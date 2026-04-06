@@ -15,7 +15,7 @@ embassy-futures = { workspace = true }
 embedded-io-async = { workspace = true }
 embedded-tls = { workspace = true }
 embedded-io = { workspace = true }
-rand_core = "0.6"
+rand_core = "0.10"
 
 getrandom = { version = "0.4.2" }
 sha2 = { version = "0.11" }
