@@ -11,7 +11,7 @@ use crate::{
         store::GlobalStore,
         translation::{
             FromGuest, GuestPointer, GuestSlice, GuestSliceStream, IntoGuest, WasiVector,
-            WasmPointer, WasmUsize, get_memory,
+            WasmPointer, WasmUsize, borrow_memory, get_memory,
         },
         wasi::{
             Error,
@@ -66,20 +66,20 @@ define_wasi_module! {
             let mut caller = caller;
             let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
 
-            let nread = GuestPointer::<WasmUsize>::new(nread_ptr).from_guest(memory).ok_or(Error::Fault)?;
-            let iovs_stream = GuestSlice::<GuestSlice<u8>>::new(iovs_ptr, iovs_len).from_guest(memory).ok_or(Error::Fault)?;
+            let nread : *mut WasmUsize = GuestPointer::<WasmUsize>::new(nread_ptr).from_guest(borrow_memory(&memory, &mut caller)).ok_or(Error::Fault)?;
+            let iovs_stream : *mut [GuestSlice<u8>] = GuestSlice::<GuestSlice<u8>>::new(iovs_ptr, iovs_len).from_guest(borrow_memory(&memory, &mut caller)).ok_or(Error::Fault)?;
 
 
-            let file = caller.data_mut().wasi.get_synchronous_file(fd as u32).ok_or(
+            let file = caller.data().wasi.get_synchronous_file(fd as u32).ok_or(
                 Error::Badf
             )?;
 
             let mut total_read = 0;
 
-            for buf in iovs_stream {
-                let buf: &mut [u8] = buf.ok_or(Error::Fault)?;
+            for buf in unsafe { &mut *iovs_stream }.iter_mut() {
+                let buf: *mut [u8] = buf.from_guest(borrow_memory(&memory, &mut caller)).ok_or(Error::Fault)?;
 
-                let read = file.read(buf).map_err(vfs_error)?;
+                let read = file.read(unsafe { &mut *buf }).map_err(vfs_error)?;
 
                 total_read += read;
             }
@@ -101,7 +101,7 @@ define_wasi_module! {
         fd: i32,
         iovs_ptr: i32,
         iovs_len: i32,
-        nwritten_ptr: i32,
+        nwritten_ptr: WasmUsize,
     ) -> Result<i32, wasmi::Error> {
         wrap_function!({
 
@@ -179,7 +179,7 @@ define_wasi_module! {
         fd: i32,
         offset: i64,
         whence: i32,
-        newoffset_ptr: i32,
+        newoffset_ptr: WasmUsize,
     ) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             xila::log::information!(
@@ -214,7 +214,7 @@ define_wasi_module! {
     fn fd_fdstat_get(
         caller: Caller<GlobalStore>,
         fd: i32,
-        stat_ptr: i32,
+        stat_ptr: WasmUsize,
     ) -> Result<i32, wasmi::Error> {
         wrap_function!({
             xila::log::information!(
@@ -250,7 +250,7 @@ define_wasi_module! {
     fn fd_prestat_get(
         caller: Caller<GlobalStore>,
         fd: i32,
-        prestat_ptr: i32,
+        prestat_ptr: WasmUsize,
     ) -> Result<i32, wasmi::Error> {
         wrap_function!({
             xila::log::information!(
@@ -287,8 +287,8 @@ define_wasi_module! {
     fn fd_prestat_dir_name(
         caller: Caller<GlobalStore>,
         fd: i32,
-        path_ptr: i32,
-        path_len: i32,
+        path_ptr: WasmUsize,
+        path_len: WasmUsize,
     ) -> Result<i32, wasmi::Error> {
         wrap_function!({
             xila::log::information!(
@@ -322,7 +322,7 @@ define_wasi_module! {
     fn fd_filestat_get(
         caller: Caller<GlobalStore>,
         fd: i32,
-        stat_ptr: i32,
+        stat_ptr: WasmUsize,
     ) -> Result<i32, wasmi::Error> {
         wrap_function!({
             xila::log::information!(

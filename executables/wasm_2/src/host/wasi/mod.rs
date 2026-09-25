@@ -2,7 +2,7 @@ mod context;
 //mod directory;
 mod environment;
 mod error;
-//mod file;
+mod file;
 //mod path;
 //mod poll;
 //mod process;

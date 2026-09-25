@@ -4,7 +4,7 @@ use crate::{
     define_wasi_module,
     host::{
         store::GlobalStore,
-        translation::{FromGuest, GuestPointer, GuestSlice, WasmUsize, get_memory},
+        translation::{FromGuest, GuestPointer, GuestSlice, WasmUsize, borrow_memory, get_memory},
         wasi::{
             Error,
             error::{WasiResult, wrap_function},
@@ -26,7 +26,7 @@ define_wasi_module! {
 
             let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
 
-            let buffer : *mut [u8] = GuestSlice::new(buf_ptr, buf_len).from_guest(memory).ok_or(Error::Fault)?;
+            let buffer : *mut [u8] = GuestSlice::new(buf_ptr, buf_len).from_guest(borrow_memory(&memory, &mut caller)).ok_or(Error::Fault)?;
 
             let mut state = old_state;
 
