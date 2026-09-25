@@ -70,7 +70,7 @@ define_wasi_module! {
             let iovs_stream : *mut [GuestSlice<u8>] = GuestSlice::<GuestSlice<u8>>::new(iovs_ptr, iovs_len).from_guest(borrow_memory(&memory, &mut caller)).ok_or(Error::Fault)?;
 
 
-            let file = caller.data().wasi.get_synchronous_file(fd as u32).ok_or(
+            let file = caller.data_mut().wasi.get_synchronous_file(fd as u32).ok_or(
                 Error::Badf
             )?;
 

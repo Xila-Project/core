@@ -47,13 +47,14 @@ define_wasi_module! {
                 let argv_buf_ptr: *mut [u8] = GuestSlice::new(argv_buf, argv_buf_size)
                     .from_guest(borrow_memory(&memory, &mut caller))
                     .ok_or(Error::Fault)?;
-                unsafe { (&mut *argv_ptr, &mut *argv_buf_ptr) }
-            }; // `memory` and `&mut caller` are dropped here!
+                (argv_ptr, argv_buf_ptr)
+            };
+            // `memory` and `&mut caller` are dropped here!
 
             let mut argv_buf_offset = 0;
 
             // 2. Iterate safely: caller can be immutably accessed without borrow conflicts
-            for (arg_index, arg) in argv_slice.iter_mut().enumerate() {
+            for (arg_index, arg) in unsafe { (&mut *argv_slice).iter_mut() }.enumerate() {
                 let arg_str = &caller.data().wasi.arguments.get(arg_index).ok_or(Error::Fault)?.as_str();
                 let arg_bytes = arg_str.as_bytes();
                 let arg_len = arg_bytes.len();
@@ -63,7 +64,8 @@ define_wasi_module! {
                 }
 
                 // Copy bytes and null-terminate
-                let target = &mut argv_buf_slice[argv_buf_offset..argv_buf_offset + arg_len + 1];
+                let target = &mut unsafe { &mut *argv_buf_slice }
+                    [argv_buf_offset..argv_buf_offset + arg_len + 1];
                 target[..arg_len].copy_from_slice(arg_bytes);
                 target[arg_len] = 0;
 
