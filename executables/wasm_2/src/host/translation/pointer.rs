@@ -35,7 +35,8 @@ impl<T: WasmPod> FromGuest<*const T> for GuestPointer<T> {
             return Some(null_mut()); // Null pointer is valid as an offset
         }
 
-        let pointer = validate_and_slice::<T>(self.offset as usize, memory)?;
+        let offset = usize::try_from(self.offset).ok()?;
+        let pointer = validate_and_slice::<T>(offset, memory)?;
 
         Some(pointer.as_mut_ptr() as *mut T)
     }
@@ -47,7 +48,8 @@ impl<T: WasmPod> FromGuest<*mut T> for GuestPointer<T> {
             return Some(null_mut()); // Null pointer is valid as an offset
         }
 
-        let pointer = validate_and_slice::<T>(self.offset as usize, memory)?;
+        let offset = usize::try_from(self.offset).ok()?;
+        let pointer = validate_and_slice::<T>(offset, memory)?;
 
         Some(pointer.as_mut_ptr() as *mut T)
     }

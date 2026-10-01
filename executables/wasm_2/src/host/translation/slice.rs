@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, ptr::null_mut};
+use core::marker::PhantomData;
 
 use crate::host::translation::{
     FromGuest, WasmPod, WasmUsize, sealed::Sealed, validate_and_slice_n,
@@ -41,11 +41,17 @@ impl From<(WasmUsize, WasmUsize)> for GuestSlice<u8> {
 
 impl<T: WasmPod> FromGuest<*const [T]> for GuestSlice<T> {
     fn from_guest(&self, memory: &mut [u8]) -> Option<*const [T]> {
-        if self.offset == 0 {
-            return Some(unsafe { core::slice::from_raw_parts(null_mut(), 0) }); // Null pointer is valid as an offset
+        if self.offset == 0 && self.size != 0 {
+            return None;
         }
+        let offset = usize::try_from(self.offset).ok()?;
+        let length = usize::try_from(self.size).ok()?;
+        let slice = validate_and_slice_n::<T>(offset, length, memory)?;
 
-        let slice = validate_and_slice_n::<T>(self.offset as usize, self.size as usize, memory)?;
+        if self.size == 0 {
+            let pointer = core::ptr::NonNull::<T>::dangling().as_ptr();
+            return Some(unsafe { core::slice::from_raw_parts(pointer, 0) });
+        }
 
         Some(unsafe {
             core::slice::from_raw_parts(slice.as_mut_ptr() as *mut T, slice.len() as usize)
@@ -55,11 +61,17 @@ impl<T: WasmPod> FromGuest<*const [T]> for GuestSlice<T> {
 
 impl<T: WasmPod> FromGuest<*mut [T]> for GuestSlice<T> {
     fn from_guest(&self, memory: &mut [u8]) -> Option<*mut [T]> {
-        if self.offset == 0 {
-            return Some(unsafe { core::slice::from_raw_parts_mut(null_mut(), 0) }); // Null pointer is valid as an offset
+        if self.offset == 0 && self.size != 0 {
+            return None;
         }
+        let offset = usize::try_from(self.offset).ok()?;
+        let length = usize::try_from(self.size).ok()?;
+        let slice = validate_and_slice_n::<T>(offset, length, memory)?;
 
-        let slice = validate_and_slice_n::<T>(self.offset as usize, self.size as usize, memory)?;
+        if self.size == 0 {
+            let pointer = core::ptr::NonNull::<T>::dangling().as_ptr();
+            return Some(unsafe { core::slice::from_raw_parts_mut(pointer, 0) });
+        }
 
         Some(unsafe {
             core::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut T, slice.len() as usize)

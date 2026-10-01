@@ -1,8 +1,6 @@
 use wasmi::{AsContextMut, Caller};
 
-use crate::host::translation::{
-    FromGuest, GuestPointer, WasiVector, WasmAdress, WasmPod, WasmPointee, WasmUsize,
-};
+use crate::host::translation::{WasmAdress, WasmUsize};
 
 pub fn get_memory<'a, T>(caller: &'a mut Caller<T>) -> Option<wasmi::Memory> {
     caller.get_export("memory").and_then(|e| e.into_memory())
@@ -24,7 +22,7 @@ pub fn validate_and_slice_n<T>(start: usize, count: usize, memory: &mut [u8]) ->
 
     let slice = memory.get_mut(start..end)?;
 
-    if slice.as_mut_ptr() as usize % core::mem::align_of::<T>() != 0 {
+    if byte_len != 0 && slice.as_mut_ptr() as usize % core::mem::align_of::<T>() != 0 {
         return None;
     }
 
@@ -52,5 +50,5 @@ pub fn validate_offset<T>(pointer: *const T, memory: &[u8]) -> Option<WasmAdress
         return None;
     }
 
-    Some(offset as WasmUsize)
+    WasmUsize::try_from(offset).ok()
 }

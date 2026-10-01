@@ -1,6 +1,9 @@
 use core::num::{NonZeroU32, NonZeroUsize};
 
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::fmt::Write;
 use getargs_derive::GetArgs;
 use wasmi::{Caller, Config, Engine, Linker, Module, Store, TypedResumableCall};
@@ -14,7 +17,7 @@ use xila::{
 use crate::host::{
     error::{Error, Result},
     store::GlobalStore,
-    wasi::{self, FileSystemItem, Prestat, WasiContext},
+    wasi::{self, DirectoryVariant, FileSystemItem, FileVariant, Prestat, WasiContext},
 };
 
 const DEFAULT_STACK_SIZE: usize = 4096;
@@ -105,9 +108,19 @@ pub async fn main_inner(standard: Standard, arguments: WasmArguments<'_>) -> Res
         &engine,
         GlobalStore {
             wasi: WasiContext {
-                files: Vec::new(),
+                files: alloc::collections::BTreeMap::new(),
                 next_fd: 3,
-                arguments: Vec::new(),
+                arguments: alloc::vec![path.to_string()],
+                environment: task::block_on(task::get_instance().get_environment_variables(task))
+                    .map_err(|_| wasmi::Error::new("environment variables unavailable"))?
+                    .into_iter()
+                    .map(|variable| {
+                        (
+                            variable.get_name().to_string(),
+                            variable.get_value().to_string(),
+                        )
+                    })
+                    .collect(),
                 task,
                 random_state: 0,
                 prestats: Vec::new(),
@@ -118,42 +131,32 @@ pub async fn main_inner(standard: Standard, arguments: WasmArguments<'_>) -> Res
 
     {
         let data = store.data_mut();
-        data.wasi.files = alloc::vec![
-            FileDescriptor {
-                fd: 0,
-                ty: FileSystemItem::CharacterDevice,
-                offset: 0,
-                rights: 2,
-                rights_inheriting: 2,
-                flags: 0
-            },
-            FileDescriptor {
-                fd: 1,
-                ty: FileSystemItem::Stdout(standard_out.into_synchronous_file()),
-                offset: 0,
-                rights: 32,
-                rights_inheriting: 32,
-                flags: 0
-            },
-            FileDescriptor {
-                fd: 2,
-                ty: FileSystemItem::Stderr(standard_error.into_synchronous_file()),
-                offset: 0,
-                rights: 32,
-                rights_inheriting: 32,
-                flags: 0
-            },
-        ];
-        data.wasi.next_fd = 3;
+        data.wasi.files.insert(
+            0,
+            FileSystemItem::StandardInput(FileVariant {
+                file: _standard_in.into_synchronous_file(),
+            }),
+        );
+        data.wasi.files.insert(
+            1,
+            FileSystemItem::StandardOutput(FileVariant {
+                file: standard_out.into_synchronous_file(),
+            }),
+        );
+        data.wasi.files.insert(
+            2,
+            FileSystemItem::StandardError(FileVariant {
+                file: standard_error.into_synchronous_file(),
+            }),
+        );
         if let Ok(dir) = root_dir {
-            data.wasi.files.push(FileDescriptor {
-                fd: 3,
-                ty: FileSystemItem::Directory(dir, b"/".to_vec()),
-                offset: 0,
-                rights: u64::MAX,
-                rights_inheriting: u64::MAX,
-                flags: 0,
-            });
+            data.wasi.files.insert(
+                3,
+                FileSystemItem::Directory(DirectoryVariant {
+                    directory: dir,
+                    path: xila::file_system::PathOwned::root(),
+                }),
+            );
             data.wasi.next_fd = 4;
             data.wasi.prestats.push(Prestat {
                 name: b"/".to_vec(),

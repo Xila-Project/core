@@ -1,16 +1,14 @@
-use core::marker::PhantomData;
-
-#[cfg(feature = "memory_32")]
+#[cfg(all(feature = "memory_32", not(feature = "memory_64")))]
 pub type WasiIsize = i32;
 #[cfg(feature = "memory_64")]
 pub type WasiIsize = i64;
 
-#[cfg(feature = "memory_32")]
+#[cfg(all(feature = "memory_32", not(feature = "memory_64")))]
 pub type WasmUsize = u32;
 #[cfg(feature = "memory_64")]
 pub type WasmUsize = u64;
 
-#[cfg(feature = "memory_32")]
+#[cfg(all(feature = "memory_32", not(feature = "memory_64")))]
 pub type WasmAdress = u32;
 #[cfg(feature = "memory_64")]
 pub type WasmAdress = u64;

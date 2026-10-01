@@ -190,3 +190,6 @@ littlefs2-sys = { git = "https://github.com/AlixANNERAUD/littlefs2-sys.git", bra
 
 [patch."https://github.com/bytecodealliance/wamr-rust-sdk.git"]
 wamr-rust-sdk = { git = "https://github.com/AlixANNERAUD/wamr-rust-sdk.git", branch = "instruction-metering-resume" }
+
+[patch."https://github.com/Xila-Project/lvgl_rust_sys"]
+lvgl_rust_sys = { path = "../lvgl_rust_sys" }

@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::host::translation::{FromGuest, WasmPointee, WasmUsize, validate_and_slice};
+use crate::host::translation::{WasmPod, types::sealed::Sealed};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -11,7 +11,8 @@ pub struct Fdstat {
     pub rights_inheriting: u64,
 }
 
-impl WasmPointee for Fdstat {}
+impl Sealed for Fdstat {}
+impl WasmPod for Fdstat {}
 
 /// Describes the type of pre-opened resource.
 #[repr(u8)]
@@ -25,7 +26,7 @@ pub enum Preopentype {
 #[derive(Debug, Clone, Copy)]
 pub struct PrestatDir {
     /// The byte length of the pre-opened directory's path name.
-    pub pr_name_len: WasmUsize, // u32 in wasm32
+    pub pr_name_len: u32,
 }
 
 /// Information about a pre-opened resource.
@@ -33,7 +34,7 @@ pub struct PrestatDir {
 #[derive(Debug, Clone, Copy)]
 pub struct Prestat {
     /// Discriminator identifying the payload variant.
-    pub tag: Preopentype,
+    pub tag: u8,
     /// Union payload containing variant-specific data.
     pub u: PrestatUnion,
 }
@@ -50,29 +51,8 @@ impl Debug for PrestatUnion {
     }
 }
 
-impl<'a> FromGuest<'a, WasmUsize> for Prestat {
-    unsafe fn from_guest(pointer: WasmUsize, memory: &'a mut [u8]) -> Option<Self> {
-        let slice = validate_and_slice::<Prestat>(pointer as usize, memory)?;
-
-        let tag_byte = *slice.first()?;
-
-        match tag_byte {
-            0 => {
-                let offset = core::mem::offset_of!(Prestat, u);
-                let pr_name_len = unsafe {
-                    core::ptr::read_unaligned(slice[offset..].as_ptr() as *const WasmUsize)
-                };
-                Some(Prestat {
-                    tag: Preopentype::Dir,
-                    u: PrestatUnion {
-                        dir: PrestatDir { pr_name_len },
-                    },
-                })
-            }
-            _ => None,
-        }
-    }
-}
+impl Sealed for Prestat {}
+impl WasmPod for Prestat {}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -87,4 +67,5 @@ pub struct Filestat {
     pub ctime: u64,
 }
 
-impl WasmPointee for Filestat {}
+impl Sealed for Filestat {}
+impl WasmPod for Filestat {}

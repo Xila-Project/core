@@ -218,7 +218,10 @@ impl Layout {
             self.clock_string.push('\0');
 
             unsafe {
-                lvgl::lv_label_set_text_static(self.clock, self.clock_string.as_ptr() as *const i8);
+                lvgl::lv_label_set_text_static(
+                    self.clock,
+                    self.clock_string.as_ptr() as *const core::ffi::c_char,
+                );
             }
         });
     }

@@ -2,7 +2,10 @@ mod memory;
 mod pointer;
 mod slice;
 mod translate;
-mod types;
+pub(crate) mod types;
+
+#[cfg(test)]
+mod tests;
 
 pub use memory::*;
 pub use pointer::*;

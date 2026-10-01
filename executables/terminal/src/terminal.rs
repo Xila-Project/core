@@ -64,7 +64,7 @@ impl Terminal {
                 }
 
                 lvgl::lv_obj_set_width(label, lvgl::lv_pct(100));
-                lvgl::lv_label_set_text_static(label, buffer.as_ptr() as *const i8);
+                lvgl::lv_label_set_text_static(label, buffer.as_ptr() as *const core::ffi::c_char);
                 lvgl::lv_obj_set_style_text_font(
                     label,
                     get_font_monospace_medium(),
@@ -137,7 +137,10 @@ impl Terminal {
         inner.buffer.push('\0');
 
         unsafe {
-            lvgl::lv_label_set_text_static(inner.display, inner.buffer.as_ptr() as *const i8);
+            lvgl::lv_label_set_text_static(
+                inner.display,
+                inner.buffer.as_ptr() as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_scroll_to_view(inner.display, true);
         }
 
@@ -151,7 +154,10 @@ impl Terminal {
         inner.buffer.push_str("\n\0");
 
         unsafe {
-            lvgl::lv_label_set_text_static(inner.display, inner.buffer.as_ptr() as *const i8);
+            lvgl::lv_label_set_text_static(
+                inner.display,
+                inner.buffer.as_ptr() as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_scroll_to_view(inner.display, true);
         }
 

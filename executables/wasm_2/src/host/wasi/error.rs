@@ -1,11 +1,7 @@
-use core::num::NonZeroI32;
+use crate::host::wasi;
 
-use crate::host::{
-    translation::{WasiIsize, WasmUsize},
-    wasi,
-};
-
-pub type WasiResult = WasiIsize;
+/// Preview 1 errno results are always a 32-bit ABI value for both guest pointer widths.
+pub type WasiResult = i32;
 
 pub enum CombinedError {
     Wasi(wasi::Error),
