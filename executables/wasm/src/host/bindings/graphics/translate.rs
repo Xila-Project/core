@@ -102,6 +102,8 @@ implicit_pointer_translation!(
     lvgl::lv_obj_class_t,
     lvgl::lv_area_t,
     lvgl::lv_style_value_t,
+    lvgl::lv_image_colorkey_t,
+    lvgl::lv_anim_timeline_t,
     lvgl::lv_color16_t,
     lvgl::lv_color32_t,
     lvgl::lv_matrix_t,
