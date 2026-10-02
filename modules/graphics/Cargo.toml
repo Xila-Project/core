@@ -8,7 +8,7 @@ cstr_core = "0.2.6"
 file_system = { workspace = true }
 lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false }
 #lvgl_rust_sys = { workspace = true, default-features = false }
-syn = { version = "2.0", features = ["full"] }
+syn = { version = "3.0", features = ["full"] }
 quote = "1.0"
 time = { workspace = true }
 shared = { workspace = true }
