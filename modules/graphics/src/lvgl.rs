@@ -20,22 +20,6 @@ pub const LV_OPA_0: u8 = 0;
 pub const LV_OPA_50: u8 = 127;
 pub const LV_OPA_COVER: u8 = 255;
 
-/// Check whether an LVGL object is part of the active widget tree.
-///
-/// This retains the pre-9.6 Core API name while linking to the LVGL 9.6 symbol.
-///
-/// # Safety
-///
-/// `object` must be a valid pointer to an LVGL object or null.
-pub unsafe fn lv_obj_is_valid(object: *const lv_obj_t) -> bool {
-    unsafe extern "C" {
-        #[link_name = "lv_obj_is_in_widget_tree"]
-        fn lv_obj_is_valid_ffi(object: *const lv_obj_t) -> bool;
-    }
-
-    unsafe { lv_obj_is_valid_ffi(object) }
-}
-
 /// Set the padding of an object on all sides
 ///
 /// # Arguments

@@ -90,6 +90,11 @@ impl LvglContext {
             "lv_obj_invalidate_expand_blur",
             // LVGL's variadic API uses va_list, which cannot cross this ABI.
             "lv_label_set_text_vfmt",
+            // These APIs use LVGL types not available in the wasm translation layer.
+            "lv_style_set_image_colorkey",
+            "lv_obj_get_style_image_colorkey",
+            "lv_obj_set_style_image_colorkey",
+            "lv_obj_add_play_timeline_event",
         ];
 
         let signature_ident_str = signature.ident.to_string();
