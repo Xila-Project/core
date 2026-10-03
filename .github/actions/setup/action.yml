@@ -9,9 +9,9 @@ runs:
       with:
         key: "Documentation"
 
-    - name: Setup | Install GCC multilib
+    - name: Setup | Install native build tools
       shell: bash
-      run: sudo apt update && sudo apt install -y gcc-multilib
+      run: sudo apt update && sudo apt install -y clang mold gcc-multilib
 
     - name: Setup | Rust stable toolchain
       uses: dtolnay/rust-toolchain@stable
