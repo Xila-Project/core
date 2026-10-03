@@ -222,10 +222,10 @@ impl Window {
     ///
     /// # Safety
     ///
-    /// This function is unsafe because it may dereference raw pointers (e.g. `Window`).
+    /// `window` must be null or point to a live LVGL object.
     ///
     pub unsafe fn from_raw(window: *mut lvgl::lv_obj_t) -> Option<NonNull<Self>> {
-        if !unsafe { lvgl::lv_obj_is_valid(window) } {
+        if window.is_null() {
             return None;
         }
 

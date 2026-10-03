@@ -81,6 +81,20 @@ impl LvglContext {
             "lv_buttonmatrix_get_map",
             "lv_textarea_get_text",
             "lv_obj_get_layer_type",
+            // Internal/private object functions are visible because private LVGL API is
+            // enabled for Core, but are not safe to expose through the wasm ABI.
+            "lv_obj_allocate_spec_attr",
+            "lv_obj_destruct",
+            "lv_obj_add_child",
+            "lv_obj_remove_child",
+            "lv_obj_invalidate_expand_blur",
+            // LVGL's variadic API uses va_list, which cannot cross this ABI.
+            "lv_label_set_text_vfmt",
+            // These APIs use LVGL types not available in the wasm translation layer.
+            "lv_style_set_image_colorkey",
+            "lv_obj_get_style_image_colorkey",
+            "lv_obj_set_style_image_colorkey",
+            "lv_obj_add_play_timeline_event",
         ];
 
         let signature_ident_str = signature.ident.to_string();
