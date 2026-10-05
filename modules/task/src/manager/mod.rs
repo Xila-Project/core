@@ -21,6 +21,7 @@ pub use spawner::*;
 
 // Manager module - core Manager structure and initialization
 
+use crate::ExecutorWithStatistics;
 use crate::manager::Metadata;
 
 use alloc::collections::BTreeMap;
@@ -42,6 +43,7 @@ pub(crate) struct Inner {
     pub(crate) tasks: BTreeMap<TaskIdentifier, Metadata>,
     pub(crate) identifiers: BTreeMap<usize, TaskIdentifier>,
     pub(crate) spawners: BTreeMap<usize, ::embassy_executor::Spawner>,
+    pub(crate) executors: BTreeMap<usize, Option<&'static dyn ExecutorWithStatistics>>,
 }
 
 unsafe impl Send for Manager {}
@@ -61,6 +63,7 @@ impl Manager {
             tasks: BTreeMap::new(),
             identifiers: BTreeMap::new(),
             spawners: BTreeMap::new(),
+            executors: BTreeMap::new(),
         }))
     }
 }

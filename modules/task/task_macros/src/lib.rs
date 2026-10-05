@@ -140,7 +140,10 @@ pub fn test(arguments: TokenStream, input: TokenStream) -> TokenStream {
                     let manager = #task_path::initialize();
 
                     unsafe {
-                        __SPAWNER = manager.register_spawner(Spawner).expect("Failed to register spawner");
+                        let _ = Spawner;
+                        __SPAWNER = manager
+                            .register_spawner_with_executor(Spawner, None)
+                            .expect("Failed to register spawner");
                     }
 
                     #task_path::block_on(async move {
@@ -270,7 +273,10 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
                     let manager = #task_path::initialize();
 
                     unsafe {
-                        __SPAWNER = manager.register_spawner(Spawner).expect("Failed to register spawner");
+                        let _ = Spawner;
+                        __SPAWNER = manager
+                            .register_spawner_with_executor(Spawner, None)
+                            .expect("Failed to register spawner");
                     }
 
                     #task_path::block_on(async move {

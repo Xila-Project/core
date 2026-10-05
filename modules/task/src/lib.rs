@@ -7,6 +7,7 @@ extern crate std;
 
 mod environment_variable;
 mod error;
+mod executor_statistics;
 mod join_handle;
 mod manager;
 mod signal;
@@ -18,6 +19,7 @@ use embassy_time::Timer;
 pub use embassy_executor;
 pub use environment_variable::*;
 pub use error::*;
+pub use executor_statistics::*;
 pub use join_handle::*;
 pub use manager::*;
 pub use signal::*;

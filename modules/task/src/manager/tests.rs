@@ -3,9 +3,28 @@ extern crate std;
 
 use super::*;
 use crate::test;
-use alloc::{collections::BTreeMap, format, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec::Vec};
 use core::time::Duration;
 use users::{GroupIdentifier, UserIdentifier};
+
+struct TestExecutorWithStatistics {
+    spawner: embassy_executor::Spawner,
+    snapshot: Option<crate::ExecutorStatisticsSnapshot>,
+}
+
+impl crate::ExecutorWithStatistics for TestExecutorWithStatistics {
+    fn spawner(&'static self) -> embassy_executor::Spawner {
+        self.spawner
+    }
+
+    fn statistics_snapshot(&self) -> Option<crate::ExecutorStatisticsSnapshot> {
+        self.snapshot
+    }
+}
+
+async fn read_executor_stats_device(_spawner_identifier: SpawnerIdentifier) -> Result<String> {
+    Err(Error::NotInitialized)
+}
 
 #[test(task_path = crate)]
 async fn test_get_task_name() {
@@ -863,4 +882,122 @@ async fn test_spawner_reuse_after_unregister() {
     let current_task = manager.get_current_task_identifier().await;
     let current_spawner = manager.get_spawner(current_task).await.unwrap();
     assert!(current_spawner != usize::MAX);
+}
+
+#[test(task_path = crate)]
+async fn test_choose_spawner_prefers_statistics_busy_idle_gap() {
+    let candidates = [
+        SpawnerCandidate {
+            identifier: 1,
+            telemetry: Some(crate::ExecutorStatisticsSnapshot::new(8_000, 2_000)),
+            task_count: 4,
+        },
+        SpawnerCandidate {
+            identifier: 2,
+            telemetry: Some(crate::ExecutorStatisticsSnapshot::new(4_000, 6_000)),
+            task_count: 1,
+        },
+    ];
+
+    let selected = Manager::choose_spawner_from_candidates(&candidates).unwrap();
+
+    assert_eq!(selected, 2);
+}
+
+#[test(task_path = crate)]
+async fn test_choose_spawner_falls_back_when_statistics_gap_small() {
+    let candidates = [
+        SpawnerCandidate {
+            identifier: 3,
+            telemetry: Some(crate::ExecutorStatisticsSnapshot::new(4_500, 5_500)),
+            task_count: 2,
+        },
+        SpawnerCandidate {
+            identifier: 4,
+            telemetry: Some(crate::ExecutorStatisticsSnapshot::new(4_200, 5_800)),
+            task_count: 1,
+        },
+    ];
+
+    let selected = Manager::choose_spawner_from_candidates(&candidates).unwrap();
+
+    assert_eq!(selected, 4);
+}
+
+#[test(task_path = crate)]
+async fn test_executor_stats_device_is_mounted_and_readable() {
+    let manager = get_instance();
+    let task = manager.get_current_task_identifier().await;
+    let current_spawner_identifier = manager.get_spawner(task).await.unwrap();
+    let spawner = {
+        let inner = manager.0.read().await;
+        *inner.spawners.get(&current_spawner_identifier).unwrap()
+    };
+
+    let executor = Box::leak(Box::new(TestExecutorWithStatistics {
+        spawner,
+        snapshot: Some(crate::ExecutorStatisticsSnapshot::new(8_000, 2_000)),
+    }));
+
+    let spawner_identifier = manager.register_executor(executor).unwrap();
+
+    let output = read_executor_stats_device(spawner_identifier)
+        .await
+        .unwrap();
+
+    assert!(output.contains(&format!("executor_id={spawner_identifier}")));
+    assert!(output.contains("busy_ticks="));
+    assert!(output.contains("idle_ticks="));
+    assert!(output.contains("total_ticks="));
+    assert!(output.contains("idle_ratio_bp="));
+
+    manager.unregister_spawner(spawner_identifier).unwrap();
+}
+
+#[test(task_path = crate)]
+async fn test_executor_stats_device_reports_unavailable_without_telemetry() {
+    let manager = get_instance();
+    let task = manager.get_current_task_identifier().await;
+    let current_spawner_identifier = manager.get_spawner(task).await.unwrap();
+    let spawner = {
+        let inner = manager.0.read().await;
+        *inner.spawners.get(&current_spawner_identifier).unwrap()
+    };
+
+    let spawner_identifier = manager.register_spawner(spawner).unwrap();
+
+    let output = read_executor_stats_device(spawner_identifier)
+        .await
+        .unwrap();
+
+    assert!(output.contains(&format!("executor_id={spawner_identifier}")));
+    assert!(output.contains("telemetry=unavailable"));
+
+    manager.unregister_spawner(spawner_identifier).unwrap();
+}
+
+#[test(task_path = crate)]
+async fn test_executor_stats_device_removed_on_unregister() {
+    let manager = get_instance();
+    let task = manager.get_current_task_identifier().await;
+    let current_spawner_identifier = manager.get_spawner(task).await.unwrap();
+    let spawner = {
+        let inner = manager.0.read().await;
+        *inner.spawners.get(&current_spawner_identifier).unwrap()
+    };
+
+    let executor = Box::leak(Box::new(TestExecutorWithStatistics {
+        spawner,
+        snapshot: Some(crate::ExecutorStatisticsSnapshot::new(4_000, 6_000)),
+    }));
+
+    let spawner_identifier = manager.register_executor(executor).unwrap();
+
+    let before_unregister = read_executor_stats_device(spawner_identifier).await;
+    assert!(before_unregister.is_ok());
+
+    manager.unregister_spawner(spawner_identifier).unwrap();
+
+    let after_unregister = read_executor_stats_device(spawner_identifier).await;
+    assert!(after_unregister.is_err());
 }
