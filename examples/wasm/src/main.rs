@@ -12,6 +12,7 @@ async fn main() {
     use alloc::vec;
     use drivers_wasm::devices::graphics::GraphicsDevices;
     use xila::bootsplash::Bootsplash;
+    use xila::executable::ExecutableContext;
     use xila::executable::{self, Standard, mount_executables};
     use xila::file_system::mbr::{Mbr, PartitionKind};
     use xila::file_system::{self, XILA_DISK_SIGNATURE};
@@ -27,10 +28,23 @@ async fn main() {
     log::initialize(&drivers_wasm::log::Logger).unwrap();
 
     // Initialize the task manager
-    let task_manager = task::initialize();
+    let task_owner: &'static mut xila::synchronization::Arc<task::Manager> = Box::leak(Box::new(
+        xila::synchronization::Arc::new(task::Manager::new()),
+    ));
+    let task_manager_pointer = xila::synchronization::Arc::into_raw(task_owner.clone());
+    let task_manager: &'static task::Manager = unsafe { &*task_manager_pointer };
     let task = task_manager.get_current_task_identifier().await;
-    let users_manager = users::initialize();
-    let time_manager = time::initialize(&drivers_wasm::devices::TimeDevice).unwrap();
+    let users_owner: &'static mut xila::synchronization::Arc<users::Manager> = Box::leak(Box::new(
+        xila::synchronization::Arc::new(users::Manager::new()),
+    ));
+    let users_manager_pointer = xila::synchronization::Arc::into_raw(users_owner.clone());
+    let users_manager: &'static users::Manager = unsafe { &*users_manager_pointer };
+    let time_owner: &'static mut xila::synchronization::Arc<time::Manager<'static>> =
+        Box::leak(Box::new(xila::synchronization::Arc::new(
+            time::Manager::new(&drivers_wasm::devices::TimeDevice).unwrap(),
+        )));
+    let time_manager_pointer = xila::synchronization::Arc::into_raw(time_owner.clone());
+    let time_manager: &'static time::Manager<'static> = unsafe { &*time_manager_pointer };
 
     // - Initialize the graphics manager
     // - - Initialize the graphics driver
@@ -45,6 +59,7 @@ async fn main() {
 
     // - - Initialize the graphics manager
     let graphics_manager = graphics::initialize(
+        time_manager,
         Box::leak(Box::new(screen_device)),
         Box::leak(Box::new(mouse_device)),
         graphics::InputKind::Pointer,
@@ -53,6 +68,11 @@ async fn main() {
         true,
     )
     .await;
+    let graphics_owner: &'static mut xila::synchronization::Arc<graphics::Manager> =
+        Box::leak(Box::new(xila::synchronization::Arc::new(graphics_manager)));
+    let graphics_manager_pointer = xila::synchronization::Arc::into_raw(graphics_owner.clone());
+    let graphics_manager: &'static graphics::Manager = unsafe { &*graphics_manager_pointer };
+    graphics::set_ffi_manager(graphics_manager);
 
     graphics_manager
         .add_input_device(
@@ -93,9 +113,20 @@ async fn main() {
     let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
 
     // Initialize the virtual file system
-    let virtual_file_system =
+    let virtual_file_system_owner: &'static mut xila::synchronization::Arc<
+        virtual_file_system::VirtualFileSystem,
+    > = Box::leak(Box::new(xila::synchronization::Arc::new(
         virtual_file_system::initialize(task_manager, users_manager, time_manager, file_system)
-            .unwrap();
+            .unwrap(),
+    )));
+    let virtual_file_system_pointer =
+        xila::synchronization::Arc::into_raw(virtual_file_system_owner.clone());
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem =
+        unsafe { &*virtual_file_system_pointer };
+    xila::abi_definitions::initialize(xila::abi_definitions::RuntimeContext {
+        virtual_file_system,
+        time_manager,
+    });
 
     // - - Mount the devices
 
@@ -167,7 +198,18 @@ async fn main() {
 
     // Mount static executables
 
+    let executable_context: &'static executable::ExecutableContext =
+        Box::leak(Box::new(executable::ExecutableContext {
+            task_manager: task_owner.clone(),
+            users_manager: users_owner.clone(),
+            virtual_file_system: virtual_file_system_owner.clone(),
+            graphics_manager: Some(graphics_owner.clone()),
+            network_manager: None,
+            time_manager: time_owner.clone(),
+        }));
+
     mount_executables!(
+        executable_context,
         virtual_file_system,
         task,
         &[
@@ -210,6 +252,7 @@ async fn main() {
         &"/devices/standard_error",
         task,
         virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
@@ -217,13 +260,22 @@ async fn main() {
     // - - Create the default user
     let group_identifier = users::GroupIdentifier::new(1000);
 
-    let _ =
-        authentication::create_group(virtual_file_system, "administrator", Some(group_identifier))
-            .await
-            .unwrap();
+    let authentication_context = authentication::Context {
+        virtual_file_system,
+        task_manager,
+        users_manager,
+        task,
+    };
+    let _ = authentication::create_group(
+        &authentication_context,
+        "administrator",
+        Some(group_identifier),
+    )
+    .await
+    .unwrap();
 
     let _ = authentication::create_user(
-        virtual_file_system,
+        &authentication_context,
         "administrator",
         "",
         group_identifier,
@@ -258,11 +310,17 @@ async fn main() {
     };
 
     // - - Execute the shell
-    let _ = executable::execute("/binaries/graphical_shell", arguments, standard, None)
-        .await
-        .unwrap()
-        .join()
-        .await;
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/graphical_shell",
+        arguments,
+        standard,
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
 
     virtual_file_system.uninitialize().await;
 }

@@ -10,6 +10,7 @@ xila = { path = "../../", features = [
   "bootsplash",
   "executable_building",
 ] }
+abi_definitions = { workspace = true }
 file_manager = { workspace = true }
 command_line_shell = { workspace = true }
 graphical_shell = { workspace = true }
