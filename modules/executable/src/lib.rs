@@ -23,7 +23,11 @@ use task::{JoinHandle, SpawnerIdentifier, TaskIdentifier};
 use users::UserIdentifier;
 use virtual_file_system::File;
 
-async fn is_execute_allowed(statistics: &Statistics, user: UserIdentifier) -> bool {
+async fn is_execute_allowed(
+    users_manager: &users::Manager,
+    statistics: &Statistics,
+    user: UserIdentifier,
+) -> bool {
     if statistics
         .permissions
         .get_others()
@@ -42,10 +46,8 @@ async fn is_execute_allowed(statistics: &Statistics, user: UserIdentifier) -> bo
         return true;
     }
 
-    let is_in_group = users::get_instance()
-        .is_in_group(user, statistics.group)
-        .await
-        || user == UserIdentifier::ROOT;
+    let is_in_group =
+        users_manager.is_in_group(user, statistics.group).await || user == UserIdentifier::ROOT;
     if (is_in_group)
         && statistics
             .permissions
@@ -59,6 +61,7 @@ async fn is_execute_allowed(statistics: &Statistics, user: UserIdentifier) -> bo
 }
 
 async fn get_overridden_user(
+    context: &ExecutableContext,
     statistics: &Statistics,
     task: TaskIdentifier,
 ) -> Result<Option<UserIdentifier>> {
@@ -70,7 +73,7 @@ async fn get_overridden_user(
         return Ok(None);
     }
 
-    let current_user = task::get_instance().get_user(task).await?;
+    let current_user = context.task_manager.get_user(task).await?;
 
     let new_user = statistics.user;
 
@@ -82,28 +85,35 @@ async fn get_overridden_user(
 }
 
 pub async fn execute(
+    context: &'static ExecutableContext,
     path: impl AsRef<Path>,
     inputs: Vec<String>,
-    standard: Standard,
+    standard: Standard<'static>,
     spawner: Option<SpawnerIdentifier>,
 ) -> Result<JoinHandle<isize>> {
-    let task_instance = task::get_instance();
+    let task_instance = &context.task_manager;
 
     let task = task_instance.get_current_task_identifier().await;
 
-    let virtual_file_system = virtual_file_system::get_instance();
+    let virtual_file_system = &context.virtual_file_system;
 
     let statistics = virtual_file_system.get_statistics(&path.as_ref()).await?;
 
     // - Check the executable bit
-    if !is_execute_allowed(&statistics, task_instance.get_user(task).await?).await {
+    if !is_execute_allowed(
+        &context.users_manager,
+        &statistics,
+        task_instance.get_user(task).await?,
+    )
+    .await
+    {
         return Err(Error::PermissionDenied);
     }
 
     let mut file = File::open(virtual_file_system, task, &path, AccessFlags::Read.into()).await?;
 
     // - Check if the user can override the user identifier
-    let new_user = get_overridden_user(&statistics, task).await?;
+    let new_user = get_overridden_user(context, &statistics, task).await?;
 
     let file_name = path
         .as_ref()
@@ -117,10 +127,10 @@ pub async fn execute(
     let (join_handle, _) = task_instance
         .spawn(task, file_name, spawner, async move |task| {
             if let Some(new_user) = new_user {
-                task::get_instance().set_user(task, new_user).await.unwrap();
+                context.task_manager.set_user(task, new_user).await.unwrap();
             }
 
-            match main(standard, inputs).await {
+            match main(context, standard, inputs).await {
                 Ok(_) => 0_isize,
                 Err(error) => -(error.get() as isize),
             }
@@ -159,30 +169,30 @@ mod tests {
 
     #[test]
     async fn test_is_execute_allowed() {
-        users::initialize();
+        let users_manager = users::Manager::new();
 
         let statistics = get_statistics_with_permissions(Permissions::ALL_FULL);
-        assert!(is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::EXECUTABLE);
-        assert!(is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::from_octal(0o007).unwrap());
-        assert!(is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::from_octal(0o070).unwrap());
-        assert!(is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::from_octal(0o100).unwrap());
-        assert!(is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::USER_READ_WRITE);
-        assert!(!is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(!is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::NONE);
-        assert!(!is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(!is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
 
         let statistics = get_statistics_with_permissions(Permissions::ALL_READ_WRITE);
-        assert!(!is_execute_allowed(&statistics, UserIdentifier::ROOT).await);
+        assert!(!is_execute_allowed(&users_manager, &statistics, UserIdentifier::ROOT).await);
     }
 }

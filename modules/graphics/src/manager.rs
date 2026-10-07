@@ -6,10 +6,11 @@ use alloc::{
 use file_system::DirectCharacterDevice;
 use synchronization::blocking_mutex::raw::CriticalSectionRawMutex;
 use synchronization::mutex::{Mutex, MutexGuard};
-use synchronization::{once_lock::OnceLock, rwlock::RwLock};
+use synchronization::rwlock::RwLock;
 use task::block_on;
 
 use core::future::Future;
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 use core::time::Duration;
 
@@ -22,17 +23,41 @@ use crate::{Color, theme};
 use crate::{Display, OwnedWindow};
 use crate::{Error, Result};
 
-static MANAGER_INSTANCE: OnceLock<Manager> = OnceLock::new();
+static TICK_TIME_MANAGER: AtomicPtr<time::Manager<'static>> = AtomicPtr::new(core::ptr::null_mut());
+static FFI_GRAPHICS_MANAGER: AtomicPtr<Manager> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Register the manager used by C/wasm callbacks that cannot carry Rust references.
+pub fn set_ffi_manager(manager: &'static Manager) {
+    FFI_GRAPHICS_MANAGER.store(manager as *const _ as *mut _, Ordering::Release);
+}
+
+/// Resolve the graphics capability at an FFI callback boundary.
+pub fn ffi_manager() -> &'static Manager {
+    let manager = FFI_GRAPHICS_MANAGER.load(Ordering::Acquire);
+    assert!(!manager.is_null(), "FFI graphics manager not initialized");
+    unsafe { &*manager }
+}
+
+/// Clone the handle of the graphics manager registered for FFI callbacks.
+pub fn ffi_manager_handle() -> synchronization::Arc<Manager> {
+    let manager = ffi_manager();
+    unsafe {
+        synchronization::Arc::increment_strong_count(manager as *const Manager);
+        synchronization::Arc::from_raw(manager as *const Manager)
+    }
+}
 
 pub async fn initialize(
+    time_manager: &'static time::Manager<'static>,
     screen_device: &'static dyn DirectCharacterDevice,
     input_device: &'static dyn DirectCharacterDevice,
     input_device_type: InputKind,
     buffer_size: usize,
     double_buffered: bool,
-) -> &'static Manager {
+) -> Manager {
+    TICK_TIME_MANAGER.store(time_manager as *const _ as *mut _, Ordering::Release);
     let manager = Manager::new(
-        time::get_instance(),
+        time_manager,
         screen_device,
         input_device,
         input_device_type,
@@ -41,17 +66,7 @@ pub async fn initialize(
     )
     .expect("Failed to create manager instance");
 
-    MANAGER_INSTANCE.get_or_init(|| manager)
-}
-
-pub fn get_instance() -> &'static Manager {
-    MANAGER_INSTANCE
-        .try_get()
-        .expect("Graphics manager not initialized")
-}
-
-pub fn try_get_instance() -> Option<&'static Manager> {
-    MANAGER_INSTANCE.try_get()
+    manager
 }
 
 struct Inner {
@@ -65,6 +80,12 @@ pub struct Manager {
     global_lock: Mutex<CriticalSectionRawMutex, ()>,
 }
 
+impl Manager {
+    pub fn lock_function_sync<T>(&self, function: impl FnOnce() -> Result<T>) -> Result<T> {
+        task::block_on(self.lock_function(function))
+    }
+}
+
 impl Drop for Manager {
     fn drop(&mut self) {
         unsafe {
@@ -74,7 +95,9 @@ impl Drop for Manager {
 }
 
 extern "C" fn binding_tick_callback_function() -> u32 {
-    time::get_instance()
+    let manager = TICK_TIME_MANAGER.load(Ordering::Acquire);
+    assert!(!manager.is_null(), "Graphics time manager not initialized");
+    unsafe { &*manager }
         .get_current_time()
         .unwrap_or_default()
         .as_millis() as u32

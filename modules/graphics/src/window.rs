@@ -1,5 +1,5 @@
 use super::lvgl;
-use crate::{Color, Error, EventKind, Key, Result, event::Event, synchronous_lock};
+use crate::{Color, Error, EventKind, Key, Result, event::Event};
 use alloc::collections::VecDeque;
 use core::{
     mem::ManuallyDrop,
@@ -284,12 +284,6 @@ impl OwnedWindow {
     }
 }
 
-impl From<NonNull<Window>> for OwnedWindow {
-    fn from(window: NonNull<Window>) -> Self {
-        Self::new(window)
-    }
-}
-
 impl From<OwnedWindow> for NonNull<Window> {
     fn from(val: OwnedWindow) -> Self {
         let this = ManuallyDrop::new(val);
@@ -299,11 +293,14 @@ impl From<OwnedWindow> for NonNull<Window> {
 
 impl Drop for OwnedWindow {
     fn drop(&mut self) {
-        synchronous_lock!({
-            unsafe {
-                self.0.as_mut().delete();
-            }
-        });
+        crate::ffi_manager()
+            .lock_function_sync(|| {
+                unsafe {
+                    self.0.as_mut().delete();
+                }
+                Ok(())
+            })
+            .expect("Failed to delete window");
     }
 }
 

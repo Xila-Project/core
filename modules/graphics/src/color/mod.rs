@@ -13,7 +13,7 @@ pub type Color = ColorRGB888;
 
 #[cfg(feature = "rendering_rgb565")]
 pub type RenderingColor = ColorRGB565;
-#[cfg(feature = "rendering_xrgb8888")]
+#[cfg(all(feature = "rendering_xrgb8888", not(feature = "rendering_rgb565")))]
 pub type RenderingColor = ColorARGB8888;
 
 #[cfg(all(feature = "rendering_xrgb8888", feature = "rendering_rgb565"))]
