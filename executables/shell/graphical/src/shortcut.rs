@@ -2,8 +2,7 @@ use alloc::{string::String, vec::Vec};
 use miniserde::{Deserialize, Serialize};
 use xila::file_system::{AccessFlags, Path};
 use xila::graphics::Color;
-use xila::task;
-use xila::virtual_file_system::{self, File};
+use xila::virtual_file_system::File;
 
 use crate::error::{Error, Result};
 
@@ -21,9 +20,13 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
-    pub async fn read_from_path(path: &Path, buffer: &mut Vec<u8>) -> Result<Shortcut> {
-        let virtual_file_system = virtual_file_system::get_instance();
-        let task = task::get_instance().get_current_task_identifier().await;
+    pub async fn read_from_path(
+        context: &'static xila::executable::ExecutableContext,
+        path: &Path,
+        buffer: &mut Vec<u8>,
+    ) -> Result<Shortcut> {
+        let virtual_file_system = &context.virtual_file_system;
+        let task = context.task_manager.get_current_task_identifier().await;
 
         let mut shortcut_file =
             File::open(virtual_file_system, task, path, AccessFlags::Read.into())
@@ -49,12 +52,16 @@ impl Shortcut {
         Ok(shortcut)
     }
 
-    pub async fn read(entry_name: &str, buffer: &mut Vec<u8>) -> Result<Shortcut> {
+    pub async fn read(
+        context: &'static xila::executable::ExecutableContext,
+        entry_name: &str,
+        buffer: &mut Vec<u8>,
+    ) -> Result<Shortcut> {
         let shortcut_file_path = SHORTCUT_PATH
             .append(entry_name)
             .ok_or(Error::FailedToGetShortcutFilePath)?;
 
-        let shortcut = Shortcut::read_from_path(&shortcut_file_path, buffer).await?;
+        let shortcut = Shortcut::read_from_path(context, &shortcut_file_path, buffer).await?;
 
         Ok(shortcut)
     }

@@ -13,6 +13,7 @@ use xila::{internationalization, network, time, virtual_file_system};
 const KEYBOARD_SIZE_RATIO: f64 = 3.0 / 1.0;
 
 pub struct Layout {
+    context: &'static xila::executable::ExecutableContext,
     window: *mut lvgl::lv_obj_t,
     _header: *mut lvgl::lv_obj_t,
     _body: *mut lvgl::lv_obj_t,
@@ -109,7 +110,7 @@ impl Layout {
     pub const UPDATE_INTERVAL: Duration = Duration::from_secs(30);
 
     pub async fn run(&mut self) {
-        let current_time = match time::get_instance().get_current_time() {
+        let current_time = match self.context.time_manager.get_current_time() {
             Ok(time) => time,
             Err(e) => {
                 log::error!("Failed to get current time: {}", e);
@@ -130,7 +131,7 @@ impl Layout {
         self.last_update = current_time;
     }
 
-    async fn get_interface_symbol(&self, file: &mut File) -> Result<Option<&CStr>> {
+    async fn get_interface_symbol(&self, file: &mut File<'_>) -> Result<Option<&CStr>> {
         let is_up = file
             .control(network::IS_LINK_UP, &())
             .await
@@ -157,9 +158,9 @@ impl Layout {
     async fn get_network_symbol(&self) -> Result<&CStr> {
         // Browse the network interfaces in the /devices/network directory
 
-        let virtual_file_system = virtual_file_system::get_instance();
+        let virtual_file_system = &self.context.virtual_file_system;
 
-        let task_manager = xila::task::get_instance();
+        let task_manager = &self.context.task_manager;
 
         let task = task_manager.get_current_task_identifier().await;
 
@@ -202,7 +203,8 @@ impl Layout {
     async fn update_network_icon(&mut self) -> Result<()> {
         let symbol = self.get_network_symbol().await?;
 
-        graphics::lock!({
+        let graphics_manager = graphics::ffi_manager();
+        graphics::lock!(graphics_manager, {
             unsafe {
                 lvgl::lv_label_set_text_static(self.network, symbol.as_ptr());
             }
@@ -212,7 +214,8 @@ impl Layout {
     }
 
     async fn update_clock(&mut self, current_time: Duration) {
-        graphics::lock!({
+        let graphics_manager = graphics::ffi_manager();
+        graphics::lock!(graphics_manager, {
             self.clock_string =
                 internationalization::format_unix_timestamp(current_time.as_secs() as i64, "%H:%M");
             self.clock_string.push('\0');
@@ -227,8 +230,12 @@ impl Layout {
         self.window
     }
 
-    pub async fn new(show_keyboard: bool) -> Result<Self> {
-        let layout = graphics::lock!({
+    pub async fn new(
+        context: &'static xila::executable::ExecutableContext,
+        show_keyboard: bool,
+    ) -> Result<Self> {
+        let graphics_manager = graphics::ffi_manager();
+        let layout = graphics::lock!(graphics_manager, {
             // - Create a window
             let window = unsafe {
                 let window = lvgl::lv_screen_active();
@@ -398,6 +405,7 @@ impl Layout {
             };
 
             Self {
+                context,
                 window,
                 _header: header,
                 _body: body,
@@ -409,9 +417,7 @@ impl Layout {
             }
         });
 
-        graphics::get_instance()
-            .set_window_parent(layout._body)
-            .await?;
+        graphics_manager.set_window_parent(layout._body).await?;
 
         Ok(layout)
     }

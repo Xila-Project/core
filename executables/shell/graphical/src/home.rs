@@ -5,6 +5,7 @@ use xila::graphics::{self, lvgl};
 use crate::{desk::Desk, error::Result};
 
 pub struct Home {
+    graphics_manager: &'static graphics::Manager,
     button: *mut lvgl::lv_obj_t,
 }
 
@@ -17,8 +18,11 @@ impl Drop for Home {
 }
 
 impl Home {
-    pub async fn new(desk: *mut lvgl::lv_obj_t) -> Result<Self> {
-        let button = graphics::lock!({
+    pub async fn new(
+        graphics_manager: &'static graphics::Manager,
+        desk: *mut lvgl::lv_obj_t,
+    ) -> Result<Self> {
+        let button = graphics::lock!(graphics_manager, {
             unsafe {
                 let button = lvgl::lv_obj_create(lvgl::lv_layer_top());
 
@@ -63,7 +67,10 @@ impl Home {
             }
         });
 
-        Ok(Self { button })
+        Ok(Self {
+            graphics_manager,
+            button,
+        })
     }
 }
 
