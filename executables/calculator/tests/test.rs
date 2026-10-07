@@ -10,17 +10,17 @@ async fn main() {
     use wasm::WasmExecutable;
     use xila::executable;
     use xila::executable::{build_crate, mount_executables};
-    use xila::task;
-    use xila::virtual_file_system;
 
     let standard = testing::initialize(true, false).await;
+    let context = standard.context;
+    let virtual_file_system = &context.virtual_file_system;
+    let task_instance = &context.task_manager;
 
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task_instance = task::get_instance();
     let task = task_instance.get_current_task_identifier().await;
 
     let binary_path = build_crate(&"calculator").unwrap();
     load_to_virtual_file_system(
+        task_instance.as_ref(),
         virtual_file_system,
         binary_path,
         "/binaries/calculator.wasm",
@@ -29,6 +29,7 @@ async fn main() {
     .unwrap();
 
     mount_executables!(
+        context,
         virtual_file_system,
         task,
         &[("/binaries/wasm", WasmExecutable)]
@@ -37,6 +38,7 @@ async fn main() {
     .unwrap();
 
     let result = executable::execute(
+        context,
         "/binaries/wasm",
         vec!["/binaries/calculator.wasm".to_string()],
         standard,
