@@ -8,6 +8,7 @@ use xila::users;
 use xila::virtual_file_system;
 
 pub struct PasswordTab {
+    context: &'static xila::executable::ExecutableContext,
     tab_container: *mut lvgl::lv_obj_t,
     current_password_text_area: *mut lvgl::lv_obj_t,
     new_password_text_area: *mut lvgl::lv_obj_t,
@@ -17,8 +18,9 @@ pub struct PasswordTab {
 }
 
 impl PasswordTab {
-    pub fn new() -> Self {
+    pub fn new(context: &'static xila::executable::ExecutableContext) -> Self {
         Self {
+            context,
             tab_container: core::ptr::null_mut(),
             current_password_text_area: core::ptr::null_mut(),
             new_password_text_area: core::ptr::null_mut(),
@@ -30,7 +32,7 @@ impl PasswordTab {
 
     async fn handle_password_change(&mut self) {
         // Get the current user
-        let task_manager = task::get_instance();
+        let task_manager = &self.context.task_manager;
         let current_task = task_manager.get_current_task_identifier().await;
 
         let user_id = match task_manager.get_user(current_task).await {
@@ -42,7 +44,7 @@ impl PasswordTab {
             }
         };
 
-        let users_manager = users::get_instance();
+        let users_manager = &self.context.users_manager;
         let username = match users_manager.get_user_name(user_id).await {
             Ok(name) => name,
             Err(_) => {
@@ -119,8 +121,14 @@ impl PasswordTab {
         }
 
         // Authenticate current password
+        let authentication_context = authentication::Context {
+            virtual_file_system: &self.context.virtual_file_system,
+            task_manager,
+            users_manager,
+            task: current_task,
+        };
         match authentication::authenticate_user(
-            virtual_file_system::get_instance(),
+            &authentication_context,
             &username,
             current_password,
         )
@@ -129,7 +137,7 @@ impl PasswordTab {
             Ok(_) => {
                 // Password is correct, proceed to change it
                 match authentication::change_user_password(
-                    virtual_file_system::get_instance(),
+                    &authentication_context,
                     &username,
                     new_password,
                 )

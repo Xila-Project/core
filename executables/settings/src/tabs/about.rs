@@ -15,13 +15,15 @@ use xila::{
 };
 
 pub struct AboutTab {
+    context: &'static xila::executable::ExecutableContext,
     container: *mut lvgl::lv_obj_t,
     list: *mut lvgl::lv_obj_t,
 }
 
 impl AboutTab {
-    pub fn new() -> Self {
+    pub fn new(context: &'static xila::executable::ExecutableContext) -> Self {
         Self {
+            context,
             container: null_mut() as *mut _,
             list: null_mut() as *mut _,
         }
@@ -77,22 +79,26 @@ impl AboutTab {
         ))?;
         self.create_list_item(translate!(c"Locale:"), &locale)?;
 
-        let memory = memory::get_instance().get_total_size();
+        let memory = memory::global_manager().get_total_size();
         let memory = Unit::new(memory as f32, BYTES_SUFFIX.symbol);
         let memory = CString::new(format!("{}", memory))
             .map_err(|_| crate::error::Error::FailedToCreateUiElement)?;
         self.create_list_item(translate!(c"Memory:"), &memory)?;
 
-        let cpu_summary = CString::new(Self::get_cpu_summary().await)
+        let cpu_summary = CString::new(self.get_cpu_summary().await)
             .map_err(|_| crate::error::Error::FailedToCreateUiElement)?;
         self.create_list_item(translate!(c"CPU:"), &cpu_summary)?;
 
         Ok(self.container)
     }
 
-    async fn get_cpu_summary() -> alloc::string::String {
-        let virtual_file_system = virtual_file_system::get_instance();
-        let task = task::get_instance().get_current_task_identifier().await;
+    async fn get_cpu_summary(&self) -> alloc::string::String {
+        let virtual_file_system = &self.context.virtual_file_system;
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
 
         let mut buffer = Vec::new();
 

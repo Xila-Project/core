@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::tabs::{AboutTab, GeneralTab, NetworkTab, PasswordTab, Tab};
 
 pub struct Settings {
+    graphics_manager: &'static graphics::Manager,
     window: OwnedWindow,
     tabs: [Tab; 4],
 }
@@ -23,10 +24,11 @@ pub struct FileItem {
 }
 
 impl Settings {
-    pub async fn new() -> Result<Self> {
-        let _lock = graphics::get_instance().lock().await;
+    pub async fn new(context: &'static xila::executable::ExecutableContext) -> Result<Self> {
+        let graphics_manager = graphics::ffi_manager();
+        let _lock = graphics_manager.lock().await;
 
-        let mut window = graphics::get_instance().create_window().await?;
+        let mut window = graphics_manager.create_window().await?;
 
         window.set_icon("Se", palette::get(Hue::Grey, palette::Tone::MAIN));
 
@@ -43,22 +45,26 @@ impl Settings {
         // Create tabs
         let mut tabs = [
             Tab::General(GeneralTab::new()),
-            Tab::Password(PasswordTab::new()),
-            Tab::Network(NetworkTab::new()),
-            Tab::About(AboutTab::new()),
+            Tab::Password(PasswordTab::new(context)),
+            Tab::Network(NetworkTab::new(context)),
+            Tab::About(AboutTab::new(context)),
         ];
 
         for tab in &mut tabs {
             tab.create_ui(tabview).await?;
         }
 
-        let manager = Self { window, tabs };
+        let manager = Self {
+            graphics_manager,
+            window,
+            tabs,
+        };
 
         Ok(manager)
     }
 
     pub async fn handle_events(&mut self) -> bool {
-        graphics::lock!({
+        graphics::lock!(self.graphics_manager, {
             while let Some(event) = self.window.pop_event() {
                 // Logique de filtrage spécifique à Settings
                 if (event.code == EventKind::Delete || event.code == EventKind::CloseRequested)
