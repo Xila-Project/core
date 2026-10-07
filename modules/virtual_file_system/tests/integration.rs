@@ -11,12 +11,14 @@ use virtual_file_system::{File, VirtualFileSystem};
 
 drivers_std::instantiate_global_allocator!();
 
-async fn initialize<'a>() -> (TaskIdentifier, &'a VirtualFileSystem) {
-    let task_instance = task::initialize();
+async fn initialize() -> (TaskIdentifier, &'static VirtualFileSystem) {
+    let task_instance = Box::leak(Box::new(task::Manager::new()));
 
-    let users_manager = users::initialize();
+    let users_manager = Box::leak(Box::new(users::Manager::new()));
 
-    let time_manager = time::initialize(&drivers_std::devices::TimeDevice).unwrap();
+    let time_manager = Box::leak(Box::new(
+        time::Manager::new(&drivers_std::devices::TimeDevice).unwrap(),
+    ));
 
     if !log::is_initialized() {
         log::initialize(&drivers_std::log::Logger).unwrap();
@@ -31,9 +33,10 @@ async fn initialize<'a>() -> (TaskIdentifier, &'a VirtualFileSystem) {
     little_fs::FileSystem::format(device, cache_size).unwrap();
     let file_system = little_fs::FileSystem::new(device, cache_size).unwrap();
 
-    let virtual_file_system =
+    let virtual_file_system = Box::leak(Box::new(
         virtual_file_system::initialize(task_instance, users_manager, time_manager, file_system)
-            .unwrap();
+            .unwrap(),
+    ));
 
     (task, virtual_file_system)
 }
