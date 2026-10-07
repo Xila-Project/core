@@ -71,6 +71,12 @@ pub fn test(arguments: TokenStream, input: TokenStream) -> TokenStream {
     let function_name = &input_function.sig.ident;
 
     let function_name_string = function_name.to_string();
+    // Tests use one serialized manager so `testing::initialize` and the test
+    // task share the same manager regardless of how the task crate is named.
+    let manager_setup = quote! {
+        let _test_lock = #task_path::test_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let manager: &'static #task_path::Manager = #task_path::reset_test_manager();
+    };
 
     // Check if function is async
     let is_asynchronous = input_function.sig.asyncness.is_some();
@@ -132,13 +138,12 @@ pub fn test(arguments: TokenStream, input: TokenStream) -> TokenStream {
             #input_function
 
             static mut __SPAWNER : usize = 0;
+            #manager_setup
 
             unsafe {
                 let __EXECUTOR = #executor;
 
                 __EXECUTOR.run(|Spawner, __executor| {
-                    let manager = #task_path::initialize();
-
                     unsafe {
                         __SPAWNER = manager.register_spawner(Spawner).expect("Failed to register spawner");
                     }
@@ -157,7 +162,7 @@ pub fn test(arguments: TokenStream, input: TokenStream) -> TokenStream {
                 });
             }
             unsafe {
-                #task_path::get_instance().unregister_spawner(__SPAWNER).expect("Failed to unregister spawner");
+                manager.unregister_spawner(__SPAWNER).expect("Failed to unregister spawner");
             }
 
         }
@@ -202,6 +207,10 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
     // Extract function details
     let function_name = &input_function.sig.ident;
     let function_name_string = function_name.to_string();
+    let manager_setup = quote! {
+        let manager: &'static #task_path::Manager =
+            ::std::boxed::Box::leak(::std::boxed::Box::new(#task_path::Manager::new()));
+    };
 
     // Check if function is async
     let is_asynchronous = input_function.sig.asyncness.is_some();
@@ -262,13 +271,12 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
             #input_function
 
             static mut __SPAWNER : usize = 0;
+            #manager_setup
 
             unsafe {
                 let __EXECUTOR : &'static mut _ = #executor_expression;
 
                 __EXECUTOR.start(|Spawner| {
-                    let manager = #task_path::initialize();
-
                     unsafe {
                         __SPAWNER = manager.register_spawner(Spawner).expect("Failed to register spawner");
                     }

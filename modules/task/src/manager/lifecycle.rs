@@ -37,8 +37,7 @@ impl Manager {
         let (join_handle_parent, join_handle_child) = JoinHandle::new();
 
         let task = async move || {
-            let manager = get_instance();
-
+            let manager = manager;
             let internal_identifier = Manager::get_current_internal_identifier().await;
 
             manager
@@ -153,12 +152,35 @@ impl Manager {
     pub async fn get_current_task_identifier(&self) -> TaskIdentifier {
         let internal_identifier = Self::get_current_internal_identifier().await;
 
-        *self
-            .0
-            .read()
-            .await
-            .identifiers
-            .get(&internal_identifier)
-            .expect("Failed to get task identifier")
+        {
+            let inner = self.0.read().await;
+            if let Some(identifier) = inner.identifiers.get(&internal_identifier) {
+                return *identifier;
+            }
+        }
+
+        // Every independently constructed task manager registers the executor's
+        // current task as its own root task on first access.
+        let mut inner = self.0.write().await;
+        if let Some(identifier) = inner.identifiers.get(&internal_identifier) {
+            return *identifier;
+        }
+        let root = Manager::ROOT_TASK_IDENTIFIER;
+        inner.tasks.insert(
+            root,
+            Metadata {
+                internal_identifier,
+                name: "Root".into(),
+                parent: root,
+                user: users::UserIdentifier::ROOT,
+                group: users::GroupIdentifier::ROOT,
+                environment_variables: alloc::vec::Vec::new(),
+                signals: crate::signal::SignalAccumulator::new(),
+                spawner_identifier: 0,
+            },
+        );
+        inner.identifiers.insert(internal_identifier, root);
+
+        root
     }
 }

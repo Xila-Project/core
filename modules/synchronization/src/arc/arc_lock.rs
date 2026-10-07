@@ -53,6 +53,42 @@ impl<T> Arc<T> {
         }
     }
 
+    /// Returns a reference to the inner value.
+    pub fn as_ref(this: &Self) -> &T {
+        &unsafe { this.ptr.as_ref() }.data
+    }
+
+    /// Converts the `Arc` into a raw pointer to the inner value.
+    pub fn into_raw(this: Self) -> *const T {
+        let pointer = &unsafe { this.ptr.as_ref() }.data as *const T;
+        core::mem::forget(this);
+        pointer
+    }
+
+    /// Increments the strong count of a pointer previously returned by `into_raw`.
+    ///
+    /// # Safety
+    /// `pointer` must refer to a live `Arc<T>` allocation.
+    pub unsafe fn increment_strong_count(pointer: *const T) {
+        let offset = core::mem::offset_of!(ArcInner<T>, data);
+        let inner = unsafe { (pointer as *mut u8).sub(offset) as *mut ArcInner<T> };
+        let inner = unsafe { &*inner };
+        inner.strong.lock(|count| {
+            let mut count = count.borrow_mut();
+            *count = count.checked_add(1).expect("Arc strong count overflow");
+        });
+    }
+
+    /// Reconstructs an `Arc` previously consumed by `into_raw`.
+    pub unsafe fn from_raw(pointer: *const T) -> Self {
+        let offset = core::mem::offset_of!(ArcInner<T>, data);
+        let inner = unsafe { (pointer as *mut u8).sub(offset) as *mut ArcInner<T> };
+        Self {
+            ptr: NonNull::new(inner).expect("Arc::from_raw received a null pointer"),
+            phantom: PhantomData,
+        }
+    }
+
     /// Gets the number of strong pointers to this allocation.
     ///
     /// # Safety

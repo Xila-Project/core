@@ -22,6 +22,7 @@ embassy-time = { workspace = true, features = ["wasm"] }
 [features]
 default = []
 std = []
+test_harness = ["std"]
 
 [dev-dependencies]
 drivers_native = { workspace = true }

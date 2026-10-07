@@ -7,6 +7,14 @@ use alloc::{collections::BTreeMap, format, vec::Vec};
 use core::time::Duration;
 use users::{GroupIdentifier, UserIdentifier};
 
+fn initialize() -> &'static Manager {
+    crate::manager::test_manager()
+}
+
+fn get_instance() -> &'static Manager {
+    initialize()
+}
+
 #[test(task_path = crate)]
 async fn test_get_task_name() {
     let manager = initialize();

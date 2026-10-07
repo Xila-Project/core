@@ -3,23 +3,9 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use synchronization::{
-    blocking_mutex::raw::CriticalSectionRawMutex, once_lock::OnceLock, rwlock::RwLock,
-};
+use synchronization::{blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock};
 
 use super::*;
-
-static MANAGER_INSTANCE: OnceLock<Manager> = OnceLock::new();
-
-pub fn initialize() -> &'static Manager {
-    MANAGER_INSTANCE.get_or_init(Manager::new)
-}
-
-pub fn get_instance() -> &'static Manager {
-    MANAGER_INSTANCE
-        .try_get()
-        .expect("User manager instance not initialized")
-}
 
 struct InternalUser {
     pub name: String,
@@ -39,7 +25,7 @@ struct InternalManager {
 pub struct Manager(RwLock<CriticalSectionRawMutex, InternalManager>);
 
 impl Manager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut groups = BTreeMap::new();
         groups.insert(
             GroupIdentifier::ROOT,
