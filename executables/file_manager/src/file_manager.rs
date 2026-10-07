@@ -8,7 +8,7 @@ pub(crate) use alloc::{
 use core::ptr::null_mut;
 use xila::log;
 use xila::task;
-use xila::virtual_file_system::{Directory, get_instance};
+use xila::virtual_file_system::Directory;
 use xila::{
     file_system::{Kind, Path, PathOwned},
     graphics::{
@@ -19,6 +19,8 @@ use xila::{
 use xila::{graphics::OwnedWindow, internationalization::translate};
 
 pub struct FileManager {
+    context: &'static xila::executable::ExecutableContext,
+    graphics_manager: &'static graphics::Manager,
     window: OwnedWindow,
     toolbar: *mut lvgl::lv_obj_t,
     up_button: *mut lvgl::lv_obj_t,
@@ -40,13 +42,16 @@ pub struct FileItem {
 }
 
 impl FileManager {
-    pub async fn new() -> Result<Self> {
-        let manager = graphics::lock!({
-            let mut window = graphics::get_instance().create_window().await?;
+    pub async fn new(context: &'static xila::executable::ExecutableContext) -> Result<Self> {
+        let graphics_manager = graphics::ffi_manager();
+        let manager = graphics::lock!(graphics_manager, {
+            let mut window = graphics_manager.create_window().await?;
 
             window.set_icon("Fm", palette::get(Hue::Cyan, palette::Tone::MAIN));
 
             let mut manager = Self {
+                context,
+                graphics_manager,
                 window,
                 toolbar: null_mut(),
                 up_button: null_mut(),
@@ -88,7 +93,7 @@ impl FileManager {
     }
 
     pub async fn handle_events(&mut self) -> bool {
-        graphics::lock!({
+        graphics::lock!(self.graphics_manager, {
             while let Some(event) = self.window.pop_event() {
                 if let Err(e) = self.handle_event(event).await {
                     log::error!(translate!("Error handling file manager event: {:?}"), e);
@@ -246,12 +251,16 @@ impl FileManager {
         // Clear existing files
         self.clear_file_list();
 
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
 
         // Open directory
-        let virtual_file_system = get_instance();
+        let virtual_file_system = &self.context.virtual_file_system;
 
-        let mut directory = Directory::open(virtual_file_system, task, &self.current_path).await?;
+        let mut directory = Directory::open(&virtual_file_system, task, &self.current_path).await?;
 
         // Read directory entries
         while let Some(entry) = directory.read().await? {

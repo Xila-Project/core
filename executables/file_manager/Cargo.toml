@@ -7,6 +7,7 @@ edition = "2024"
 xila = { path = "../../", features = ["graphics"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dev-dependencies]
+task = { workspace = true, features = ["test_harness"] }
 drivers_native = { workspace = true }
 drivers_core = { workspace = true }
 drivers_shared = { workspace = true }
