@@ -12,21 +12,24 @@ async fn main() {
     use drivers_std::loader::load_to_virtual_file_system;
     use wasm::WasmExecutable;
     use xila::executable::{build_crate, mount_executables};
-    use xila::task;
-    use xila::virtual_file_system;
 
     let standard = testing::initialize(true, false).await;
-
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task_instance = task::get_instance();
-    let task = task_instance.get_current_task_identifier().await;
+    let context = standard.context;
+    let virtual_file_system = &context.virtual_file_system;
+    let task = context.task_manager.get_current_task_identifier().await;
 
     let binary_path = build_crate(&"wasm_wasm_test").unwrap();
-    load_to_virtual_file_system(virtual_file_system, binary_path, "/test_wasm.wasm")
-        .await
-        .unwrap();
+    load_to_virtual_file_system(
+        context.task_manager.clone(),
+        virtual_file_system,
+        binary_path,
+        "/test_wasm.wasm",
+    )
+    .await
+    .unwrap();
 
     mount_executables!(
+        context,
         virtual_file_system,
         task,
         &[
@@ -38,6 +41,7 @@ async fn main() {
     .unwrap();
 
     let result = executable::execute(
+        context,
         "/binaries/wasm",
         vec!["/test_wasm.wasm".to_string()],
         standard,
