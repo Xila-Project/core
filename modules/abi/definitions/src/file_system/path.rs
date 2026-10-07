@@ -20,7 +20,7 @@ abi_unsafe_function! {
 
         log::information!("Getting statistics for path {path:?}");
 
-        let result = block_on(virtual_file_system::get_instance().get_statistics(&path))?;
+        let result = block_on(crate::runtime_context().virtual_file_system.get_statistics(&path))?;
 
         log::information!("Got statistics for path {path:?}: {result:?}");
 
@@ -71,7 +71,7 @@ abi_unsafe_function! {
 
         // Debug: Renaming files
 
-        block_on(virtual_file_system::get_instance().rename(&old_path, &new_path))?;
+        block_on(crate::runtime_context().virtual_file_system.rename(&old_path, &new_path))?;
         Ok(())
     }
 }
@@ -88,6 +88,6 @@ abi_unsafe_function! {
     ) -> XilaFileSystemResult {
         let path = parse_c_str(path)?;
 
-        block_on(virtual_file_system::get_instance().remove(task.into(), path))
+        block_on(crate::runtime_context().virtual_file_system.remove(task.into(), path))
     }
 }

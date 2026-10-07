@@ -6,7 +6,7 @@ use file_system::{
 };
 use shared::generate_shadow_type;
 use users::{GroupIdentifier, UserIdentifier};
-use virtual_file_system::{Error, SynchronousFile, get_instance as get_file_system_instance};
+use virtual_file_system::{Error, SynchronousFile};
 
 use crate::{
     XilaFileSystemPollEvent, XilaFileSystemState, XilaTaskIdentifier, XilaTime,
@@ -18,7 +18,7 @@ use super::{
     XilaFileSystemWhence,
 };
 
-generate_shadow_type!(XilaFileSystemFile, SynchronousFile);
+generate_shadow_type!(XilaFileSystemFile, SynchronousFile<'static>);
 
 abi_unsafe_function! {
     /// This function is used to get the statistics of a file.
@@ -99,7 +99,7 @@ abi_unsafe_function! {
         file: *mut XilaFileSystemFile,
     ) -> XilaFileSystemResult {
         log::information!("Closing file {file:?}");
-        (*file).close_internal(get_file_system_instance())
+        (*file).close_internal(crate::runtime_context().virtual_file_system)
     }
 }
 
@@ -293,7 +293,7 @@ abi_unsafe_function! {
 
         log::information!("Resolved flags: {:?}", flags);
 
-        let f = SynchronousFile::open(get_file_system_instance(), task.into(), path, flags)?;
+        let f = SynchronousFile::open(crate::runtime_context().virtual_file_system, task.into(), path, flags)?;
 
         log::information!("Successfully opened file at path {:?} with mode {:?}, open {:?} and status {:?}",
             path,
@@ -303,7 +303,7 @@ abi_unsafe_function! {
          );
 
         unsafe {
-            let target_slot = file as *mut SynchronousFile;
+            let target_slot = file as *mut SynchronousFile<'static>;
             ::core::ptr::write(target_slot, f);
         }
 

@@ -1,7 +1,5 @@
 use core::ffi::{c_int, c_void};
 
-use time::get_instance;
-
 pub type XilaTime = u64;
 
 #[repr(C)]
@@ -28,7 +26,8 @@ pub enum XilaTimerFlags {
 /// The current time since the system startup in microseconds.
 #[unsafe(no_mangle)]
 pub extern "C" fn xila_time_get_time_since_startup_microseconds() -> u64 {
-    get_instance()
+    crate::runtime_context()
+        .time_manager
         .get_current_time_since_startup()
         .unwrap_or_default()
         .as_micros() as u64

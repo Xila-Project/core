@@ -7,11 +7,11 @@ use core::{ffi::c_char, ptr::null_mut};
 use log::debug;
 use shared::generate_shadow_type;
 use task::{TaskIdentifier, block_on};
-use virtual_file_system::{SynchronousDirectory, get_instance as get_file_system_instance};
+use virtual_file_system::SynchronousDirectory;
 
 use super::{XilaFileKind, XilaFileSystemInode, XilaFileSystemSize};
 
-generate_shadow_type!(XilaFileSystemDirectory, SynchronousDirectory);
+generate_shadow_type!(XilaFileSystemDirectory, SynchronousDirectory<'static>);
 
 abi_unsafe_function! {
     /// This function is used to open a directory.
@@ -30,11 +30,11 @@ abi_unsafe_function! {
         debug!("Opening directory {path:?} for task {task:?}");
 
         let synchronous_directory =
-            SynchronousDirectory::open(get_file_system_instance(), task, path)?;
+            SynchronousDirectory::open(crate::runtime_context().virtual_file_system, task, path)?;
 
         unsafe {
             // Cast the destination slot and overwrite it without reading/dropping garbage first
-            let target_slot = out_directory as *mut SynchronousDirectory;
+            let target_slot = out_directory as *mut SynchronousDirectory<'static>;
             ::core::ptr::write(target_slot, synchronous_directory);
         }
 
@@ -80,7 +80,7 @@ abi_unsafe_function! {
     fn xila_file_system_directory_close(
         directory: *mut XilaFileSystemDirectory,
     ) -> XilaFileSystemResult {
-        (*directory).close_internal(get_file_system_instance())
+        (*directory).close_internal(crate::runtime_context().virtual_file_system)
     }
 }
 
@@ -186,7 +186,7 @@ abi_unsafe_function! {
     ) -> XilaFileSystemResult {
         let path = parse_c_str(path)?;
 
-        block_on(get_file_system_instance().create_directory(task.into(), &path))?;
+        block_on(crate::runtime_context().virtual_file_system.create_directory(task.into(), &path))?;
 
         Ok(())
     }
