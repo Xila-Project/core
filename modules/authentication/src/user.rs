@@ -18,10 +18,10 @@ use alloc::{
 use file_system::{AccessFlags, Path, PathOwned};
 use miniserde::{Deserialize, Serialize};
 use users::{GroupIdentifier, GroupIdentifierInner, UserIdentifier, UserIdentifierInner};
-use virtual_file_system::{Directory, File, VirtualFileSystem};
+use virtual_file_system::{Directory, File};
 
 use crate::{
-    Error, READ_CHUNK_SIZE, Result, USERS_FOLDER_PATH,
+    Context, Error, READ_CHUNK_SIZE, Result, USERS_FOLDER_PATH,
     hash::{generate_salt, hash_password},
 };
 
@@ -198,13 +198,14 @@ pub fn get_user_file_path(user_name: &str) -> Result<PathOwned> {
 /// - `Failed_to_parse_user_file` - Invalid JSON format in user file
 /// - `Invalid_password` - Password doesn't match stored hash
 pub async fn authenticate_user(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     user_name: &str,
     password: &str,
 ) -> Result<UserIdentifier> {
     let path = get_user_file_path(user_name)?;
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let virtual_file_system = context.virtual_file_system;
+    let task = context.task;
 
     let mut user_file = File::open(virtual_file_system, task, path, AccessFlags::Read.into())
         .await
@@ -264,13 +265,14 @@ pub async fn authenticate_user(
 /// - Users manager operations (adding user)
 /// - Random salt generation failures
 pub async fn create_user(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     user_name: &str,
     password: &str,
     primary_group: GroupIdentifier,
     user_identifier: Option<UserIdentifier>,
 ) -> Result<UserIdentifier> {
-    let users_manager = users::get_instance();
+    let virtual_file_system = context.virtual_file_system;
+    let users_manager = context.users_manager;
 
     // - New user identifier if not provided.
     let user_identifier = if let Some(user_identifier) = user_identifier {
@@ -289,7 +291,7 @@ pub async fn create_user(
         .map_err(Error::FailedToCreateUser)?;
 
     // - Hash password.
-    let task = task::get_instance().get_current_task_identifier().await;
+    let task = context.task;
 
     let salt = generate_salt(virtual_file_system, task).await?;
 
@@ -304,7 +306,7 @@ pub async fn create_user(
         salt,
     );
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let task = context.task;
 
     match Directory::create(virtual_file_system, task, USERS_FOLDER_PATH).await {
         Ok(_) | Err(virtual_file_system::Error::AlreadyExists) => {}
@@ -356,11 +358,12 @@ pub async fn create_user(
 /// - Salt generation failures
 /// - JSON parsing errors
 pub async fn change_user_password(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     user_name: &str,
     new_password: &str,
 ) -> Result<()> {
-    let task = task::get_instance().get_current_task_identifier().await;
+    let virtual_file_system = context.virtual_file_system;
+    let task = context.task;
 
     let salt = generate_salt(virtual_file_system, task).await?;
 
@@ -420,22 +423,18 @@ pub async fn change_user_password(
 /// - JSON parsing errors
 /// - Path construction failures
 pub async fn change_user_name(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     current_name: &str,
     new_name: &str,
 ) -> Result<()> {
+    let virtual_file_system = context.virtual_file_system;
     let file_path = get_user_file_path(current_name)?;
 
     let mut buffer = Vec::new();
 
-    File::read_from_path(
-        virtual_file_system,
-        task::get_instance().get_current_task_identifier().await,
-        &file_path,
-        &mut buffer,
-    )
-    .await
-    .map_err(Error::FailedToReadUserFile)?;
+    File::read_from_path(virtual_file_system, context.task, &file_path, &mut buffer)
+        .await
+        .map_err(Error::FailedToReadUserFile)?;
 
     let mut user: User =
         miniserde::json::from_str(core::str::from_utf8(buffer.as_slice()).unwrap())
@@ -447,7 +446,7 @@ pub async fn change_user_name(
 
     File::write_to_path(
         virtual_file_system,
-        task::get_instance().get_current_task_identifier().await,
+        context.task,
         get_user_file_path(new_name)?,
         user_json.as_bytes(),
     )
@@ -480,13 +479,14 @@ pub async fn change_user_name(
 /// - File system errors (opening, reading)
 /// - JSON parsing errors
 pub async fn read_user_file(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     buffer: &mut Vec<u8>,
     file: &str,
 ) -> Result<User> {
     let user_file_path = get_user_file_path(file)?;
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let virtual_file_system = context.virtual_file_system;
+    let task = context.task;
 
     File::read_from_path(virtual_file_system, task, &user_file_path, buffer)
         .await

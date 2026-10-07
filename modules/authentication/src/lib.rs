@@ -39,7 +39,9 @@ mod user;
 use alloc::{vec, vec::Vec};
 pub use error::*;
 pub use group::*;
+use task::TaskIdentifier;
 pub use user::*;
+use virtual_file_system::VirtualFileSystem;
 
 const READ_CHUNK_SIZE: usize = 32;
 
@@ -51,6 +53,14 @@ const GROUP_FOLDER_PATH: &str = "/system/groups";
 
 /// Path to the random device used for salt generation
 const RANDOM_DEVICE_PATH: &str = "/devices/random";
+
+/// The dependencies required by authentication operations.
+pub struct Context<'a> {
+    pub virtual_file_system: &'a VirtualFileSystem,
+    pub task_manager: &'a task::Manager,
+    pub users_manager: &'a users::Manager,
+    pub task: TaskIdentifier,
+}
 
 /// Loads all users and groups from the filesystem into memory.
 ///
@@ -80,19 +90,18 @@ const RANDOM_DEVICE_PATH: &str = "/devices/random";
 ///     Ok(())
 /// }
 /// ```
-pub async fn load_all_users_and_groups() -> Result<()> {
+pub async fn load_all_users_and_groups(context: &Context<'_>) -> Result<()> {
     use group::read_group_file;
     use user::read_user_file;
     use virtual_file_system::Directory;
     // Open Xila users folder.
-    let virtual_file_system = virtual_file_system::get_instance();
-
-    let users_manager = users::get_instance();
+    let virtual_file_system = context.virtual_file_system;
+    let users_manager = context.users_manager;
 
     let mut buffer: Vec<u8> = vec![];
 
     {
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task = context.task;
 
         let groups_directory = Directory::open(virtual_file_system, task, GROUP_FOLDER_PATH)
             .await
@@ -100,14 +109,13 @@ pub async fn load_all_users_and_groups() -> Result<()> {
 
         // Read all groups.
         for group_entry in groups_directory {
-            let group = if let Ok(group) =
-                read_group_file(virtual_file_system, &mut buffer, &group_entry.name).await
-            {
-                group
-            } else {
-                // ? : Log error ?
-                continue;
-            };
+            let group =
+                if let Ok(group) = read_group_file(context, &mut buffer, &group_entry.name).await {
+                    group
+                } else {
+                    // ? : Log error ?
+                    continue;
+                };
 
             users_manager
                 .add_group(group.get_identifier(), group.get_name(), group.get_users())
@@ -117,7 +125,7 @@ pub async fn load_all_users_and_groups() -> Result<()> {
     }
 
     {
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task = context.task;
 
         let users_directory = Directory::open(virtual_file_system, task, USERS_FOLDER_PATH)
             .await
@@ -125,14 +133,13 @@ pub async fn load_all_users_and_groups() -> Result<()> {
 
         // Read all users.
         for user_entry in users_directory {
-            let user = if let Ok(user) =
-                read_user_file(virtual_file_system, &mut buffer, &user_entry.name).await
-            {
-                user
-            } else {
-                // ? : Log error ?
-                continue;
-            };
+            let user =
+                if let Ok(user) = read_user_file(context, &mut buffer, &user_entry.name).await {
+                    user
+                } else {
+                    // ? : Log error ?
+                    continue;
+                };
 
             users_manager
                 .add_user(
