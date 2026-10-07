@@ -183,7 +183,7 @@ impl IcmpSocket {
         use wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
         let mut echo_payload = vec![0u8; payload_size];
-        let start_time = crate::get_smoltcp_time();
+        let start_time = crate::get_smoltcp_time(self.context.stack.time_manager());
 
         let timestamp_millis = start_time.total_millis() as u64;
         echo_payload[0..8].copy_from_slice(&timestamp_millis.to_be_bytes());
@@ -258,7 +258,7 @@ impl IcmpSocket {
         let timeout_end = start_time + timeout.into_smoltcp();
 
         loop {
-            let now = crate::get_smoltcp_time();
+            let now = crate::get_smoltcp_time(self.context.stack.time_manager());
             if now >= timeout_end {
                 return Err(Error::TimedOut);
             }
@@ -320,7 +320,7 @@ impl IcmpSocket {
                     };
 
                     if is_valid_reply {
-                        let end_time = crate::get_smoltcp_time();
+                        let end_time = crate::get_smoltcp_time(self.context.stack.time_manager());
                         let rtt = end_time - start_time;
                         return Ok(Duration::from_milliseconds(rtt.total_millis()));
                     }

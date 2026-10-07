@@ -1,6 +1,5 @@
 use crate::{
-    DnsQueryKind, Error, IpAddress, IpCidr, Ipv4, Ipv6, MacAddress, Port, Result, Route,
-    WakeSignal, get_smoltcp_time,
+    DnsQueryKind, Error, IpAddress, IpCidr, Ipv4, Ipv6, MacAddress, Port, Result, Route, WakeSignal,
 };
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::{
@@ -32,24 +31,32 @@ pub struct StackInner {
     pub maximum_transmission_unit: usize,
     pub maximum_burst_size: Option<usize>,
     pub next_local_port: Port,
+    time_manager: &'static time::Manager<'static>,
 }
 
 #[derive(Clone)]
 pub struct Stack {
     inner: Arc<Mutex<CriticalSectionRawMutex, StackInner>>,
     wake_signal: WakeSignal,
+    time_manager: &'static time::Manager<'static>,
 }
 
 impl Stack {
     pub fn new(inner: StackInner, wake_signal: WakeSignal) -> Self {
+        let time_manager = inner.time_manager;
         Stack {
             inner: Arc::new(Mutex::new(inner)),
             wake_signal,
+            time_manager,
         }
     }
 
     pub fn wake_up(&self) -> &WakeSignal {
         &self.wake_signal
+    }
+
+    pub fn time_manager(&self) -> &'static time::Manager<'static> {
+        self.time_manager
     }
 
     /// Try to lock the inner stack without blocking. Returns None if the lock is held.
@@ -130,6 +137,7 @@ impl StackInner {
         controller_device: impl DirectCharacterDevice + 'static,
         random_seed: u64,
         now: smoltcp::time::Instant,
+        time_manager: &'static time::Manager<'static>,
     ) -> Self {
         let capabilities = device.capabilities();
 
@@ -164,6 +172,7 @@ impl StackInner {
             maximum_transmission_unit: capabilities.max_transmission_unit,
             maximum_burst_size: capabilities.max_burst_size,
             next_local_port: Port::from_inner(next_local_port),
+            time_manager,
         }
     }
 
@@ -362,7 +371,7 @@ impl StackInner {
     }
 
     pub fn poll(&mut self, device: &mut impl Device) -> Option<Duration> {
-        let now = get_smoltcp_time();
+        let now = crate::get_smoltcp_time(self.time_manager);
 
         self.interface.poll(now, device, &mut self.sockets);
 
