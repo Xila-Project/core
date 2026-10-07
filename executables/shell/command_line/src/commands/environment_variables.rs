@@ -83,7 +83,9 @@ where
 
     let (name, value) = argument.split_once('=').ok_or(Error::InvalidArgument)?;
 
-    task::get_instance()
+    context
+        .executable_context()
+        .task_manager
         .set_environment_variable(context.task_id(), name, value)
         .await
         .map_err(Error::FailedToSetEnvironmentVariable)
@@ -100,7 +102,9 @@ where
     let RemoveEnvironmentVariableArguments { name } =
         RemoveEnvironmentVariableArguments::parse(options)?;
 
-    task::get_instance()
+    context
+        .executable_context()
+        .task_manager
         .remove_environment_variable(context.task_id(), name)
         .await
         .map_err(Error::FailedToRemoveEnvironmentVariable)
@@ -115,7 +119,7 @@ where
     C: CommandContext,
 {
     let GetEnvironmentVariableArguments { key } = GetEnvironmentVariableArguments::parse(options)?;
-    let task_manager = task::get_instance();
+    let task_manager = &context.executable_context().task_manager;
 
     if key.is_empty() {
         let environment_variables = task_manager

@@ -65,12 +65,14 @@ async fn write_long_entry<C: CommandContext>(
     entry: &impl AsRef<str>,
 ) -> Result<()> {
     let entry_path = path.append(entry.as_ref()).ok_or(Error::FailedToJoinPath)?;
-    let statistics = virtual_file_system::get_instance()
+    let statistics = context
+        .executable_context()
+        .virtual_file_system
         .get_statistics(&entry_path)
         .await
         .map_err(Error::FailedToGetMetadata)?;
 
-    let users_manager = users::get_instance();
+    let users_manager = &context.executable_context().users_manager;
     let user = users_manager
         .get_user_name(statistics.user)
         .await
@@ -104,7 +106,7 @@ where
     let ListArguments { path, long } = ListArguments::parse(options)?;
     let path = resolve_list_path(context, path);
 
-    let virtual_file_system = virtual_file_system::get_instance();
+    let virtual_file_system = &context.executable_context().virtual_file_system;
     let mut directory = Directory::open(virtual_file_system, context.task_id(), &path)
         .await
         .map_err(Error::FailedToOpenDirectory)?;

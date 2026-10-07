@@ -49,15 +49,31 @@ fn resolve_path<C: CommandContext>(
     }
 }
 
-async fn resolve_user_name(user: xila::users::UserIdentifier) -> String {
-    match users::get_instance().get_user_name(user).await {
+async fn resolve_user_name<C: CommandContext>(
+    context: &C,
+    user: xila::users::UserIdentifier,
+) -> String {
+    match context
+        .executable_context()
+        .users_manager
+        .get_user_name(user)
+        .await
+    {
         Ok(name) => name,
         Err(_) => format!("{}", user.as_u16()),
     }
 }
 
-async fn resolve_group_name(group: xila::users::GroupIdentifier) -> String {
-    match users::get_instance().get_group_name(group).await {
+async fn resolve_group_name<C: CommandContext>(
+    context: &C,
+    group: xila::users::GroupIdentifier,
+) -> String {
+    match context
+        .executable_context()
+        .users_manager
+        .get_group_name(group)
+        .await
+    {
         Ok(name) => name,
         Err(_) => format!("{}", group.as_u16()),
     }
@@ -116,13 +132,15 @@ where
     let StatisticsArguments { path } = StatisticsArguments::parse(options)?;
     let path = resolve_path(context, path)?;
 
-    let statistics = virtual_file_system::get_instance()
+    let statistics = context
+        .executable_context()
+        .virtual_file_system
         .get_statistics(&path)
         .await
         .map_err(Error::FailedToGetMetadata)?;
 
-    let user = resolve_user_name(statistics.user).await;
-    let group = resolve_group_name(statistics.group).await;
+    let user = resolve_user_name(context, statistics.user).await;
+    let group = resolve_group_name(context, statistics.group).await;
     let output = format_statistics(&statistics, &user, &group);
 
     context.write_out_fmt(format_args!("{}", output))?;

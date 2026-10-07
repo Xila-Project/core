@@ -5,9 +5,16 @@ use xila::{
     virtual_file_system::{self, Directory},
 };
 
-pub async fn resolve(command: &str, paths: &[&Path]) -> Result<PathOwned> {
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task = task::get_instance().get_current_task_identifier().await;
+pub async fn resolve(
+    executable_context: &'static xila::executable::ExecutableContext,
+    command: &str,
+    paths: &[&Path],
+) -> Result<PathOwned> {
+    let virtual_file_system = &executable_context.virtual_file_system;
+    let task = executable_context
+        .task_manager
+        .get_current_task_identifier()
+        .await;
 
     for path in paths {
         if let Ok(mut directory) = Directory::open(virtual_file_system, task, path).await {
@@ -56,8 +63,10 @@ mod tests {
     }
 
     async fn create_file(path: &str) {
-        let virtual_file_system = virtual_file_system::get_instance();
-        let task = task::get_instance().get_current_task_identifier().await;
+        let standard = testing::initialize(false, true).await;
+        let context = standard.context;
+        let virtual_file_system = &context.virtual_file_system;
+        let task = context.task_manager.get_current_task_identifier().await;
 
         let file = File::open(
             virtual_file_system,
@@ -72,8 +81,10 @@ mod tests {
     }
 
     async fn create_directory(path: &str) {
-        let virtual_file_system = virtual_file_system::get_instance();
-        let task = task::get_instance().get_current_task_identifier().await;
+        let standard = testing::initialize(false, true).await;
+        let context = standard.context;
+        let virtual_file_system = &context.virtual_file_system;
+        let task = context.task_manager.get_current_task_identifier().await;
 
         Directory::create(virtual_file_system, task, Path::from_str(path))
             .await
@@ -89,7 +100,10 @@ mod tests {
         create_directory("/resolver_test_b").await;
         create_file("/resolver_test_b/hello").await;
 
+        let standard = testing::initialize(false, true).await;
+        let executable_context = standard.context;
         let result = resolve(
+            executable_context,
             "hello",
             &[
                 Path::from_str("/resolver_test_a"),
@@ -112,7 +126,10 @@ mod tests {
         create_file("/resolver_test_first/tool").await;
         create_file("/resolver_test_second/tool").await;
 
+        let standard = testing::initialize(false, true).await;
+        let executable_context = standard.context;
         let result = resolve(
+            executable_context,
             "tool",
             &[
                 Path::from_str("/resolver_test_first"),
@@ -132,7 +149,13 @@ mod tests {
 
         create_directory("/resolver_test_empty").await;
 
-        let result = resolve("missing_command", &[Path::from_str("/resolver_test_empty")]).await;
+        let standard = testing::initialize(false, true).await;
+        let result = resolve(
+            standard.context,
+            "missing_command",
+            &[Path::from_str("/resolver_test_empty")],
+        )
+        .await;
 
         assert!(matches!(result, Err(Error::CommandNotFound)));
     }

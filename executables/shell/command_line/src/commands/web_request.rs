@@ -170,7 +170,7 @@ where
     C: CommandContext,
 {
     let parameters = parse_web_request_parameters(options)?;
-    let virtual_file_system = xila::virtual_file_system::get_instance();
+    let virtual_file_system = &context.executable_context().virtual_file_system;
     let task = context.task_id();
 
     let mut buffer = build_request_buffer(&parameters, virtual_file_system, task).await?;

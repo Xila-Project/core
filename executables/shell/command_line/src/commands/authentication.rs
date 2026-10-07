@@ -1,7 +1,7 @@
 use crate::{Result, Shell, error::Error};
 use alloc::string::String;
 use core::fmt::Write;
-use xila::{authentication, internationalization::translate, task, virtual_file_system};
+use xila::{authentication, internationalization::translate};
 
 impl Shell {
     pub async fn authenticate(&mut self) -> Result<String> {
@@ -18,19 +18,20 @@ impl Shell {
         self.standard.read_line(&mut password).await.unwrap();
 
         // - Check the user name and the password
-        let user_identifier = authentication::authenticate_user(
-            virtual_file_system::get_instance(),
-            &user_name,
-            &password,
-        )
-        .await
-        .map_err(Error::AuthenticationFailed)?;
+        let task_manager = &self.context.task_manager;
+        let task = task_manager.get_current_task_identifier().await;
+        let authentication_context = authentication::Context {
+            virtual_file_system: &self.context.virtual_file_system,
+            task_manager: &task_manager,
+            users_manager: &self.context.users_manager,
+            task,
+        };
+        let user_identifier =
+            authentication::authenticate_user(&authentication_context, &user_name, &password)
+                .await
+                .map_err(Error::AuthenticationFailed)?;
 
         // - Set the user
-        let task_manager = task::get_instance();
-
-        let task = task_manager.get_current_task_identifier().await;
-
         task_manager
             .set_user(task, user_identifier)
             .await

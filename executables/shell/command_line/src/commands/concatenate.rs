@@ -43,7 +43,7 @@ fn resolve_path<C: CommandContext>(
 }
 
 async fn read_file_and_write<C: CommandContext>(context: &mut C, path: &Path) -> Result<()> {
-    let virtual_file_system = virtual_file_system::get_instance();
+    let virtual_file_system = &context.executable_context().virtual_file_system;
 
     let mut file = File::open(
         virtual_file_system,

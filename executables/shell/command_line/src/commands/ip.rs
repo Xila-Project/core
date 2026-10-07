@@ -32,8 +32,13 @@ struct IpArguments<'a> {
     command: &'a str,
 }
 
-async fn open_interface(virtual_file_system: &VirtualFileSystem, interface: &str) -> Result<File> {
-    let task = task::get_instance().get_current_task_identifier().await;
+async fn open_interface<C: CommandContext>(context: &C, interface: &str) -> Result<File<'static>> {
+    let executable_context = context.executable_context();
+    let virtual_file_system = &executable_context.virtual_file_system;
+    let task = executable_context
+        .task_manager
+        .get_current_task_identifier()
+        .await;
     let path = Path::NETWORK_DEVICES
         .join(interface)
         .ok_or(Error::FailedToJoinPath)?;
@@ -46,13 +51,18 @@ async fn open_interface(virtual_file_system: &VirtualFileSystem, interface: &str
 async fn show_routes_interface<C: CommandContext>(
     context: &mut C,
     interface: &str,
-    file: &mut File,
+    file: &mut File<'_>,
 ) -> crate::Result<()> {
-    let mut routes = FileControlIterator::new(file, GET_ROUTE_COUNT, GET_ROUTE)
-        .await
+    let count = file
+        .as_synchronous_file_mut()
+        .control(GET_ROUTE_COUNT, &())
         .map_err(Error::FailedToOpenFile)?;
 
-    while let Some(route) = routes.next().await.map_err(Error::FailedToOpenFile)? {
+    for index in 0..count {
+        let route = file
+            .as_synchronous_file_mut()
+            .control(GET_ROUTE, &index)
+            .map_err(Error::FailedToOpenFile)?;
         context.write_out_fmt(format_args!(
             "{} via {} device {}\n",
             route.cidr, route.via_router, interface
@@ -80,7 +90,7 @@ async fn show_routes<C: CommandContext>(
             continue;
         }
 
-        let mut file = open_interface(virtual_file_system, &entry.name).await?;
+        let mut file = open_interface(context, &entry.name).await?;
         show_routes_interface(context, &entry.name, &mut file).await?;
     }
 
@@ -89,13 +99,18 @@ async fn show_routes<C: CommandContext>(
 
 async fn show_address_interface<C: CommandContext>(
     context: &mut C,
-    file: &mut File,
+    file: &mut File<'_>,
 ) -> crate::Result<()> {
-    let mut addresses = FileControlIterator::new(file, GET_IP_ADDRESS_COUNT, GET_IP_ADDRESS)
-        .await
+    let count = file
+        .as_synchronous_file_mut()
+        .control(GET_IP_ADDRESS_COUNT, &())
         .map_err(Error::FailedToOpenFile)?;
 
-    while let Some(address) = addresses.next().await.map_err(Error::FailedToOpenFile)? {
+    for index in 0..count {
+        let address = file
+            .as_synchronous_file_mut()
+            .control(GET_IP_ADDRESS, &index)
+            .map_err(Error::FailedToOpenFile)?;
         context.write_out_fmt(format_args!("   {} \n", address))?;
     }
 
@@ -124,7 +139,7 @@ async fn show_address<C: CommandContext>(
 
         log::information!("Showing address for interface {}", entry.name);
 
-        let mut file = open_interface(virtual_file_system, &entry.name).await?;
+        let mut file = open_interface(context, &entry.name).await?;
 
         let state = file
             .control(GET_STATE, &())
@@ -180,8 +195,12 @@ where
 {
     let IpArguments { command } = IpArguments::parse(options)?;
 
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task = task::get_instance().get_current_task_identifier().await;
+    let executable_context = context.executable_context();
+    let virtual_file_system = &executable_context.virtual_file_system;
+    let task = executable_context
+        .task_manager
+        .get_current_task_identifier()
+        .await;
 
     match command {
         "address" | "a" => show_address(context, virtual_file_system, task).await?,

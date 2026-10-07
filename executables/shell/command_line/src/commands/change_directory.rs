@@ -42,7 +42,7 @@ where
 
     let current_directory = resolve_target_directory(context.current_directory(), path)?;
 
-    ensure_directory_exists(context.task_id(), &current_directory).await?;
+    ensure_directory_exists(context, &current_directory).await?;
 
     context.set_current_directory(current_directory);
 
@@ -67,10 +67,10 @@ fn resolve_target_directory(
     Ok(target_directory)
 }
 
-async fn ensure_directory_exists(task: xila::task::TaskIdentifier, directory: &Path) -> Result<()> {
-    let virtual_file_system = virtual_file_system::get_instance();
+async fn ensure_directory_exists<C: CommandContext>(context: &C, directory: &Path) -> Result<()> {
+    let virtual_file_system = &context.executable_context().virtual_file_system;
 
-    let _ = Directory::open(virtual_file_system, task, directory)
+    let _ = Directory::open(virtual_file_system, context.task_id(), directory)
         .await
         .map_err(Error::FailedToOpenDirectory)?
         .close(virtual_file_system)

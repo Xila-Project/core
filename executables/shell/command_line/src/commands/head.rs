@@ -48,7 +48,7 @@ fn resolve_path<C: CommandContext>(
     }
 }
 
-async fn read_head_bytes(mut file: File, lines_to_keep: usize) -> Result<Vec<u8>> {
+async fn read_head_bytes(mut file: File<'_>, lines_to_keep: usize) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     if lines_to_keep == 0 {
         return Ok(output);
@@ -94,7 +94,7 @@ where
     let path = resolve_path(context, path)?;
 
     let file = File::open(
-        virtual_file_system::get_instance(),
+        &context.executable_context().virtual_file_system,
         context.task_id(),
         &path,
         AccessFlags::Read.into(),

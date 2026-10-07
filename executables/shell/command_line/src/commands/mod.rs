@@ -23,7 +23,11 @@ use crate::Result;
 use alloc::borrow::ToOwned;
 use core::fmt;
 use xila::file_system::Path;
-use xila::{executable::Standard, file_system::PathOwned, task::TaskIdentifier};
+use xila::{
+    executable::{ExecutableContext, Standard},
+    file_system::PathOwned,
+    task::TaskIdentifier,
+};
 
 use self::{
     change_directory::ChangeDirectoryCommand,
@@ -50,6 +54,7 @@ use self::{
 };
 
 pub trait CommandContext {
+    fn executable_context(&self) -> &'static ExecutableContext;
     fn task_id(&self) -> TaskIdentifier;
     fn current_directory(&self) -> &Path;
     fn set_current_directory(&mut self, directory: PathOwned);
@@ -57,7 +62,7 @@ pub trait CommandContext {
     fn write_out_fmt(&mut self, arguments: fmt::Arguments<'_>) -> Result<()>;
     async fn write_out(&mut self, buffer: &[u8]);
     async fn write_out_line(&mut self, buffer: &[u8]);
-    fn standard(&mut self) -> &mut Standard;
+    fn standard(&mut self) -> &mut Standard<'static>;
     fn current_directory_owned(&self) -> PathOwned {
         self.current_directory().to_owned()
     }
