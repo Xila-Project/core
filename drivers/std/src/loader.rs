@@ -25,6 +25,7 @@ impl From<io::Error> for Error {
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub async fn load_to_virtual_file_system(
+    task_manager: &'static task::Manager,
     virtual_file_system: &VirtualFileSystem,
     source_path: impl AsRef<path::Path>,
     destination_path: impl AsRef<Path>,
@@ -32,7 +33,7 @@ pub async fn load_to_virtual_file_system(
     // Open file for reading on host
     let mut source_file = File::open(source_path.as_ref())?;
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let task = task_manager.get_current_task_identifier().await;
 
     let mut file = virtual_file_system::File::open(
         virtual_file_system,
@@ -74,10 +75,11 @@ mod tests {
 
         let device = file_system::MemoryDevice::<512>::new_static(1024 * 1024 * 512);
 
-        let task_instance = task::initialize();
-
-        let _ = users::initialize();
-        let _ = time::initialize(&crate::devices::TimeDevice);
+        let task_instance = Box::leak(Box::new(task::Manager::new()));
+        let users_manager = Box::leak(Box::new(users::Manager::new()));
+        let time_manager = Box::leak(Box::new(
+            time::Manager::new(&crate::devices::TimeDevice).unwrap(),
+        ));
 
         let task = task_instance.get_current_task_identifier().await;
 
@@ -85,16 +87,21 @@ mod tests {
         let file_system = little_fs::FileSystem::new(device, 256).unwrap();
 
         let virtual_file_system = virtual_file_system::initialize(
-            task::get_instance(),
-            users::get_instance(),
-            time::get_instance(),
+            task_instance,
+            users_manager,
+            time_manager,
             file_system,
         )
         .unwrap();
 
-        load_to_virtual_file_system(virtual_file_system, source_path, destination_path)
-            .await
-            .unwrap();
+        load_to_virtual_file_system(
+            task_instance,
+            virtual_file_system,
+            source_path,
+            destination_path,
+        )
+        .await
+        .unwrap();
 
         // - Read the file and compare it with the original
         let test_file = std::fs::read_to_string(source_path).unwrap();

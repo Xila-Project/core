@@ -283,14 +283,13 @@ async fn write_tls_all(
 }
 
 async fn create_tls_connection<'a, T: DirectCharacterDevice + 'static>(
+    manager: &'static network::Manager,
     host: &str,
     port: u16,
     read_record: &'a mut [u8; TLS_RECORD_BUFFER_SIZE],
     write_record: &'a mut [u8; TLS_RECORD_BUFFER_SIZE],
     random_device: &'static T,
 ) -> Result<TlsConnection<'a, TcpSocketAdapter, Aes128GcmSha256>> {
-    let manager = network::get_instance();
-
     let address = manager
         .resolve(host, DnsQueryKind::A | DnsQueryKind::Aaaa, true, None)
         .await
@@ -327,6 +326,7 @@ async fn create_tls_connection<'a, T: DirectCharacterDevice + 'static>(
 }
 
 async fn run_request<T: DirectCharacterDevice + 'static>(
+    network_manager: &'static network::Manager,
     inner: Arc<Mutex<CriticalSectionRawMutex, HttpsClientInner>>,
     request: Vec<u8>,
     random_device: &'static T,
@@ -346,6 +346,7 @@ async fn run_request<T: DirectCharacterDevice + 'static>(
         let mut read_record = [0u8; TLS_RECORD_BUFFER_SIZE];
         let mut write_record = [0u8; TLS_RECORD_BUFFER_SIZE];
         let mut tls = create_tls_connection(
+            network_manager,
             host,
             port,
             &mut read_record,
@@ -429,11 +430,23 @@ async fn run_request<T: DirectCharacterDevice + 'static>(
     }
 }
 
-pub struct HttpsClientDevice<T: DirectCharacterDevice + 'static>(&'static T);
+pub struct HttpsClientDevice<T: DirectCharacterDevice + 'static> {
+    random_device: &'static T,
+    network_manager: &'static network::Manager,
+    task_manager: &'static task::Manager,
+}
 
 impl<T: DirectCharacterDevice + 'static> HttpsClientDevice<T> {
-    pub const fn new(random_device: &'static T) -> Self {
-        Self(random_device)
+    pub const fn new(
+        random_device: &'static T,
+        network_manager: &'static network::Manager,
+        task_manager: &'static task::Manager,
+    ) -> Self {
+        Self {
+            random_device,
+            network_manager,
+            task_manager,
+        }
     }
 }
 
@@ -470,17 +483,21 @@ impl<T: DirectCharacterDevice + 'static> BaseOperations for HttpsClientDevice<T>
         let request = buffer.to_vec();
         let inner = context.inner.clone();
 
-        let task_manager = task::get_instance();
+        let task_manager = self.task_manager;
+        let network_manager = self.network_manager;
         let parent = task::Manager::ROOT_TASK_IDENTIFIER;
 
-        let random_device = self.0;
+        let random_device = self.random_device;
 
         if let Err(spawn_error) =
             task::block_on(
                 task_manager.spawn(parent, "HTTPS request worker", None, move |_| {
                     let inner_clone = inner.clone();
                     let request_owned = request;
-                    async move { run_request(inner_clone, request_owned, random_device).await }
+                    async move {
+                        run_request(network_manager, inner_clone, request_owned, random_device)
+                            .await
+                    }
                 }),
             )
         {
