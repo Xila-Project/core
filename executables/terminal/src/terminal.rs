@@ -17,7 +17,10 @@ pub(crate) struct Inner {
     validated_input: VecDeque<u8>,
 }
 
-pub struct Terminal(pub(crate) RwLock<CriticalSectionRawMutex, Inner>);
+pub struct Terminal {
+    inner: RwLock<CriticalSectionRawMutex, Inner>,
+    graphics_manager: &'static graphics::Manager,
+}
 
 unsafe impl Send for Terminal {}
 
@@ -27,10 +30,9 @@ impl Terminal {
     const CLEAR: &'static str = "\x1B[2J";
     const HOME: &'static str = "\x1B[H";
 
-    pub async fn new() -> Result<Self> {
-        let inner = graphics::lock!({
-            let mut window = graphics::get_instance().create_window().await?;
-
+    pub async fn new(graphics_manager: &'static graphics::Manager) -> Result<Self> {
+        let inner = graphics::lock!(graphics_manager, {
+            let mut window = graphics_manager.create_window().await?;
             unsafe {
                 window.set_icon(">_", Color::BLACK);
 
@@ -97,12 +99,16 @@ impl Terminal {
             }
         });
 
-        Ok(Self(RwLock::new(inner)))
+        Ok(Self {
+            inner: RwLock::new(inner),
+            graphics_manager,
+        })
     }
 
     pub fn print(&self, text: &str) -> Result<()> {
-        let mut inner = self.0.try_write().map_err(|_| Error::RessourceBusy)?;
-        let _lock = graphics::get_instance()
+        let mut inner = self.inner.try_write().map_err(|_| Error::RessourceBusy)?;
+        let _lock = self
+            .graphics_manager
             .try_lock()
             .ok_or(Error::RessourceBusy)?;
 
@@ -159,7 +165,7 @@ impl Terminal {
     }
 
     pub fn read_input(&self, buffer: &mut [u8]) -> Result<usize> {
-        let mut inner = self.0.try_write().map_err(|_| Error::RessourceBusy)?;
+        let mut inner = self.inner.try_write().map_err(|_| Error::RessourceBusy)?;
 
         let mut read = 0;
 
@@ -187,8 +193,8 @@ impl Terminal {
     pub async fn handle_events(&self) -> Result<bool> {
         let mut running = true;
 
-        graphics::lock!({
-            let mut inner = self.0.write().await;
+        graphics::lock!(self.graphics_manager, {
+            let mut inner = self.inner.write().await;
 
             while let Some(event) = inner.window.pop_event() {
                 match event.code {
