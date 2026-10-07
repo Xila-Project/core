@@ -8,7 +8,7 @@ file_system = { workspace = true }
 users = { workspace = true }
 time = { workspace = true }
 virtual_file_system = { workspace = true }
-task = { workspace = true }
+task = { workspace = true, features = ["test_harness"] }
 log = { workspace = true }
 graphics = { workspace = true }
 little_fs = { workspace = true }
@@ -20,3 +20,8 @@ drivers_std = { workspace = true }
 executable = { workspace = true }
 abi_definitions = { workspace = true }
 network = { workspace = true }
+synchronization = { workspace = true }
+
+[features]
+default = ["graphics"]
+graphics = ["executable/graphics"]
