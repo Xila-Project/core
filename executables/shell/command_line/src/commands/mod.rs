@@ -15,6 +15,7 @@ mod ping;
 mod print_working_directory;
 mod statistics;
 mod tail;
+mod touch;
 mod web_request;
 mod which;
 mod word_count;
@@ -44,6 +45,7 @@ use self::{
     print_working_directory::PrintWorkingDirectoryCommand,
     statistics::StatisticsCommand,
     tail::TailCommand,
+    touch::TouchCommand,
     web_request::WebRequestCommand,
     which::WhichCommand,
     word_count::WordCountCommand,
@@ -99,6 +101,7 @@ pub enum UserCommandKind {
     WordCount,
     Head,
     Tail,
+    Touch,
 }
 
 pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
@@ -125,6 +128,7 @@ pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
         "wc" => Some(UserCommandKind::WordCount),
         "head" => Some(UserCommandKind::Head),
         "tail" => Some(UserCommandKind::Tail),
+        "touch" => Some(UserCommandKind::Touch),
         _ => None,
     }
 }
@@ -190,6 +194,7 @@ where
         UserCommandKind::WordCount => WordCountCommand.execute(context, options, paths).await,
         UserCommandKind::Head => HeadCommand.execute(context, options, paths).await,
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
+        UserCommandKind::Touch => TouchCommand.execute(context, options, paths).await,
     }
 }
 
@@ -297,6 +302,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("tail"),
             Some(UserCommandKind::Tail)
+        ));
+        assert!(matches!(
+            resolve_user_command("touch"),
+            Some(UserCommandKind::Touch)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }

@@ -25,6 +25,7 @@
   "Failed to resolve domain: {}": "Failed to resolve domain: {}",
   "Failed to set current directory: {}": "Failed to set current directory: {}",
   "Failed to set environment variable: {}": "Failed to set environment variable: {}",
+  "Failed to set metadata: {}": "Failed to set metadata: {}",
   "Failed to set task user: {}": "Failed to set task user: {}",
   "Failed to tokenize command line": "Failed to tokenize command line",
   "Format error": "Format error",

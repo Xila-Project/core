@@ -841,4 +841,43 @@ impl VirtualFileSystem {
         let attributes = Attributes::new().set_permissions(permissions);
         Self::set_attributes(file_system.file_system, relative_path, &attributes).await
     }
+
+    pub async fn set_times(
+        &self,
+        task: TaskIdentifier,
+        path: impl AsRef<Path>,
+        access: bool,
+        modification: bool,
+    ) -> Result<()> {
+        if !access && !modification {
+            return Ok(());
+        }
+
+        let path = path.as_ref();
+        let file_systems = self.file_systems.read().await;
+
+        let (file_system, relative_path, _) =
+            Self::get_file_system_from_path(&file_systems, &path)?;
+        let (time, current_user, _) = self.get_time_user_group(task).await?;
+
+        Self::check_permissions(
+            file_system.file_system,
+            relative_path,
+            Permission::Write,
+            current_user,
+        )
+        .await?;
+
+        let mut attributes = Attributes::new();
+
+        if access {
+            attributes = attributes.set_access(time);
+        }
+
+        if modification {
+            attributes = attributes.set_modification(time);
+        }
+
+        Self::set_attributes(file_system.file_system, relative_path, &attributes).await
+    }
 }
