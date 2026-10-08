@@ -18,10 +18,11 @@ Les points d'entrée natifs et wasm construisent le graphe dans cet ordre :
 5. les périphériques et exécutables qui utilisent ces services.
 
 `VirtualFileSystem::new` conserve task/users/time au lieu de les laisser
-implicites. `network::Manager::new` conserve task/VFS/time. Les instances sont
-possédées par des `Arc` dans la composition et les contextes, et les références
-`'static` aux APIs existantes sont des alias de ces allocations, pas des
-registres globaux de gestionnaires.
+implicites. `network::Manager::new` conserve task/VFS/time. Les points de
+composition allouent les gestionnaires destinés à vivre pendant tout le
+processus avec `Box::leak` et transmettent des références `&'static`. Les
+contextes ne possèdent que ces références; aucun `Arc` n'est nécessaire
+uniquement pour étendre leur durée de vie.
 
 ## Applications et exécutables
 

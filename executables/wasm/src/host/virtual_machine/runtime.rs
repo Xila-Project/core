@@ -59,7 +59,7 @@ impl Runtime {
         arguments: Vec<WasmValue>,
         task: TaskIdentifier,
         instruction_limit: NonZero<u32>,
-        task_manager: synchronization::Arc<task::Manager>,
+        task_manager: &'static task::Manager,
     ) -> Result<Vec<WasmValue>> {
         log::information!(
             "Starting execution of WASM module '{name}' with function '{function_name}'"

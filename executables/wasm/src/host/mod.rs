@@ -60,7 +60,7 @@ pub async fn inner_main(standard: Standard<'static>, arguments: Vec<String>) -> 
     } = WasmArguments::parse(&mut options)?;
     let path = Path::new(path);
 
-    let task_manager = context.task_manager.clone();
+    let task_manager = context.task_manager;
     let task = task_manager.get_current_task_identifier().await;
 
     let path = if path.is_absolute() {

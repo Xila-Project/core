@@ -18,18 +18,13 @@ use virtual_file_system::{File, ItemStatic, create_default_hierarchy, mount_stat
 pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standard<'static> {
     log::initialize(&Logger).unwrap();
 
-    let task_owner = task::test_manager_arc();
-    let task_pointer = synchronization::Arc::into_raw(task_owner.clone());
-    let task_manager = unsafe { &*task_pointer };
-    let users_owner = synchronization::Arc::new(users::Manager::new());
-    let users_pointer = synchronization::Arc::into_raw(users_owner.clone());
-    let users = unsafe { &*users_pointer };
-    let time_owner = synchronization::Arc::new(time::Manager::new(&TimeDevice).unwrap());
-    let time_pointer = synchronization::Arc::into_raw(time_owner.clone());
-    let time = unsafe { &*time_pointer };
-    let mut network_manager: Option<synchronization::Arc<network::Manager>> = None;
+    let task_manager = task::test_manager();
+    let users: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time: &'static time::Manager<'static> =
+        Box::leak(Box::new(time::Manager::new(&TimeDevice).unwrap()));
+    let mut network_manager: Option<&'static network::Manager> = None;
     #[cfg(feature = "graphics")]
-    let mut graphics_manager_option: Option<synchronization::Arc<graphics::Manager>> = None;
+    let mut graphics_manager_option: Option<&'static graphics::Manager> = None;
 
     if graphics_enabled {
         let (screen_device, pointer_device, keyboard_device, mut runner) =
@@ -47,13 +42,11 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
         )
         .await;
 
-        let graphics_owner = synchronization::Arc::new(graphics_manager);
-        let graphics_instance: &'static graphics::Manager =
-            unsafe { &*synchronization::Arc::into_raw(graphics_owner.clone()) };
-        graphics_manager_option = Some(graphics_owner);
-        graphics::set_ffi_manager(graphics_instance);
+        let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
+        graphics_manager_option = Some(graphics_manager);
+        graphics::set_ffi_manager(graphics_manager);
 
-        graphics_instance
+        graphics_manager
             .add_input_device(
                 Box::leak(Box::new(keyboard_device)),
                 graphics::InputKind::Keypad,
@@ -66,7 +59,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
                 task_manager.get_current_task_identifier().await,
                 "Graphics",
                 None,
-                |_| graphics_instance.r#loop(task::Manager::sleep),
+                |_| graphics_manager.r#loop(task::Manager::sleep),
             )
             .await
             .unwrap();
@@ -88,11 +81,9 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
 
     let file_system = little_fs::FileSystem::new_format(memory_device, 256).unwrap();
 
-    let virtual_file_system_owner = synchronization::Arc::new(
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
         virtual_file_system::initialize(task_manager, users, time, file_system).unwrap(),
-    );
-    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem =
-        unsafe { &*synchronization::Arc::into_raw(virtual_file_system_owner.clone()) };
+    ));
 
     let task = task_manager.get_current_task_identifier().await;
 
@@ -114,15 +105,13 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
         .unwrap();
 
     if network_enabled {
-        let network_owner = synchronization::Arc::new(network::initialize(
+        let network_instance: &'static network::Manager = Box::leak(Box::new(network::initialize(
             task_manager,
             virtual_file_system,
             time,
             &drivers_shared::devices::RandomDevice,
-        ));
-        let network_instance: &'static network::Manager =
-            unsafe { &*synchronization::Arc::into_raw(network_owner.clone()) };
-        network_manager = Some(network_owner);
+        )));
+        network_manager = Some(network_instance);
 
         let (interface_device, controller_device) =
             drivers_std::tuntap::new("xila0", false, true).unwrap();
@@ -197,8 +186,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
     .unwrap();
 
     if network_enabled {
-        let network_instance: &'static network::Manager =
-            unsafe { &*synchronization::Arc::into_raw(network_manager.as_ref().unwrap().clone()) };
+        let network_instance = network_manager.unwrap();
         let http_client = Box::leak(Box::new(drivers_shared::devices::HttpClientDevice::new(
             network_instance,
             task_manager,
@@ -224,13 +212,13 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
 
     let group_identifier = GroupIdentifier::new(1000);
     let executable_context: &'static ExecutableContext = Box::leak(Box::new(ExecutableContext {
-        task_manager: task_owner,
-        users_manager: users_owner,
-        virtual_file_system: virtual_file_system_owner,
+        task_manager,
+        users_manager: users,
+        virtual_file_system,
         #[cfg(feature = "graphics")]
         graphics_manager: graphics_manager_option,
         network_manager,
-        time_manager: time_owner,
+        time_manager: time,
     }));
 
     let authentication_context = authentication::Context {

@@ -24,7 +24,7 @@ impl<'runtime> Module<'runtime> {
         standard_in: File<'static>,
         standard_out: File<'static>,
         standard_error: File<'static>,
-        task_manager: synchronization::Arc<task::Manager>,
+        task_manager: &'static task::Manager,
     ) -> Result<Self> {
         // - Environment variables.
         let task = task_manager.get_current_task_identifier().await;

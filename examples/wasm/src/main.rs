@@ -28,23 +28,12 @@ async fn main() {
     log::initialize(&drivers_wasm::log::Logger).unwrap();
 
     // Initialize the task manager
-    let task_owner: &'static mut xila::synchronization::Arc<task::Manager> = Box::leak(Box::new(
-        xila::synchronization::Arc::new(task::Manager::new()),
-    ));
-    let task_manager_pointer = xila::synchronization::Arc::into_raw(task_owner.clone());
-    let task_manager: &'static task::Manager = unsafe { &*task_manager_pointer };
+    let task_manager: &'static task::Manager = Box::leak(Box::new(task::Manager::new()));
     let task = task_manager.get_current_task_identifier().await;
-    let users_owner: &'static mut xila::synchronization::Arc<users::Manager> = Box::leak(Box::new(
-        xila::synchronization::Arc::new(users::Manager::new()),
+    let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(
+        time::Manager::new(&drivers_wasm::devices::TimeDevice).unwrap(),
     ));
-    let users_manager_pointer = xila::synchronization::Arc::into_raw(users_owner.clone());
-    let users_manager: &'static users::Manager = unsafe { &*users_manager_pointer };
-    let time_owner: &'static mut xila::synchronization::Arc<time::Manager<'static>> =
-        Box::leak(Box::new(xila::synchronization::Arc::new(
-            time::Manager::new(&drivers_wasm::devices::TimeDevice).unwrap(),
-        )));
-    let time_manager_pointer = xila::synchronization::Arc::into_raw(time_owner.clone());
-    let time_manager: &'static time::Manager<'static> = unsafe { &*time_manager_pointer };
 
     // - Initialize the graphics manager
     // - - Initialize the graphics driver
@@ -68,10 +57,7 @@ async fn main() {
         true,
     )
     .await;
-    let graphics_owner: &'static mut xila::synchronization::Arc<graphics::Manager> =
-        Box::leak(Box::new(xila::synchronization::Arc::new(graphics_manager)));
-    let graphics_manager_pointer = xila::synchronization::Arc::into_raw(graphics_owner.clone());
-    let graphics_manager: &'static graphics::Manager = unsafe { &*graphics_manager_pointer };
+    let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
     graphics::set_ffi_manager(graphics_manager);
 
     graphics_manager
@@ -113,16 +99,10 @@ async fn main() {
     let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
 
     // Initialize the virtual file system
-    let virtual_file_system_owner: &'static mut xila::synchronization::Arc<
-        virtual_file_system::VirtualFileSystem,
-    > = Box::leak(Box::new(xila::synchronization::Arc::new(
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
         virtual_file_system::initialize(task_manager, users_manager, time_manager, file_system)
             .unwrap(),
-    )));
-    let virtual_file_system_pointer =
-        xila::synchronization::Arc::into_raw(virtual_file_system_owner.clone());
-    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem =
-        unsafe { &*virtual_file_system_pointer };
+    ));
     xila::abi_definitions::initialize(xila::abi_definitions::RuntimeContext {
         virtual_file_system,
         time_manager,
@@ -200,12 +180,12 @@ async fn main() {
 
     let executable_context: &'static executable::ExecutableContext =
         Box::leak(Box::new(executable::ExecutableContext {
-            task_manager: task_owner.clone(),
-            users_manager: users_owner.clone(),
-            virtual_file_system: virtual_file_system_owner.clone(),
-            graphics_manager: Some(graphics_owner.clone()),
+            task_manager,
+            users_manager,
+            virtual_file_system,
+            graphics_manager: Some(graphics_manager),
             network_manager: None,
-            time_manager: time_owner.clone(),
+            time_manager,
         }));
 
     mount_executables!(

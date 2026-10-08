@@ -6,7 +6,6 @@ use file_system::{
     MountOperations, define_command,
 };
 use shared::AnyByLayout;
-use synchronization::Arc;
 
 define_command!(GET_MAIN_FUNCTION, Read, b'E', 1, (), MainFunction);
 
@@ -15,13 +14,13 @@ pub trait ExecutableTrait: 'static + Send + Sync {
 }
 
 pub struct ExecutableContext {
-    pub task_manager: Arc<task::Manager>,
-    pub users_manager: Arc<users::Manager>,
-    pub virtual_file_system: Arc<virtual_file_system::VirtualFileSystem>,
+    pub task_manager: &'static task::Manager,
+    pub users_manager: &'static users::Manager,
+    pub virtual_file_system: &'static virtual_file_system::VirtualFileSystem,
     #[cfg(feature = "graphics")]
-    pub graphics_manager: Option<Arc<graphics::Manager>>,
-    pub network_manager: Option<Arc<network::Manager>>,
-    pub time_manager: Arc<time::Manager<'static>>,
+    pub graphics_manager: Option<&'static graphics::Manager>,
+    pub network_manager: Option<&'static network::Manager>,
+    pub time_manager: &'static time::Manager<'static>,
 }
 
 pub type MainFuture =

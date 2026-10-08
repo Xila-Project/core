@@ -23,6 +23,8 @@ pub use spawner::*;
 
 use crate::manager::Metadata;
 
+#[cfg(any(test, feature = "test_harness"))]
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use synchronization::{blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock};
 
@@ -38,7 +40,7 @@ unsafe impl Send for Manager {}
 pub struct Manager(pub(crate) RwLock<CriticalSectionRawMutex, Inner>);
 
 #[cfg(any(test, feature = "test_harness"))]
-static TEST_MANAGER: synchronization::once_lock::OnceLock<synchronization::Arc<Manager>> =
+static TEST_MANAGER: synchronization::once_lock::OnceLock<&'static Manager> =
     synchronization::once_lock::OnceLock::new();
 
 #[cfg(any(test, feature = "test_harness"))]
@@ -52,9 +54,7 @@ pub fn test_lock() -> &'static std::sync::Mutex<()> {
 #[cfg(any(test, feature = "test_harness"))]
 #[doc(hidden)]
 pub fn test_manager() -> &'static Manager {
-    synchronization::Arc::as_ref(
-        TEST_MANAGER.get_or_init(|| synchronization::Arc::new(Manager::new())),
-    )
+    TEST_MANAGER.get_or_init(|| Box::leak(Box::new(Manager::new())))
 }
 
 #[cfg(any(test, feature = "test_harness"))]
@@ -67,14 +67,6 @@ pub fn reset_test_manager() -> &'static Manager {
     inner.spawners.clear();
     drop(inner);
     manager
-}
-
-#[cfg(any(test, feature = "test_harness"))]
-#[doc(hidden)]
-pub fn test_manager_arc() -> synchronization::Arc<Manager> {
-    TEST_MANAGER
-        .get_or_init(|| synchronization::Arc::new(Manager::new()))
-        .clone()
 }
 
 #[cfg(any(test, feature = "test_harness"))]

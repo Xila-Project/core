@@ -38,15 +38,6 @@ pub fn ffi_manager() -> &'static Manager {
     unsafe { &*manager }
 }
 
-/// Clone the handle of the graphics manager registered for FFI callbacks.
-pub fn ffi_manager_handle() -> synchronization::Arc<Manager> {
-    let manager = ffi_manager();
-    unsafe {
-        synchronization::Arc::increment_strong_count(manager as *const Manager);
-        synchronization::Arc::from_raw(manager as *const Manager)
-    }
-}
-
 pub async fn initialize(
     time_manager: &'static time::Manager<'static>,
     screen_device: &'static dyn DirectCharacterDevice,
