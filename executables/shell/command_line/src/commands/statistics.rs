@@ -6,7 +6,6 @@ use xila::{
     file_system::Path,
     internationalization::translate,
     shared::{BYTES_SUFFIX, Unit},
-    users, virtual_file_system,
 };
 
 use super::{CommandContext, UserCommand};

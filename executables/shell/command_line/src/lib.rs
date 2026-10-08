@@ -15,7 +15,6 @@ use core::fmt::Write;
 use core::num::NonZeroUsize;
 use error::*;
 use xila::file_system::Path;
-use xila::task;
 use xila::{executable, file_system::PathOwned};
 use xila::{
     executable::{ExecutableTrait, Standard},

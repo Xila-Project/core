@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned;
 use getargs::Options;
 use xila::{
     file_system::{AccessFlags, Path},
-    virtual_file_system::{self, File},
+    virtual_file_system::File,
 };
 
 use crate::{Error, Result, commands::check_no_more_options};

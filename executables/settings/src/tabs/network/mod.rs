@@ -9,7 +9,7 @@ use xila::{
     graphics::{Event, EventKind, lvgl, symbol},
     log,
     network::{self, InterfaceKind},
-    virtual_file_system::{self, Directory, File, VirtualFileSystem},
+    virtual_file_system::{Directory, File, VirtualFileSystem},
 };
 
 pub struct NetworkTab {

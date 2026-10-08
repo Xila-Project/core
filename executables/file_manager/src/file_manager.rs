@@ -260,7 +260,7 @@ impl FileManager {
         // Open directory
         let virtual_file_system = &self.context.virtual_file_system;
 
-        let mut directory = Directory::open(&virtual_file_system, task, &self.current_path).await?;
+        let mut directory = Directory::open(virtual_file_system, task, &self.current_path).await?;
 
         // Read directory entries
         while let Some(entry) = directory.read().await? {

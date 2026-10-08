@@ -5,7 +5,6 @@ use xila::graphics::{self, lvgl};
 use crate::{desk::Desk, error::Result};
 
 pub struct Home {
-    graphics_manager: &'static graphics::Manager,
     button: *mut lvgl::lv_obj_t,
 }
 
@@ -36,11 +35,7 @@ impl Home {
                     lvgl::lv_color_white(),
                     lvgl::LV_STATE_DEFAULT,
                 );
-                lvgl::lv_obj_set_style_bg_opa(
-                    button,
-                    lvgl::LV_OPA_50 as u8,
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                lvgl::lv_obj_set_style_bg_opa(button, lvgl::LV_OPA_50, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_align(button, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_y(button, -5);
 
@@ -67,10 +62,7 @@ impl Home {
             }
         });
 
-        Ok(Self {
-            graphics_manager,
-            button,
-        })
+        Ok(Self { button })
     }
 }
 

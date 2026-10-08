@@ -81,6 +81,12 @@ pub fn get_instance() -> &'static Manager {
 
 unsafe impl Sync for Manager {}
 
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Manager {
     pub const ROOT_TASK_IDENTIFIER: TaskIdentifier = TaskIdentifier::new(0);
 

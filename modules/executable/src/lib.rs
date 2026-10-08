@@ -101,7 +101,7 @@ pub async fn execute(
 
     // - Check the executable bit
     if !is_execute_allowed(
-        &context.users_manager,
+        context.users_manager,
         &statistics,
         task_instance.get_user(task).await?,
     )

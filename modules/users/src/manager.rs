@@ -24,6 +24,12 @@ struct InternalManager {
 
 pub struct Manager(RwLock<CriticalSectionRawMutex, InternalManager>);
 
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Manager {
     pub fn new() -> Self {
         let mut groups = BTreeMap::new();

@@ -3,9 +3,7 @@ pub(crate) use core::ffi::CStr;
 use xila::authentication;
 use xila::graphics::{self, EventKind, OwnedWindow, lvgl};
 use xila::internationalization::translate;
-use xila::task;
 use xila::users::UserIdentifier;
-use xila::virtual_file_system;
 
 use crate::error::{Error, Result};
 
@@ -133,9 +131,9 @@ impl Login {
         let task_manager = &self.context.task_manager;
         let task = task_manager.get_current_task_identifier().await;
         let authentication_context = authentication::Context {
-            virtual_file_system: &self.context.virtual_file_system,
+            virtual_file_system: self.context.virtual_file_system,
             task_manager,
-            users_manager: &self.context.users_manager,
+            users_manager: self.context.users_manager,
             task,
         };
         let user_identifier =

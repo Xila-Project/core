@@ -2,7 +2,6 @@ use crate::Result;
 use crate::error::Error;
 use getargs::Options;
 use xila::file_system::Path;
-use xila::task;
 
 use super::{CommandContext, UserCommand};
 

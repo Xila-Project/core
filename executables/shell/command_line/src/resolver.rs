@@ -1,8 +1,7 @@
 use crate::error::{Error, Result};
 use xila::{
     file_system::{Path, PathOwned},
-    task,
-    virtual_file_system::{self, Directory},
+    virtual_file_system::Directory,
 };
 
 pub async fn resolve(

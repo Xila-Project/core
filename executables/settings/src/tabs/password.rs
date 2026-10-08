@@ -3,9 +3,6 @@ use alloc::ffi::CString;
 use xila::authentication;
 use xila::graphics::{Event, EventKind, lvgl};
 use xila::internationalization::translate;
-use xila::task;
-use xila::users;
-use xila::virtual_file_system;
 
 pub struct PasswordTab {
     context: &'static xila::executable::ExecutableContext,
@@ -122,7 +119,7 @@ impl PasswordTab {
 
         // Authenticate current password
         let authentication_context = authentication::Context {
-            virtual_file_system: &self.context.virtual_file_system,
+            virtual_file_system: self.context.virtual_file_system,
             task_manager,
             users_manager,
             task: current_task,

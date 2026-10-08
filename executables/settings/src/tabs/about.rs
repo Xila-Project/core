@@ -10,8 +10,7 @@ use xila::{
     internationalization::{self, translate},
     memory,
     shared::{BYTES_SUFFIX, Unit},
-    task,
-    virtual_file_system::{self, File},
+    virtual_file_system::File,
 };
 
 pub struct AboutTab {

@@ -14,8 +14,7 @@ use alloc::{
 };
 use xila::graphics::{self, Color, EventKind, Logo, OwnedWindow, Point, lvgl};
 use xila::log::{self, error, warning};
-use xila::task;
-use xila::virtual_file_system::{self, Directory};
+use xila::virtual_file_system::Directory;
 use xila::{
     executable,
     graphics::theme::{self, get_border_color_primary},
@@ -121,11 +120,7 @@ impl Desk {
                 for i in 0..4 {
                     let part = lvgl::lv_obj_get_child(logo_inner_object, i);
 
-                    lvgl::lv_obj_set_style_bg_opa(
-                        part,
-                        lvgl::LV_OPA_0 as u8,
-                        lvgl::LV_STATE_DEFAULT,
-                    );
+                    lvgl::lv_obj_set_style_bg_opa(part, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
 
                     lvgl::lv_obj_set_style_border_width(part, 2, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_set_style_border_color(
@@ -144,11 +139,7 @@ impl Desk {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_bg_opa(
-                    tile_view,
-                    lvgl::LV_OPA_0 as u8,
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                lvgl::lv_obj_set_style_bg_opa(tile_view, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_scrollbar_mode(
                     tile_view,
                     lvgl::lv_scrollbar_mode_t_LV_SCROLLBAR_MODE_OFF,
@@ -255,7 +246,7 @@ impl Desk {
             let container = lvgl::lv_obj_create(drawer);
 
             lvgl::lv_obj_set_size(container, 12 * 8, 11 * 8);
-            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0 as u8, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_flex_flow(container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
             lvgl::lv_obj_set_style_pad_all(container, 0, lvgl::LV_STATE_DEFAULT);
@@ -348,7 +339,7 @@ impl Desk {
             &"/devices/null",
             &"/devices/null",
             task,
-            &self.context.virtual_file_system,
+            self.context.virtual_file_system,
             self.context,
         )
         .await

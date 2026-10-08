@@ -47,7 +47,7 @@ pub async fn initialize(
     double_buffered: bool,
 ) -> Manager {
     TICK_TIME_MANAGER.store(time_manager as *const _ as *mut _, Ordering::Release);
-    let manager = Manager::new(
+    Manager::new(
         time_manager,
         screen_device,
         input_device,
@@ -55,9 +55,7 @@ pub async fn initialize(
         buffer_size,
         double_buffered,
     )
-    .expect("Failed to create manager instance");
-
-    manager
+    .expect("Failed to create manager instance")
 }
 
 struct Inner {

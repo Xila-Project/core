@@ -4,8 +4,8 @@ use alloc::string::ToString;
 use getargs_derive::GetArgs;
 use xila::{
     file_system::{Kind, Path},
-    log, users,
-    virtual_file_system::{self, Directory},
+    log,
+    virtual_file_system::Directory,
 };
 
 use super::{CommandContext, UserCommand};

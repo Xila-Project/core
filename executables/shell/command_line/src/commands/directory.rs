@@ -4,7 +4,7 @@ use getargs::Options;
 use getargs_derive::GetArgs;
 use xila::{
     file_system::{Kind, Path},
-    virtual_file_system::{self, Directory},
+    virtual_file_system::Directory,
 };
 
 use super::{CommandContext, UserCommand};
@@ -110,7 +110,7 @@ where
     let path = resolve_path(context, path)?;
 
     Directory::create(
-        &context.executable_context().virtual_file_system,
+        context.executable_context().virtual_file_system,
         context.task_id(),
         &path,
     )

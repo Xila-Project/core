@@ -1,10 +1,7 @@
 use crate::{Error, Result};
 use alloc::borrow::ToOwned;
 use getargs_derive::GetArgs;
-use xila::{
-    file_system::Path,
-    virtual_file_system::{self, Directory},
-};
+use xila::{file_system::Path, virtual_file_system::Directory};
 
 use super::{CommandContext, UserCommand};
 

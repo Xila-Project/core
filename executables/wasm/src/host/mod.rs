@@ -12,8 +12,7 @@ use xila::executable::MainFuture;
 use xila::executable::Standard;
 use xila::file_system::{Kind, Path};
 use xila::synchronization::once_lock::OnceLock;
-use xila::task::{self};
-use xila::virtual_file_system::{self, File};
+use xila::virtual_file_system::File;
 
 #[cfg(feature = "graphics")]
 use crate::host::bindings::graphics::GraphicsBindings;

@@ -4,8 +4,7 @@ use xila::{
     file_system::{AccessFlags, Path},
     log,
     network::{GET_IP_ADDRESS, GET_IP_ADDRESS_COUNT, GET_ROUTE, GET_ROUTE_COUNT, GET_STATE},
-    task,
-    virtual_file_system::{self, Directory, File, FileControlIterator, VirtualFileSystem},
+    virtual_file_system::{Directory, File, VirtualFileSystem},
 };
 
 use super::{CommandContext, UserCommand};

@@ -8,7 +8,7 @@ use xila::graphics::{self, EventKind, lvgl, symbol, theme};
 use xila::log;
 use xila::network::InterfaceKind;
 use xila::virtual_file_system::{Directory, File};
-use xila::{internationalization, network, time, virtual_file_system};
+use xila::{internationalization, network};
 
 const KEYBOARD_SIZE_RATIO: f64 = 3.0 / 1.0;
 

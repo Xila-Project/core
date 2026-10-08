@@ -3,7 +3,7 @@ use alloc::{borrow::ToOwned, vec::Vec};
 use getargs_derive::GetArgs;
 use xila::{
     file_system::{AccessFlags, Path},
-    virtual_file_system::{self, File},
+    virtual_file_system::File,
 };
 
 use super::{CommandContext, UserCommand};
@@ -94,7 +94,7 @@ where
     let path = resolve_path(context, path)?;
 
     let file = File::open(
-        &context.executable_context().virtual_file_system,
+        context.executable_context().virtual_file_system,
         context.task_id(),
         &path,
         AccessFlags::Read.into(),

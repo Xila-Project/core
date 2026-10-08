@@ -7,7 +7,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use xila::{executable::execute, file_system::Path, task};
+use xila::{executable::execute, file_system::Path};
 
 impl Shell {
     pub async fn execute<'a, I>(&mut self, input: I, paths: &[&Path]) -> Result<()>

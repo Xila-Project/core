@@ -22,7 +22,6 @@ use login::Login;
 use xila::executable::{self, ExecutableTrait, Standard};
 use xila::graphics;
 use xila::task;
-use xila::users;
 
 #[derive(GetArgs)]
 struct GraphicalShellArguments {
