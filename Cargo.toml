@@ -63,7 +63,7 @@ default = [
 executable_building = ["executable/building"]
 abi_definitions = ["dep:abi_definitions"]
 bootsplash = ["dep:bootsplash"]
-graphics = ["dep:graphics"]
+graphics = ["dep:graphics", "executable/graphics"]
 graphics_rendering_rgb565 = ["graphics", "graphics/rendering_rgb565"]
 graphics_rendering_xrgb8888 = ["graphics", "graphics/rendering_xrgb8888"]
 

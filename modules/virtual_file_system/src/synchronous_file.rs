@@ -12,14 +12,15 @@ use task::TaskIdentifier;
 use task::block_on;
 use users::{GroupIdentifier, UserIdentifier};
 
-pub struct SynchronousFile {
+pub struct SynchronousFile<'a> {
+    virtual_file_system: &'a VirtualFileSystem,
     pub(crate) item: ItemStatic,
     pub(crate) position: Size,
     pub(crate) flags: Flags,
     pub(crate) context: Context,
 }
 
-impl Debug for SynchronousFile {
+impl Debug for SynchronousFile<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SynchronousFile")
             .field("item", &self.item)
@@ -29,14 +30,16 @@ impl Debug for SynchronousFile {
     }
 }
 
-impl SynchronousFile {
+impl<'a> SynchronousFile<'a> {
     pub(crate) const fn new(
+        virtual_file_system: &'a VirtualFileSystem,
         item: ItemStatic,
         position: Size,
         flags: Flags,
         context: Context,
     ) -> Self {
         Self {
+            virtual_file_system,
             item,
             position,
             flags,
@@ -45,7 +48,7 @@ impl SynchronousFile {
     }
 
     pub fn open(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: TaskIdentifier,
         path: impl AsRef<Path>,
         flags: Flags,
@@ -174,6 +177,7 @@ impl SynchronousFile {
             .clone_context(&self.context)?;
 
         Ok(Self {
+            virtual_file_system: self.virtual_file_system,
             item: self.item.clone(),
             position: self.position,
             flags: self.flags,
@@ -266,10 +270,10 @@ impl SynchronousFile {
     }
 }
 
-impl Drop for SynchronousFile {
+impl Drop for SynchronousFile<'_> {
     fn drop(&mut self) {
         // Note: We cannot use async in Drop, so we just ignore errors here.
-        let _ = self.close_internal(crate::get_instance()).map_err(|e| {
+        let _ = self.close_internal(self.virtual_file_system).map_err(|e| {
             log::warning!("Failed to close SynchronousFile in Drop: {e}");
         });
     }

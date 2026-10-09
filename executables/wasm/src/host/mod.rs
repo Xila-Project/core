@@ -12,8 +12,7 @@ use xila::executable::MainFuture;
 use xila::executable::Standard;
 use xila::file_system::{Kind, Path};
 use xila::synchronization::once_lock::OnceLock;
-use xila::task::{self};
-use xila::virtual_file_system::{self, File};
+use xila::virtual_file_system::File;
 
 #[cfg(feature = "graphics")]
 use crate::host::bindings::graphics::GraphicsBindings;
@@ -44,12 +43,13 @@ struct WasmArguments<'a> {
 }
 
 impl ExecutableTrait for WasmExecutable {
-    fn main(standard: Standard, arguments: Vec<String>) -> MainFuture {
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
 
-pub async fn inner_main(standard: Standard, arguments: Vec<String>) -> Result<(), Error> {
+pub async fn inner_main(standard: Standard<'static>, arguments: Vec<String>) -> Result<(), Error> {
+    let context = standard.context;
     let mut options = getargs::Options::new(arguments.iter().map(|argument| argument.as_str()));
     let WasmArguments {
         install,
@@ -59,12 +59,13 @@ pub async fn inner_main(standard: Standard, arguments: Vec<String>) -> Result<()
     } = WasmArguments::parse(&mut options)?;
     let path = Path::new(path);
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let task_manager = context.task_manager;
+    let task = task_manager.get_current_task_identifier().await;
 
     let path = if path.is_absolute() {
         path.to_owned()
     } else {
-        let current_path = task::get_instance()
+        let current_path = task_manager
             .get_environment_variable(task, "Current_directory")
             .await
             .map_err(|_| Error::FailedToGetCurrentDirectory)?;
@@ -76,7 +77,7 @@ pub async fn inner_main(standard: Standard, arguments: Vec<String>) -> Result<()
         current_path.join(path).ok_or(Error::InvalidPath)?
     };
 
-    let virtual_file_system = virtual_file_system::get_instance();
+    let virtual_file_system = &context.virtual_file_system;
 
     let statistics = virtual_file_system
         .get_statistics(&path)
@@ -106,7 +107,7 @@ pub async fn inner_main(standard: Standard, arguments: Vec<String>) -> Result<()
 
     let standard = standard.split();
 
-    let task_identifier = task::get_instance().get_current_task_identifier().await;
+    let task_identifier = task_manager.get_current_task_identifier().await;
 
     runtime
         .execute(
@@ -118,13 +119,14 @@ pub async fn inner_main(standard: Standard, arguments: Vec<String>) -> Result<()
             vec![],
             task_identifier,
             instruction_limit,
+            task_manager,
         )
         .await?;
 
     Ok(())
 }
 
-pub async fn main(standard: Standard, arguments: Vec<String>) -> Result<(), NonZeroUsize> {
+pub async fn main(standard: Standard<'static>, arguments: Vec<String>) -> Result<(), NonZeroUsize> {
     let mut duplicated_standard = standard
         .duplicate()
         .await

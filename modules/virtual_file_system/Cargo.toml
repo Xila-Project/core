@@ -22,6 +22,7 @@ drivers_shared = { workspace = true }
 drivers_std = { workspace = true }
 little_fs = { workspace = true }
 abi_definitions = { workspace = true }
+task = { workspace = true, features = ["test_harness"] }
 
 [[test]]
 name = "integration"

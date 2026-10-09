@@ -4,7 +4,7 @@ use getargs::Options;
 use getargs_derive::GetArgs;
 use xila::{
     file_system::{Kind, Path},
-    virtual_file_system::{self, Directory},
+    virtual_file_system::Directory,
 };
 
 use super::{CommandContext, UserCommand};
@@ -110,7 +110,7 @@ where
     let path = resolve_path(context, path)?;
 
     Directory::create(
-        virtual_file_system::get_instance(),
+        context.executable_context().virtual_file_system,
         context.task_id(),
         &path,
     )
@@ -129,7 +129,9 @@ where
     let DirectoryRemoveArguments { path } = DirectoryRemoveArguments::parse(options)?;
     let path = resolve_path(context, path)?;
 
-    let statistics = virtual_file_system::get_instance()
+    let statistics = context
+        .executable_context()
+        .virtual_file_system
         .get_statistics(&path)
         .await
         .map_err(Error::FailedToGetMetadata)?;
@@ -138,7 +140,9 @@ where
         return Err(Error::InvalidArgument);
     }
 
-    virtual_file_system::get_instance()
+    context
+        .executable_context()
+        .virtual_file_system
         .remove(context.task_id(), &path)
         .await
         .map_err(Error::FailedToRemoveDirectory)
@@ -155,7 +159,9 @@ where
     let DirectoryRemoveArguments { path } = DirectoryRemoveArguments::parse(options)?;
     let path = resolve_path(context, path)?;
 
-    let statistics = virtual_file_system::get_instance()
+    let statistics = context
+        .executable_context()
+        .virtual_file_system
         .get_statistics(&path)
         .await
         .map_err(Error::FailedToGetMetadata)?;
@@ -164,7 +170,9 @@ where
         return Err(Error::InvalidArgument);
     }
 
-    virtual_file_system::get_instance()
+    context
+        .executable_context()
+        .virtual_file_system
         .remove(context.task_id(), &path)
         .await
         .map_err(Error::FailedToRemoveDirectory)
@@ -209,7 +217,11 @@ mod tests {
 
         async fn write_out_line(&mut self, _buffer: &[u8]) {}
 
-        fn standard(&mut self) -> &mut Standard {
+        fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
+            panic!("executable context not needed in this test")
+        }
+
+        fn standard(&mut self) -> &mut Standard<'static> {
             panic!("standard not needed in this test")
         }
     }

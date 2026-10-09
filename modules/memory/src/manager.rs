@@ -185,6 +185,6 @@ unsafe impl<'a> GlobalAlloc for Manager<'a> {
     }
 }
 
-pub fn get_instance() -> &'static Manager<'static> {
+pub fn global_manager() -> &'static Manager<'static> {
     unsafe { &__XILA_MEMORY_MANAGER }
 }

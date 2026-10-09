@@ -3,7 +3,7 @@ use alloc::borrow::ToOwned;
 use getargs_derive::GetArgs;
 use xila::{
     file_system::{AccessFlags, Path},
-    virtual_file_system::{self, File},
+    virtual_file_system::File,
 };
 
 use super::{CommandContext, UserCommand};
@@ -96,7 +96,7 @@ fn finalize_counts(counts: &mut Counts, state: &CountState) {
     counts.longest_line = counts.longest_line.max(state.current_line_length);
 }
 
-async fn count_file(mut file: File) -> Result<Counts> {
+async fn count_file(mut file: File<'_>) -> Result<Counts> {
     let mut counts = Counts {
         characters: 0,
         words: 0,
@@ -173,7 +173,7 @@ where
     }
 
     let file = File::open(
-        virtual_file_system::get_instance(),
+        context.executable_context().virtual_file_system,
         context.task_id(),
         &path,
         AccessFlags::Read.into(),
@@ -224,7 +224,11 @@ mod tests {
 
         async fn write_out_line(&mut self, _buffer: &[u8]) {}
 
-        fn standard(&mut self) -> &mut Standard {
+        fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
+            panic!("executable context not needed in this test")
+        }
+
+        fn standard(&mut self) -> &mut Standard<'static> {
             panic!("standard not needed in this test")
         }
     }

@@ -54,11 +54,12 @@ impl Runtime {
         name: &str,
         buffer: Vec<u8>,
         stack_size: usize,
-        (standard_in, standard_out, standard_error): (File, File, File),
+        (standard_in, standard_out, standard_error): (File<'static>, File<'static>, File<'static>),
         function_name: &str,
         arguments: Vec<WasmValue>,
         task: TaskIdentifier,
         instruction_limit: NonZero<u32>,
+        task_manager: &'static task::Manager,
     ) -> Result<Vec<WasmValue>> {
         log::information!(
             "Starting execution of WASM module '{name}' with function '{function_name}'"
@@ -79,6 +80,7 @@ impl Runtime {
             standard_in,
             standard_out,
             standard_error,
+            task_manager,
         )
         .await?;
         log::information!("SUCE MOI LE MODULE '{name}'");

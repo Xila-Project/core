@@ -8,18 +8,23 @@ use alloc::boxed::Box;
 use drivers_native::window_screen;
 use drivers_shared::devices::RandomDevice;
 use drivers_std::{devices::TimeDevice, log::Logger};
+use executable::ExecutableContext;
 use executable::Standard;
 use file_system::{AccessFlags, MemoryDevice};
 use network::{ADD_DNS_SERVER, ADD_IP_ADDRESS, ADD_ROUTE};
 use users::GroupIdentifier;
 use virtual_file_system::{File, ItemStatic, create_default_hierarchy, mount_static};
 
-pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standard {
+pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standard<'static> {
     log::initialize(&Logger).unwrap();
 
-    let task_manager = task::initialize();
-    let users = users::initialize();
-    let time = time::initialize(&TimeDevice).unwrap();
+    let task_manager = task::test_manager();
+    let users: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time: &'static time::Manager<'static> =
+        Box::leak(Box::new(time::Manager::new(&TimeDevice).unwrap()));
+    let mut network_manager: Option<&'static network::Manager> = None;
+    #[cfg(feature = "graphics")]
+    let mut graphics_manager_option: Option<&'static graphics::Manager> = None;
 
     if graphics_enabled {
         let (screen_device, pointer_device, keyboard_device, mut runner) =
@@ -28,6 +33,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
                 .unwrap();
 
         let graphics_manager = graphics::initialize(
+            time,
             Box::leak(Box::new(screen_device)),
             Box::leak(Box::new(pointer_device)),
             graphics::InputKind::Pointer,
@@ -35,6 +41,10 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
             true,
         )
         .await;
+
+        let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
+        graphics_manager_option = Some(graphics_manager);
+        graphics::set_ffi_manager(graphics_manager);
 
         graphics_manager
             .add_input_device(
@@ -46,7 +56,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
 
         task_manager
             .spawn(
-                task::get_instance().get_current_task_identifier().await,
+                task_manager.get_current_task_identifier().await,
                 "Graphics",
                 None,
                 |_| graphics_manager.r#loop(task::Manager::sleep),
@@ -56,7 +66,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
 
         task_manager
             .spawn(
-                task::get_instance().get_current_task_identifier().await,
+                task_manager.get_current_task_identifier().await,
                 "Window screen runner",
                 None,
                 async move |_| {
@@ -71,8 +81,9 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
 
     let file_system = little_fs::FileSystem::new_format(memory_device, 256).unwrap();
 
-    let virtual_file_system =
-        virtual_file_system::initialize(task_manager, users, time, file_system).unwrap();
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
+        virtual_file_system::initialize(task_manager, users, time, file_system).unwrap(),
+    ));
 
     let task = task_manager.get_current_task_identifier().await;
 
@@ -94,16 +105,18 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
         .unwrap();
 
     if network_enabled {
-        let network_manager = network::initialize(
+        let network_instance: &'static network::Manager = Box::leak(Box::new(network::initialize(
             task_manager,
             virtual_file_system,
+            time,
             &drivers_shared::devices::RandomDevice,
-        );
+        )));
+        network_manager = Some(network_instance);
 
         let (interface_device, controller_device) =
             drivers_std::tuntap::new("xila0", false, true).unwrap();
 
-        network_manager
+        network_instance
             .mount_interface(task, "tunnel0", interface_device, controller_device, None)
             .await
             .expect("Failed to mount network interface.");
@@ -173,31 +186,57 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
     .unwrap();
 
     if network_enabled {
-        static HTTPS_CLIENT_DEVICE: drivers_shared::devices::HttpsClientDevice<
-            drivers_shared::devices::RandomDevice,
-        > = drivers_shared::devices::HttpsClientDevice::new(&drivers_shared::devices::RandomDevice);
+        let network_instance = network_manager.unwrap();
+        let http_client = Box::leak(Box::new(drivers_shared::devices::HttpClientDevice::new(
+            network_instance,
+            task_manager,
+        )));
+        let https_client: &'static _ =
+            Box::leak(Box::new(drivers_shared::devices::HttpsClientDevice::new(
+                &drivers_shared::devices::RandomDevice,
+                network_instance,
+                task_manager,
+            )));
 
         mount_static!(
             virtual_file_system,
             task,
-            &[(
-                &"/devices/https_client",
-                CharacterDevice,
-                HTTPS_CLIENT_DEVICE
-            )]
+            &[
+                (&"/devices/http_client", CharacterDevice, *http_client),
+                (&"/devices/https_client", CharacterDevice, *https_client),
+            ]
         )
         .await
         .unwrap();
     }
 
     let group_identifier = GroupIdentifier::new(1000);
+    let executable_context: &'static ExecutableContext = Box::leak(Box::new(ExecutableContext {
+        task_manager,
+        users_manager: users,
+        virtual_file_system,
+        #[cfg(feature = "graphics")]
+        graphics_manager: graphics_manager_option,
+        network_manager,
+        time_manager: time,
+    }));
 
-    authentication::create_group(virtual_file_system, "administrator", Some(group_identifier))
-        .await
-        .unwrap();
+    let authentication_context = authentication::Context {
+        virtual_file_system,
+        task_manager,
+        users_manager: users,
+        task,
+    };
+    authentication::create_group(
+        &authentication_context,
+        "administrator",
+        Some(group_identifier),
+    )
+    .await
+    .unwrap();
 
     authentication::create_user(
-        virtual_file_system,
+        &authentication_context,
         "administrator",
         "",
         group_identifier,
@@ -222,6 +261,7 @@ pub async fn initialize(graphics_enabled: bool, network_enabled: bool) -> Standa
         &"/devices/standard_error",
         task,
         virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap()

@@ -17,7 +17,7 @@ pub unsafe fn object_delete(__translator: &mut Translator, object: WasmPointer) 
 }
 
 pub unsafe fn window_create() -> *mut lvgl::lv_obj_t {
-    let window = task::block_on(graphics::get_instance().create_window()).unwrap();
+    let window = task::block_on(graphics::ffi_manager().create_window()).unwrap();
 
     let window: NonNull<Window> = window.into();
 

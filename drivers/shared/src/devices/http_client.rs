@@ -159,9 +159,12 @@ async fn write_tcp_all(socket: &mut TcpSocket, mut payload: &[u8]) -> Result<()>
     Ok(())
 }
 
-async fn create_tcp_connection(host: &str, port: u16) -> Result<TcpSocket> {
+async fn create_tcp_connection(
+    manager: &'static network::Manager,
+    host: &str,
+    port: u16,
+) -> Result<TcpSocket> {
     log::information!("http_client: create session host='{}' port={}", host, port);
-    let manager = network::get_instance();
 
     let address = manager
         .resolve(host, DnsQueryKind::A | DnsQueryKind::Aaaa, true, None)
@@ -190,6 +193,7 @@ async fn create_tcp_connection(host: &str, port: u16) -> Result<TcpSocket> {
 }
 
 async fn run_request(
+    network_manager: &'static network::Manager,
     inner: Arc<Mutex<CriticalSectionRawMutex, HttpClientInner>>,
     request: Vec<u8>,
 ) {
@@ -205,7 +209,7 @@ async fn run_request(
 
         let (host, port) = split_host_port(host_header, DEFAULT_HTTP_PORT);
 
-        let mut socket = create_tcp_connection(host, port).await?;
+        let mut socket = create_tcp_connection(network_manager, host, port).await?;
 
         let request_length = compute_request_length(&request, parser)?;
         let payload = &request[..request_length];
@@ -271,7 +275,22 @@ async fn run_request(
     }
 }
 
-pub struct HttpClientDevice;
+pub struct HttpClientDevice {
+    network_manager: &'static network::Manager,
+    task_manager: &'static task::Manager,
+}
+
+impl HttpClientDevice {
+    pub const fn new(
+        network_manager: &'static network::Manager,
+        task_manager: &'static task::Manager,
+    ) -> Self {
+        Self {
+            network_manager,
+            task_manager,
+        }
+    }
+}
 
 impl BaseOperations for HttpClientDevice {
     fn open(&self, context: &mut Context) -> Result<()> {
@@ -306,14 +325,15 @@ impl BaseOperations for HttpClientDevice {
         let request = buffer.to_vec();
         let inner = context.inner.clone();
 
-        let task_manager = task::get_instance();
+        let task_manager = self.task_manager;
+        let network_manager = self.network_manager;
         let parent = task::Manager::ROOT_TASK_IDENTIFIER;
 
         if task::block_on(
             task_manager.spawn(parent, "HTTP request worker", None, move |_| {
                 let inner_clone = inner.clone();
                 let request_owned = request;
-                async move { run_request(inner_clone, request_owned).await }
+                async move { run_request(network_manager, inner_clone, request_owned).await }
             }),
         )
         .is_err()

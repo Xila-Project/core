@@ -2,7 +2,6 @@ use crate::Result;
 use crate::error::Error;
 use getargs::Options;
 use xila::file_system::Path;
-use xila::task;
 
 use super::{CommandContext, UserCommand};
 
@@ -25,7 +24,9 @@ impl UserCommand for EchoCommand {
 
 async fn write_echo_argument<C: CommandContext>(context: &mut C, argument: &str) -> Result<()> {
     if let Some(name) = argument.strip_prefix('$') {
-        let environment_variable = task::get_instance()
+        let environment_variable = context
+            .executable_context()
+            .task_manager
             .get_environment_variable(context.task_id(), name)
             .await
             .map_err(Error::FailedToReadEnvironmentVariable)?;

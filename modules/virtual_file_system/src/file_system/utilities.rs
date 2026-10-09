@@ -141,11 +141,11 @@ impl VirtualFileSystem {
         &self,
         task: TaskIdentifier,
     ) -> Result<(Time, UserIdentifier, GroupIdentifier)> {
-        let time: Time = time::get_instance().get_current_time()?.into();
+        let time: Time = self.time_manager.get_current_time()?.into();
 
-        let user = task::get_instance().get_user(task).await?;
+        let user = self.task_manager.get_user(task).await?;
 
-        let group = users::get_instance().get_user_primary_group(user).await?;
+        let group = self.users_manager.get_user_primary_group(user).await?;
 
         Ok((time, user, group))
     }
@@ -185,6 +185,7 @@ impl VirtualFileSystem {
     }
 
     pub(super) async fn check_permissions(
+        &self,
         file_system: &dyn FileSystemOperations,
         path: impl AsRef<Path>,
         asked_permissions: Permission,
@@ -202,7 +203,7 @@ impl VirtualFileSystem {
             .ok_or(Error::MissingAttribute)?;
 
         if !Self::has_permissions(
-            users::get_instance(),
+            self.users_manager,
             current_user,
             asked_permissions,
             owner_user,
@@ -227,6 +228,7 @@ impl VirtualFileSystem {
     }
 
     pub(super) async fn check_permissions_with_parent(
+        &self,
         file_systems: &FileSystemsArray,
         path: impl AsRef<Path>,
         current_permission: Permission,
@@ -239,7 +241,7 @@ impl VirtualFileSystem {
             let (parent_file_system, relative_path, _) =
                 Self::get_file_system_from_path(file_systems, &parent_path)?; // Get the file system identifier and the relative path
 
-            Self::check_permissions(
+            self.check_permissions(
                 parent_file_system.file_system,
                 relative_path,
                 parent_permission,
@@ -250,7 +252,7 @@ impl VirtualFileSystem {
 
         let (file_system, relative_path, _) = Self::get_file_system_from_path(file_systems, &path)?; // Get the file system identifier and the relative path
 
-        Self::check_permissions(
+        self.check_permissions(
             file_system.file_system,
             relative_path,
             current_permission,

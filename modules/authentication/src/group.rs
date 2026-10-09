@@ -17,9 +17,9 @@ use alloc::{
 use file_system::{AccessFlags, Path, PathOwned};
 use miniserde::{Deserialize, Serialize};
 use users::{GroupIdentifier, GroupIdentifierInner, UserIdentifier, UserIdentifierInner};
-use virtual_file_system::{Directory, File, VirtualFileSystem};
+use virtual_file_system::{Directory, File};
 
-use crate::{Error, GROUP_FOLDER_PATH, Result};
+use crate::{Context, Error, GROUP_FOLDER_PATH, Result};
 
 /// Represents a user group with associated metadata and member list.
 ///
@@ -132,7 +132,7 @@ pub fn get_group_file_path(group_name: &str) -> Result<PathOwned> {
 /// - File system errors (opening, reading)
 /// - JSON parsing errors
 pub async fn read_group_file(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     buffer: &mut Vec<u8>,
     file: &str,
 ) -> Result<Group> {
@@ -141,7 +141,8 @@ pub async fn read_group_file(
         .append(file)
         .ok_or(Error::FailedToGetGroupFilePath)?;
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let virtual_file_system = context.virtual_file_system;
+    let task = context.task;
 
     let mut group_file = File::open(
         virtual_file_system,
@@ -195,11 +196,12 @@ pub async fn read_group_file(
 /// - File system operations (directory creation, file writing)
 /// - Users manager operations (adding group)
 pub async fn create_group(
-    virtual_file_system: &VirtualFileSystem,
+    context: &Context<'_>,
     group_name: &str,
     group_identifier: Option<GroupIdentifier>,
 ) -> Result<GroupIdentifier> {
-    let users_manager = users::get_instance();
+    let virtual_file_system = context.virtual_file_system;
+    let users_manager = context.users_manager;
 
     // - New group identifier if not provided.
     let group_identifier = if let Some(group_identifier) = group_identifier {
@@ -220,7 +222,7 @@ pub async fn create_group(
     // - Write group file.
     let group = Group::new(group_identifier.as_u16(), group_name.to_string(), vec![]);
 
-    let task = task::get_instance().get_current_task_identifier().await;
+    let task = context.task;
 
     match Directory::create(virtual_file_system, task, GROUP_FOLDER_PATH).await {
         Ok(_) | Err(virtual_file_system::Error::AlreadyExists) => {}

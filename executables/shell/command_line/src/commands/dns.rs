@@ -117,7 +117,11 @@ where
 
     let default = !a_enabled && !aaaa_enabled && !cname_enabled && !ns_enabled && !soa_enabled;
 
-    let network_manager = network::get_instance();
+    let network_manager = context
+        .executable_context()
+        .network_manager
+        .as_ref()
+        .ok_or(crate::Error::InvalidOption)?;
 
     if a_enabled || default {
         resolve_record(context, network_manager, domain, DnsQueryKind::A).await?;

@@ -15,7 +15,6 @@ use core::fmt::Write;
 use core::num::NonZeroUsize;
 use error::*;
 use xila::file_system::Path;
-use xila::task;
 use xila::{executable, file_system::PathOwned};
 use xila::{
     executable::{ExecutableTrait, Standard},
@@ -31,8 +30,9 @@ mod resolver;
 use commands::{CommandContext, dispatch_user_command, resolve_user_command};
 
 pub struct Shell {
+    context: &'static executable::ExecutableContext,
     task: TaskIdentifier,
-    standard: Standard,
+    standard: Standard<'static>,
     current_directory: PathOwned,
     running: bool,
     user: String,
@@ -52,6 +52,9 @@ impl<'a> ShellCommandContext<'a> {
 }
 
 impl CommandContext for ShellCommandContext<'_> {
+    fn executable_context(&self) -> &'static executable::ExecutableContext {
+        self.shell.context
+    }
     fn task_id(&self) -> TaskIdentifier {
         self.shell.task
     }
@@ -84,29 +87,31 @@ impl CommandContext for ShellCommandContext<'_> {
         let _ = self.shell.standard.out().write_line(buffer).await;
     }
 
-    fn standard(&mut self) -> &mut Standard {
+    fn standard(&mut self) -> &mut Standard<'static> {
         &mut self.shell.standard
     }
 }
 
 impl ExecutableTrait for ShellExecutable {
-    fn main(standard: Standard, arguments: Vec<String>) -> executable::MainFuture {
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
 
 pub async fn main(
-    standard: Standard,
+    standard: Standard<'static>,
     arguments: Vec<String>,
 ) -> core::result::Result<(), NonZeroUsize> {
     Shell::new(standard).await.main(arguments).await
 }
 
 impl Shell {
-    pub async fn new(standard: Standard) -> Self {
+    pub async fn new(standard: Standard<'static>) -> Self {
+        let context = standard.context;
         Self {
+            context,
             standard,
-            task: task::get_instance().get_current_task_identifier().await,
+            task: context.task_manager.get_current_task_identifier().await,
             current_directory: Path::ROOT.to_owned(),
             running: true,
             user: "".to_string(),
@@ -175,12 +180,10 @@ impl Shell {
     }
 
     pub async fn main(&mut self, arguments: Vec<String>) -> core::result::Result<(), NonZeroUsize> {
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task_manager = &self.context.task_manager;
+        let task = task_manager.get_current_task_identifier().await;
 
-        let user = match task::get_instance()
-            .get_environment_variable(task, "User")
-            .await
-        {
+        let user = match task_manager.get_environment_variable(task, "User").await {
             Ok(user) => user.get_value().to_string(),
             Err(_) => loop {
                 match self.authenticate().await {
@@ -194,7 +197,7 @@ impl Shell {
 
         self.user = user;
 
-        let paths = task::get_instance()
+        let paths = task_manager
             .get_environment_variable(task, "Paths")
             .await
             .map_err(|_| Error::FailedToGetPath)?;
@@ -205,7 +208,7 @@ impl Shell {
             .map(Path::from_str)
             .collect::<Vec<&Path>>();
 
-        let host = task::get_instance()
+        let host = task_manager
             .get_environment_variable(task, "Host")
             .await
             .map_err(|_| Error::FailedToGetPath)?;

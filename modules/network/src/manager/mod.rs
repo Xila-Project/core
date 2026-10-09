@@ -13,7 +13,6 @@ use smoltcp::{
     phy::Device,
     socket::{icmp, tcp, udp},
 };
-use synchronization::once_lock::OnceLock;
 use synchronization::{
     Arc, blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock, signal::Signal,
 };
@@ -28,24 +27,7 @@ use crate::{
     },
 };
 
-static MANAGER_INSTANCE: OnceLock<Manager> = OnceLock::new();
-
-pub fn get_instance() -> &'static Manager {
-    MANAGER_INSTANCE
-        .try_get()
-        .expect("Manager is not initialized")
-}
-
-pub fn initialize(
-    _task_manager: &'static task::Manager,
-    _virtual_file_system: &'static VirtualFileSystem,
-    random_device: &'static dyn DirectCharacterDevice,
-) -> &'static Manager {
-    MANAGER_INSTANCE.get_or_init(|| Manager::new(random_device))
-}
-
-pub fn get_smoltcp_time() -> smoltcp::time::Instant {
-    let time_manager = time::get_instance();
+pub fn get_smoltcp_time(time_manager: &time::Manager<'_>) -> smoltcp::time::Instant {
     let current_time = time_manager
         .get_current_time()
         .expect("Failed to get current time");
@@ -56,13 +38,49 @@ pub fn get_smoltcp_time() -> smoltcp::time::Instant {
 type StackList = Vec<Stack>;
 
 pub struct Manager {
+    task_manager: &'static task::Manager,
+    virtual_file_system: &'static VirtualFileSystem,
+    time_manager: &'static time::Manager<'static>,
     pub(crate) random_device: &'static dyn DirectCharacterDevice,
     pub(crate) stacks: RwLock<CriticalSectionRawMutex, StackList>,
 }
 
+#[cfg(test)]
+pub(crate) static TEST_MANAGER: synchronization::once_lock::OnceLock<Manager> =
+    synchronization::once_lock::OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn test_manager() -> &'static Manager {
+    TEST_MANAGER
+        .try_get()
+        .expect("Network test manager not initialized")
+}
+
+pub fn initialize(
+    task_manager: &'static task::Manager,
+    virtual_file_system: &'static VirtualFileSystem,
+    time_manager: &'static time::Manager<'static>,
+    random_device: &'static dyn DirectCharacterDevice,
+) -> Manager {
+    Manager::new(
+        task_manager,
+        virtual_file_system,
+        time_manager,
+        random_device,
+    )
+}
+
 impl Manager {
-    pub fn new(random_device: &'static dyn DirectCharacterDevice) -> Self {
+    pub fn new(
+        task_manager: &'static task::Manager,
+        virtual_file_system: &'static VirtualFileSystem,
+        time_manager: &'static time::Manager<'static>,
+        random_device: &'static dyn DirectCharacterDevice,
+    ) -> Self {
         Manager {
+            task_manager,
+            virtual_file_system,
+            time_manager,
             random_device,
             stacks: RwLock::new(Vec::new()),
         }
@@ -115,9 +133,16 @@ impl Manager {
         }
 
         let random_seed = self.generate_seed()?;
-        let now = get_smoltcp_time();
+        let now = get_smoltcp_time(self.time_manager);
 
-        let stack_inner = StackInner::new(name, &mut device, controller_device, random_seed, now);
+        let stack_inner = StackInner::new(
+            name,
+            &mut device,
+            controller_device,
+            random_seed,
+            now,
+            self.time_manager,
+        );
 
         // Create a wake signal for runner/stack communication
         let wake_signal: WakeSignal = Arc::new(Signal::new());
@@ -126,9 +151,7 @@ impl Manager {
 
         let mut runner = StackRunner::new(stack.clone(), device, wake_signal);
 
-        let task_manager = task::get_instance();
-
-        task_manager
+        self.task_manager
             .spawn(
                 task,
                 "Network Interface Runner",
@@ -146,9 +169,8 @@ impl Manager {
 
         let device = NetworkDevice::new(stack.clone());
 
-        let virtual_file_system = virtual_file_system::get_instance();
-
-        match virtual_file_system
+        match self
+            .virtual_file_system
             .create_directory(task, &Path::NETWORK_DEVICES)
             .await
         {
@@ -157,13 +179,13 @@ impl Manager {
             Err(e) => return Err(Error::FailedToMountDevice(e)),
         };
 
-        match virtual_file_system.remove(task, &path).await {
+        match self.virtual_file_system.remove(task, &path).await {
             Ok(_) => {}
             Err(virtual_file_system::Error::FileSystem(file_system::Error::NotFound)) => {}
             Err(e) => return Err(Error::FailedToMountDevice(e)),
         };
 
-        virtual_file_system
+        self.virtual_file_system
             .mount_character_device(task, path, device)
             .await
             .map_err(Error::FailedToMountDevice)?;

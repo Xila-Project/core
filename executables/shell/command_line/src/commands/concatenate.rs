@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned;
 use getargs::Options;
 use xila::{
     file_system::{AccessFlags, Path},
-    virtual_file_system::{self, File},
+    virtual_file_system::File,
 };
 
 use crate::{Error, Result, commands::check_no_more_options};
@@ -43,7 +43,7 @@ fn resolve_path<C: CommandContext>(
 }
 
 async fn read_file_and_write<C: CommandContext>(context: &mut C, path: &Path) -> Result<()> {
-    let virtual_file_system = virtual_file_system::get_instance();
+    let virtual_file_system = &context.executable_context().virtual_file_system;
 
     let mut file = File::open(
         virtual_file_system,

@@ -1,6 +1,12 @@
+static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-#[xila::task::run(task_path = xila::task, executor = drivers_std::executor::instantiate_static_executor!())]
-async fn main() {
+#[xila::task::run(
+    task_path = xila::task,
+    executor = drivers_std::executor::instantiate_static_executor!(),
+    manager = &TASK_MANAGER
+)]
+async fn main(task_manager: &'static xila::task::Manager) {
     drivers_std::memory::instantiate_global_allocator!();
 
     extern crate alloc;
@@ -34,9 +40,10 @@ async fn main() {
 
     // Initialize the task manager
 
-    let task_manager = task::initialize();
-    let users_manager = users::initialize();
-    let time_manager = time::initialize(&drivers_std::devices::TimeDevice).unwrap();
+    let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(
+        time::Manager::new(&drivers_std::devices::TimeDevice).unwrap(),
+    ));
 
     let task = task_manager.get_current_task_identifier().await;
     // - Initialize the graphics manager
@@ -54,6 +61,7 @@ async fn main() {
 
     // - - Initialize the graphics manager
     let graphics_manager = graphics::initialize(
+        time_manager,
         screen_device,
         pointer_device,
         graphics::InputKind::Pointer,
@@ -61,6 +69,8 @@ async fn main() {
         true,
     )
     .await;
+    let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
+    graphics::set_ffi_manager(graphics_manager);
 
     graphics_manager
         .add_input_device(keyboard_device, graphics::InputKind::Keypad)
@@ -108,9 +118,14 @@ async fn main() {
     let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
 
     // Initialize the virtual file system
-    let virtual_file_system =
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
         virtual_file_system::initialize(task_manager, users_manager, time_manager, file_system)
-            .unwrap();
+            .unwrap(),
+    ));
+    xila::abi_definitions::initialize(xila::abi_definitions::RuntimeContext {
+        virtual_file_system,
+        time_manager,
+    });
 
     log::information!("Virtual file system initialized.");
 
@@ -124,9 +139,21 @@ async fn main() {
 
     log::information!("Default hierarchy created.");
 
-    static HTTP_CLIENT_DEVICE: drivers_shared::devices::HttpsClientDevice<
-        drivers_shared::devices::RandomDevice,
-    > = drivers_shared::devices::HttpsClientDevice::new(&drivers_shared::devices::RandomDevice);
+    let network_manager: &'static network::Manager = Box::leak(Box::new(network::initialize(
+        task_manager,
+        virtual_file_system,
+        time_manager,
+        &drivers_shared::devices::RandomDevice,
+    )));
+    let http_client = Box::leak(Box::new(drivers_shared::devices::HttpClientDevice::new(
+        network_manager,
+        task_manager,
+    )));
+    let https_client = Box::leak(Box::new(drivers_shared::devices::HttpsClientDevice::new(
+        &drivers_shared::devices::RandomDevice,
+        network_manager,
+        task_manager,
+    )));
 
     mount_static!(
         virtual_file_system,
@@ -163,16 +190,8 @@ async fn main() {
                 drivers_shared::devices::RandomDevice
             ),
             (&"/devices/null", CharacterDevice, drivers_core::NullDevice),
-            (
-                &"/devices/http_client",
-                CharacterDevice,
-                drivers_shared::devices::HttpClientDevice
-            ),
-            (
-                &"/devices/https_client",
-                CharacterDevice,
-                HTTP_CLIENT_DEVICE
-            ),
+            (&"/devices/http_client", CharacterDevice, *http_client),
+            (&"/devices/https_client", CharacterDevice, *https_client),
             (
                 &"/devices/hasher",
                 CharacterDevice,
@@ -185,12 +204,6 @@ async fn main() {
 
     let (interface_device, controller_device) = drivers_std::tuntap::new("xila0", false, true)
         .expect("Failed to create network interface.");
-
-    let network_manager = network::initialize(
-        task_manager,
-        virtual_file_system,
-        &drivers_shared::devices::RandomDevice,
-    );
 
     network_manager
         .mount_interface(task, "tunnel0", interface_device, controller_device, None)
@@ -222,9 +235,18 @@ async fn main() {
 
     // Mount static executables
 
-    let virtual_file_system = virtual_file_system::get_instance();
+    let executable_context: &'static executable::ExecutableContext =
+        Box::leak(Box::new(executable::ExecutableContext {
+            task_manager,
+            users_manager,
+            virtual_file_system,
+            graphics_manager: Some(graphics_manager),
+            network_manager: Some(network_manager),
+            time_manager,
+        }));
 
     mount_executables!(
+        executable_context,
         virtual_file_system,
         task,
         &[
@@ -267,7 +289,8 @@ async fn main() {
         &"/devices/standard_out",
         &"/devices/standard_error",
         task,
-        virtual_file_system::get_instance(),
+        virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
@@ -275,6 +298,7 @@ async fn main() {
     let calculator_binary_path = build_crate("calculator").unwrap();
 
     load_to_virtual_file_system(
+        task_manager,
         virtual_file_system,
         &calculator_binary_path,
         "/binaries/calculator",
@@ -285,6 +309,7 @@ async fn main() {
     let weather_binary_path = build_crate("weather").unwrap();
 
     load_to_virtual_file_system(
+        task_manager,
         virtual_file_system,
         &weather_binary_path,
         "/binaries/weather",
@@ -293,6 +318,7 @@ async fn main() {
     .unwrap();
 
     let _ = executable::execute(
+        executable_context,
         "/binaries/wasm",
         vec!["--install".to_string(), "/binaries/calculator".to_string()],
         standard
@@ -307,6 +333,7 @@ async fn main() {
     .await;
 
     let _ = executable::execute(
+        executable_context,
         "/binaries/wasm",
         vec!["--install".to_string(), "/binaries/weather".to_string()],
         standard,
@@ -320,8 +347,14 @@ async fn main() {
     // - - Create the default user
     let group_identifier = users::GroupIdentifier::new(1000);
 
+    let authentication_context = authentication::Context {
+        virtual_file_system,
+        task_manager,
+        users_manager,
+        task,
+    };
     let _ = authentication::create_group(
-        virtual_file_system::get_instance(),
+        &authentication_context,
         "administrator",
         Some(group_identifier),
     )
@@ -329,7 +362,7 @@ async fn main() {
     .unwrap();
 
     let _ = authentication::create_user(
-        virtual_file_system::get_instance(),
+        &authentication_context,
         "administrator",
         "",
         group_identifier,
@@ -359,19 +392,26 @@ async fn main() {
         &"/devices/standard_out",
         &"/devices/standard_error",
         task,
-        virtual_file_system::get_instance(),
+        virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
 
     // - - Execute the shell
-    let _ = executable::execute("/binaries/graphical_shell", vec![], standard, None)
-        .await
-        .unwrap()
-        .join()
-        .await;
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/graphical_shell",
+        vec![],
+        standard,
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
 
-    virtual_file_system::get_instance().uninitialize().await;
+    virtual_file_system.uninitialize().await;
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

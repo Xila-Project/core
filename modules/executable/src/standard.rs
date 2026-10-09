@@ -4,21 +4,24 @@ use file_system::{AccessFlags, Path};
 use task::TaskIdentifier;
 use virtual_file_system::{File, VirtualFileSystem};
 
+use crate::ExecutableContext;
 use crate::Result;
 
-pub struct Standard {
-    pub standard_in: File,
-    pub standard_out: File,
-    pub standard_error: File,
+pub struct Standard<'a> {
+    pub context: &'static ExecutableContext,
+    pub standard_in: File<'a>,
+    pub standard_out: File<'a>,
+    pub standard_error: File<'a>,
 }
 
-impl Standard {
+impl<'a> Standard<'a> {
     pub async fn open(
         standard_in: &impl AsRef<Path>,
         standard_out: &impl AsRef<Path>,
         standard_error: &impl AsRef<Path>,
         task: TaskIdentifier,
-        virtual_file_system: &'static VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
+        context: &'static ExecutableContext,
     ) -> Result<Self> {
         let standard_in = virtual_file_system
             .open(standard_in, AccessFlags::Read.into(), task)
@@ -32,26 +35,37 @@ impl Standard {
             .open(standard_error, AccessFlags::Write.into(), task)
             .await?;
 
-        Ok(Self::new(standard_in, standard_out, standard_error))
+        Ok(Self::new(
+            context,
+            standard_in,
+            standard_out,
+            standard_error,
+        ))
     }
 
-    pub fn new(standard_in: File, standard_out: File, standard_error: File) -> Self {
+    pub fn new(
+        context: &'static ExecutableContext,
+        standard_in: File<'a>,
+        standard_out: File<'a>,
+        standard_error: File<'a>,
+    ) -> Self {
         Self {
+            context,
             standard_in,
             standard_out,
             standard_error,
         }
     }
 
-    pub fn input(&mut self) -> &mut File {
+    pub fn input<'s>(&'s mut self) -> &'s mut File<'a> {
         &mut self.standard_in
     }
 
-    pub fn out(&mut self) -> &mut File {
+    pub fn out<'s>(&'s mut self) -> &'s mut File<'a> {
         &mut self.standard_out
     }
 
-    pub fn error(&mut self) -> &mut File {
+    pub fn error<'s>(&'s mut self) -> &'s mut File<'a> {
         &mut self.standard_error
     }
 
@@ -83,13 +97,14 @@ impl Standard {
 
     pub async fn duplicate(&self) -> virtual_file_system::Result<Self> {
         Ok(Self {
+            context: self.context,
             standard_in: self.standard_in.duplicate().await?,
             standard_out: self.standard_out.duplicate().await?,
             standard_error: self.standard_error.duplicate().await?,
         })
     }
 
-    pub fn split(self) -> (File, File, File) {
+    pub fn split(self) -> (File<'a>, File<'a>, File<'a>) {
         (self.standard_in, self.standard_out, self.standard_error)
     }
 

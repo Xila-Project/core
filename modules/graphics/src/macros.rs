@@ -1,17 +1,13 @@
 #[macro_export]
 macro_rules! lock {
     ($body:block) => {{
-        let _lock = $crate::get_instance().lock().await;
+        let _lock = graphics_manager.lock().await;
         let __result = { $body };
         ::core::mem::drop(_lock);
         __result
     }};
-}
-
-#[macro_export]
-macro_rules! synchronous_lock {
-    ($body:block) => {{
-        let _lock = $crate::get_instance().synchronous_lock();
+    ($manager:expr, $body:block) => {{
+        let _lock = $manager.lock().await;
         let __result = { $body };
         ::core::mem::drop(_lock);
         __result

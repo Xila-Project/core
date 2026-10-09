@@ -13,38 +13,31 @@ use file_system::{
     AccessFlags, AttributeFlags, Attributes, Context, FileSystemOperations, Flags, Kind, Path,
     StateFlags, Statistics,
 };
-use synchronization::{
-    blocking_mutex::raw::CriticalSectionRawMutex, once_lock::OnceLock, rwlock::RwLock,
-};
+use synchronization::{blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock};
 use task::TaskIdentifier;
 use users::{GroupIdentifier, UserIdentifier};
 use utilities::*;
 
-/// Instance of the virtual file system.
-static VIRTUAL_FILE_SYSTEM_INSTANCE: OnceLock<VirtualFileSystem> = OnceLock::new();
-
 pub fn initialize(
     task_manager: &'static task::Manager,
     users_manager: &'static users::Manager,
-    time_manager: &'static time::Manager,
+    time_manager: &'static time::Manager<'static>,
     root_file_system: impl FileSystemOperations + 'static,
-) -> Result<&'static VirtualFileSystem> {
-    let virtual_file_system =
-        VirtualFileSystem::new(task_manager, users_manager, time_manager, root_file_system);
-
-    Ok(VIRTUAL_FILE_SYSTEM_INSTANCE.get_or_init(|| virtual_file_system))
-}
-
-pub fn get_instance() -> &'static VirtualFileSystem {
-    VIRTUAL_FILE_SYSTEM_INSTANCE
-        .try_get()
-        .expect("Virtual file system is not initialized")
+) -> Result<VirtualFileSystem> {
+    Ok(VirtualFileSystem::new(
+        task_manager,
+        users_manager,
+        time_manager,
+        root_file_system,
+    ))
 }
 
 /// The virtual file system.
 ///
-/// It is a singleton.
 pub struct VirtualFileSystem {
+    task_manager: &'static task::Manager,
+    users_manager: &'static users::Manager,
+    time_manager: &'static time::Manager<'static>,
     /// Mounted file systems.
     file_systems: RwLock<CriticalSectionRawMutex, FileSystemsArray>,
     /// Character devices.
@@ -56,10 +49,18 @@ pub struct VirtualFileSystem {
 }
 
 impl VirtualFileSystem {
+    pub fn task_manager(&self) -> &'static task::Manager {
+        self.task_manager
+    }
+
+    pub fn users_manager(&self) -> &'static users::Manager {
+        self.users_manager
+    }
+
     pub fn new(
-        _: &'static task::Manager,
-        _: &'static users::Manager,
-        _: &'static time::Manager,
+        task_manager: &'static task::Manager,
+        users_manager: &'static users::Manager,
+        time_manager: &'static time::Manager<'static>,
         root_file_system: impl FileSystemOperations + 'static,
     ) -> Self {
         let file_systems = vec![InternalFileSystem {
@@ -69,6 +70,9 @@ impl VirtualFileSystem {
         }];
 
         Self {
+            task_manager,
+            users_manager,
+            time_manager,
             file_systems: RwLock::new(file_systems),
             character_device: RwLock::new(BTreeMap::new()),
             block_device: RwLock::new(BTreeMap::new()),
@@ -192,18 +196,18 @@ impl VirtualFileSystem {
         Ok(())
     }
 
-    pub async fn open_directory(
-        &self,
+    pub async fn open_directory<'a>(
+        &'a self,
         task: TaskIdentifier,
         path: &impl AsRef<Path>,
-    ) -> Result<Directory> {
+    ) -> Result<Directory<'a>> {
         let path = path.as_ref();
 
         let mut file_systems = self.file_systems.write().await; // Get the file systems
 
         let (time, user, _) = self.get_time_user_group(task).await?;
 
-        Self::check_permissions_with_parent(
+        self.check_permissions_with_parent(
             &file_systems,
             path,
             Permission::Read,
@@ -243,18 +247,19 @@ impl VirtualFileSystem {
         file_system.reference_count += 1;
 
         Ok(Directory::new(
+            self,
             file_system.file_system,
             Flags::new(AccessFlags::Read, None, None),
             context,
         ))
     }
 
-    pub async fn open(
-        &self,
+    pub async fn open<'a>(
+        &'a self,
         path: &impl AsRef<Path>,
         flags: Flags,
         task: TaskIdentifier,
-    ) -> Result<File> {
+    ) -> Result<File<'a>> {
         let path = path.as_ref();
 
         let mut file_systems = self.file_systems.write().await; // Get the file systems
@@ -270,7 +275,7 @@ impl VirtualFileSystem {
 
             match result {
                 Ok(()) => {
-                    Self::check_permissions(
+                    self.check_permissions(
                         file_system.file_system,
                         path.go_parent().ok_or_else(|| {
                             log::error!("Error getting parent path for {:?}", path);
@@ -303,7 +308,7 @@ impl VirtualFileSystem {
                 }
             }
         } else {
-            Self::check_permissions_with_parent(
+            self.check_permissions_with_parent(
                 &file_systems,
                 path,
                 mode.into_permission(),
@@ -341,7 +346,12 @@ impl VirtualFileSystem {
                 poll(|| Ok(device.device.open(&mut context)?)).await?;
                 device.reference_count += 1;
 
-                File::new(ItemStatic::CharacterDevice(device.device), flags, context)
+                File::new(
+                    self,
+                    ItemStatic::CharacterDevice(device.device),
+                    flags,
+                    context,
+                )
             }
             Kind::BlockDevice => {
                 let mut devices = self.block_device.write().await;
@@ -351,7 +361,7 @@ impl VirtualFileSystem {
                 poll(|| Ok(device.device.open(&mut context)?)).await?;
                 device.reference_count += 1;
 
-                File::new(ItemStatic::BlockDevice(device.device), flags, context)
+                File::new(self, ItemStatic::BlockDevice(device.device), flags, context)
             }
             Kind::Pipe => {
                 let mut pipes = self.pipes.write().await;
@@ -360,7 +370,7 @@ impl VirtualFileSystem {
                 poll(|| Ok(pipe.pipe.open(&mut context)?)).await?;
                 pipe.reference_count += 1;
 
-                File::new(ItemStatic::Pipe(pipe.pipe), flags, context)
+                File::new(self, ItemStatic::Pipe(pipe.pipe), flags, context)
             }
             Kind::File => {
                 poll(|| {
@@ -374,7 +384,12 @@ impl VirtualFileSystem {
 
                 file_system.reference_count += 1;
 
-                File::new(ItemStatic::File(file_system.file_system), flags, context)
+                File::new(
+                    self,
+                    ItemStatic::File(file_system.file_system),
+                    flags,
+                    context,
+                )
             }
             _ => Err(Error::UnsupportedOperation)?,
         };
@@ -402,7 +417,7 @@ impl VirtualFileSystem {
 
         let parent_path = path.go_parent().ok_or(Error::InvalidPath)?;
 
-        Self::check_permissions(
+        self.check_permissions(
             parent_file_system.file_system,
             parent_path,
             Permission::Write,
@@ -545,11 +560,11 @@ impl VirtualFileSystem {
         .await
     }
 
-    pub async fn create_unnamed_pipe(
-        &self,
+    pub async fn create_unnamed_pipe<'a>(
+        &'a self,
         size: usize,
         status: StateFlags,
-    ) -> Result<(File, File)> {
+    ) -> Result<(File<'a>, File<'a>)> {
         let mut pipes = self.pipes.write().await;
 
         let inode = Self::get_new_inode(&*pipes).ok_or(Error::TooManyInodes)?;
@@ -565,12 +580,14 @@ impl VirtualFileSystem {
         );
 
         let writer = File::new(
+            self,
             ItemStatic::Pipe(pipe),
             Flags::new(AccessFlags::Write, None, Some(status)),
             Context::new_empty(),
         );
 
         let reader = File::new(
+            self,
             ItemStatic::Pipe(pipe),
             Flags::new(AccessFlags::Read, None, Some(status)),
             Context::new_empty(),
@@ -587,7 +604,7 @@ impl VirtualFileSystem {
 
         let (_, user, _) = self.get_time_user_group(task).await?;
 
-        Self::check_permissions(
+        self.check_permissions(
             file_system.file_system,
             path.as_ref().go_parent().ok_or(Error::InvalidPath)?,
             Permission::Write,
@@ -626,7 +643,7 @@ impl VirtualFileSystem {
         let (time, user, group) = self.get_time_user_group(task).await?;
 
         // Get the parent directory attributes
-        Self::check_permissions(
+        self.check_permissions(
             file_system.file_system,
             path.as_ref().go_parent().ok_or(Error::InvalidPath)?,
             Permission::Write,

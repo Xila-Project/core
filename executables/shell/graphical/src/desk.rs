@@ -14,8 +14,7 @@ use alloc::{
 };
 use xila::graphics::{self, Color, EventKind, Logo, OwnedWindow, Point, lvgl};
 use xila::log::{self, error, warning};
-use xila::task;
-use xila::virtual_file_system::{self, Directory};
+use xila::virtual_file_system::Directory;
 use xila::{
     executable,
     graphics::theme::{self, get_border_color_primary},
@@ -26,6 +25,8 @@ use xila::{file_system::Kind, graphics::symbol};
 pub const WINDOWS_PARENT_CHILD_CHANGED: graphics::EventKind = graphics::EventKind::Custom2;
 
 pub struct Desk {
+    context: &'static xila::executable::ExecutableContext,
+    graphics_manager: &'static graphics::Manager,
     window: OwnedWindow,
     tile_view: *mut lvgl::lv_obj_t,
     drawer_tile: *mut lvgl::lv_obj_t,
@@ -80,9 +81,12 @@ impl Desk {
         unsafe { lvgl::lv_obj_has_flag(self.dock, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_HIDDEN) }
     }
 
-    pub async fn new(windows_parent: *mut lvgl::lv_obj_t) -> Result<Self> {
-        let desk = graphics::lock!({
-            let graphics = graphics::get_instance();
+    pub async fn new(
+        context: &'static xila::executable::ExecutableContext,
+        windows_parent: *mut lvgl::lv_obj_t,
+    ) -> Result<Self> {
+        let graphics = graphics::ffi_manager();
+        let desk = graphics::lock!(graphics, {
             // - Create a window
             let mut window = graphics.create_window().await?;
 
@@ -116,11 +120,7 @@ impl Desk {
                 for i in 0..4 {
                     let part = lvgl::lv_obj_get_child(logo_inner_object, i);
 
-                    lvgl::lv_obj_set_style_bg_opa(
-                        part,
-                        lvgl::LV_OPA_0 as u8,
-                        lvgl::LV_STATE_DEFAULT,
-                    );
+                    lvgl::lv_obj_set_style_bg_opa(part, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
 
                     lvgl::lv_obj_set_style_border_width(part, 2, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_set_style_border_color(
@@ -139,11 +139,7 @@ impl Desk {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_bg_opa(
-                    tile_view,
-                    lvgl::LV_OPA_0 as u8,
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                lvgl::lv_obj_set_style_bg_opa(tile_view, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_scrollbar_mode(
                     tile_view,
                     lvgl::lv_scrollbar_mode_t_LV_SCROLLBAR_MODE_OFF,
@@ -217,6 +213,8 @@ impl Desk {
             let shortcuts = BTreeMap::new();
 
             let desk: Desk = Self {
+                context,
+                graphics_manager: graphics::ffi_manager(),
                 window,
                 tile_view,
                 desk_tile,
@@ -248,7 +246,7 @@ impl Desk {
             let container = lvgl::lv_obj_create(drawer);
 
             lvgl::lv_obj_set_size(container, 12 * 8, 11 * 8);
-            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0 as u8, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_flex_flow(container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
             lvgl::lv_obj_set_style_pad_all(container, 0, lvgl::LV_STATE_DEFAULT);
@@ -277,9 +275,13 @@ impl Desk {
 
     async unsafe fn create_drawer_interface(&mut self, drawer: *mut lvgl::lv_obj_t) -> Result<()> {
         unsafe {
-            let task = task::get_instance().get_current_task_identifier().await;
+            let task = self
+                .context
+                .task_manager
+                .get_current_task_identifier()
+                .await;
 
-            let virtual_file_system = virtual_file_system::get_instance();
+            let virtual_file_system = &self.context.virtual_file_system;
 
             let _ = virtual_file_system
                 .create_directory(task, &SHORTCUT_PATH)
@@ -300,7 +302,7 @@ impl Desk {
                     continue;
                 }
 
-                match Shortcut::read(&shortcut_entry.name, &mut buffer).await {
+                match Shortcut::read(self.context, &shortcut_entry.name, &mut buffer).await {
                     Ok(shortcut) => {
                         self.create_drawer_shortcut(
                             &shortcut_entry.name,
@@ -322,25 +324,36 @@ impl Desk {
     }
 
     async fn execute_shortcut(&mut self, shortcut_name: &str) -> Result<()> {
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
 
         let mut buffer = vec![];
 
-        let shortcut = Shortcut::read(shortcut_name, &mut buffer).await?;
+        let shortcut = Shortcut::read(self.context, shortcut_name, &mut buffer).await?;
 
         let standard = Standard::open(
             &"/devices/null",
             &"/devices/null",
             &"/devices/null",
             task,
-            virtual_file_system::get_instance(),
+            self.context.virtual_file_system,
+            self.context,
         )
         .await
         .map_err(Error::FailedToOpenStandardFile)?;
 
-        executable::execute(&*shortcut.command, shortcut.arguments, standard, None)
-            .await
-            .map_err(Error::FailedToExecuteShortcut)?;
+        executable::execute(
+            self.context,
+            &*shortcut.command,
+            shortcut.arguments,
+            standard,
+            None,
+        )
+        .await
+        .map_err(Error::FailedToExecuteShortcut)?;
 
         Ok(())
     }
@@ -414,7 +427,8 @@ impl Desk {
     }
 
     async fn close_app_for_window(&mut self, window_identifier: usize) {
-        if let Err(error) = graphics::get_instance()
+        if let Err(error) = self
+            .graphics_manager
             .send_window_close_request(window_identifier)
             .await
         {
@@ -457,7 +471,7 @@ impl Desk {
     }
 
     async fn get_visible_windows(&self) -> Result<Vec<(usize, String, Color)>> {
-        let graphics_manager = graphics::get_instance();
+        let graphics_manager = self.graphics_manager;
         let window_count = graphics_manager.get_window_count().await?;
 
         let mut windows = Vec::new();
@@ -544,7 +558,7 @@ impl Desk {
     }
 
     pub async fn handle_events(&mut self) -> bool {
-        graphics::lock!({
+        graphics::lock!(self.graphics_manager, {
             while let Some(event) = self.window.pop_event() {
                 if let Err(error) = self.handle_event(event).await {
                     log::error!("Failed to handle desk event: {error:?}");
@@ -576,7 +590,8 @@ impl Desk {
                     })
                 {
                     if let Some(window_identifier) = self.dock_menu_target_window
-                        && let Err(error) = graphics::get_instance()
+                        && let Err(error) = self
+                            .graphics_manager
                             .maximize_window(window_identifier)
                             .await
                     {
@@ -652,7 +667,8 @@ impl Desk {
                     let window_identifier =
                         unsafe { lvgl::lv_obj_get_user_data(event.target) as usize };
 
-                    if let Err(error) = graphics::get_instance()
+                    if let Err(error) = self
+                        .graphics_manager
                         .maximize_window(window_identifier)
                         .await
                     {

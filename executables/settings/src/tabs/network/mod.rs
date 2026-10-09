@@ -9,10 +9,11 @@ use xila::{
     graphics::{Event, EventKind, lvgl, symbol},
     log,
     network::{self, InterfaceKind},
-    virtual_file_system::{self, Directory, File, VirtualFileSystem},
+    virtual_file_system::{Directory, File, VirtualFileSystem},
 };
 
 pub struct NetworkTab {
+    context: &'static xila::executable::ExecutableContext,
     tab_container: *mut lvgl::lv_obj_t,
     interfaces_list: *mut lvgl::lv_obj_t,
     last_update: Duration,
@@ -23,8 +24,9 @@ pub struct NetworkTab {
 impl NetworkTab {
     pub const UPDATE_INTERVAL: Duration = Duration::from_secs(30);
 
-    pub fn new() -> Self {
+    pub fn new(context: &'static xila::executable::ExecutableContext) -> Self {
         Self {
+            context,
             tab_container: null_mut(),
             interfaces_list: null_mut(),
             last_update: Duration::from_secs(0),
@@ -37,7 +39,7 @@ impl NetworkTab {
         &self,
         interface_name: &str,
     ) -> Result<(InterfaceKind, bool)> {
-        let virtual_file_system = virtual_file_system::get_instance();
+        let virtual_file_system = &self.context.virtual_file_system;
 
         let mut file = open_interface(virtual_file_system, interface_name).await?;
 
@@ -54,9 +56,9 @@ impl NetworkTab {
             lvgl::lv_obj_clean(self.interfaces_list);
         }
 
-        let virtual_file_system = xila::virtual_file_system::get_instance();
+        let virtual_file_system = &self.context.virtual_file_system;
 
-        let task_manager = xila::task::get_instance();
+        let task_manager = &self.context.task_manager;
 
         let task = task_manager.get_current_task_identifier().await;
 
@@ -146,7 +148,7 @@ impl NetworkTab {
     }
 
     pub async fn handle_event(&mut self, event: &Event) -> bool {
-        let time_manager = xila::time::get_instance();
+        let time_manager = &self.context.time_manager;
 
         let current_time = match time_manager.get_current_time() {
             Ok(time) => time,
@@ -201,7 +203,9 @@ impl NetworkTab {
 
                 log::information!("Opening configuration panel for interface: {}", interface);
 
-                match InterfacePanel::new(interface.to_string(), self.tab_container).await {
+                match InterfacePanel::new(self.context, interface.to_string(), self.tab_container)
+                    .await
+                {
                     Ok(panel) => {
                         self.configuration_panel.replace(panel);
                     }
@@ -218,11 +222,11 @@ impl NetworkTab {
     }
 }
 
-pub async fn open_interface(
-    virtual_file_system: &VirtualFileSystem,
+pub async fn open_interface<'a>(
+    virtual_file_system: &'a VirtualFileSystem,
     interface: &str,
-) -> Result<File> {
-    let task_manager = xila::task::get_instance();
+) -> Result<File<'a>> {
+    let task_manager = virtual_file_system.task_manager();
 
     let task = task_manager.get_current_task_identifier().await;
 

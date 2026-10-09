@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use getargs::Options;
 use getargs_derive::GetArgs;
-use xila::{file_system::Path, virtual_file_system};
+use xila::file_system::Path;
 
 use crate::{Result, error::Error, resolver::resolve};
 
@@ -33,7 +33,9 @@ async fn validate_and_print_path<C: CommandContext>(
     context: &mut C,
     resolved_path: &Path,
 ) -> Result<()> {
-    let _ = virtual_file_system::get_instance()
+    let _ = context
+        .executable_context()
+        .virtual_file_system
         .get_statistics(&resolved_path)
         .await
         .map_err(Error::FailedToGetMetadata)?;
@@ -79,7 +81,7 @@ where
     if let Some(path) = resolve_as_path(context, command)? {
         validate_and_print_path(context, &path).await?;
     } else {
-        let path = resolve(command, paths).await?;
+        let path = resolve(context.executable_context(), command, paths).await?;
         validate_and_print_path(context, &path).await?;
     }
 
@@ -125,7 +127,11 @@ mod tests {
 
         async fn write_out_line(&mut self, _buffer: &[u8]) {}
 
-        fn standard(&mut self) -> &mut Standard {
+        fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
+            panic!("executable context not needed in this test")
+        }
+
+        fn standard(&mut self) -> &mut Standard<'static> {
             panic!("standard not needed in this test")
         }
     }

@@ -17,27 +17,29 @@ pub enum FileVariantKind {
 }
 
 pub struct FileVariant {
-    pub file: ManuallyDrop<SynchronousFile>,
+    pub file: ManuallyDrop<SynchronousFile<'static>>,
     pub kind: FileVariantKind,
 }
 
 impl AsMut<XilaFileSystemFile> for FileVariant {
     #[inline]
     fn as_mut(&mut self) -> &mut XilaFileSystemFile {
-        unsafe { &mut *(&mut *self.file as *mut SynchronousFile as *mut XilaFileSystemFile) }
+        unsafe {
+            &mut *(&mut *self.file as *mut SynchronousFile<'static> as *mut XilaFileSystemFile)
+        }
     }
 }
 
 pub struct DirectoryVariant {
     pub path: PathOwned,
-    pub directory: ManuallyDrop<SynchronousDirectory>,
+    pub directory: ManuallyDrop<SynchronousDirectory<'static>>,
 }
 
 impl AsMut<XilaFileSystemDirectory> for DirectoryVariant {
     #[inline]
     fn as_mut(&mut self) -> &mut XilaFileSystemDirectory {
         unsafe {
-            &mut *(&mut *self.directory as *mut SynchronousDirectory
+            &mut *(&mut *self.directory as *mut SynchronousDirectory<'static>
                 as *mut XilaFileSystemDirectory)
         }
     }
@@ -49,14 +51,14 @@ pub enum FileSystemItem {
 }
 
 impl FileSystemItem {
-    pub fn new_file(file: SynchronousFile, kind: FileVariantKind) -> *mut Self {
+    pub fn new_file(file: SynchronousFile<'static>, kind: FileVariantKind) -> *mut Self {
         Box::into_raw(Box::new(FileSystemItem::File(FileVariant {
             file: ManuallyDrop::new(file),
             kind,
         })))
     }
 
-    pub fn new_directory(directory: SynchronousDirectory, path: PathOwned) -> *mut Self {
+    pub fn new_directory(directory: SynchronousDirectory<'static>, path: PathOwned) -> *mut Self {
         let item = FileSystemItem::Directory(DirectoryVariant {
             path,
             directory: ManuallyDrop::new(directory),

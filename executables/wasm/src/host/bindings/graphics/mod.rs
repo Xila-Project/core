@@ -45,7 +45,7 @@ unsafe fn call_inner(
     result_pointer: WasmPointer,
 ) -> Result<()> {
     unsafe {
-        let instance = graphics::get_instance();
+        let instance = graphics::ffi_manager();
 
         let _lock = block_on(instance.lock());
 

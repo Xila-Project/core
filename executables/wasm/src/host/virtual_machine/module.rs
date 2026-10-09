@@ -21,13 +21,12 @@ impl<'runtime> Module<'runtime> {
         runtime: &'runtime Runtime,
         buffer: Vec<u8>,
         name: &str,
-        standard_in: File,
-        standard_out: File,
-        standard_error: File,
+        standard_in: File<'static>,
+        standard_out: File<'static>,
+        standard_error: File<'static>,
+        task_manager: &'static task::Manager,
     ) -> Result<Self> {
         // - Environment variables.
-        let task_manager = task::get_instance();
-
         let task = task_manager.get_current_task_identifier().await;
         let mut environment_variables_raw: Vec<*const i8> = task_manager
             .get_environment_variables(task)

@@ -55,12 +55,13 @@ async fn write_ping_line<C: CommandContext>(
 
 async fn ping_loop<C: CommandContext>(
     context: &mut C,
+    network_manager: &network::Manager,
     resolved_target: &xila::network::IpAddress,
     count: u16,
     timeout_seconds: u64,
     payload_size: usize,
 ) -> crate::Result<()> {
-    let socket = network::get_instance()
+    let socket = network_manager
         .new_icmp_socket(256, 256, 1, 1, None)
         .await
         .map_err(Error::FailedToCreateSocket)?;
@@ -126,7 +127,11 @@ where
         size: payload_size,
     } = PingArguments::parse(options)?;
 
-    let manager = network::get_instance();
+    let manager = context
+        .executable_context()
+        .network_manager
+        .as_ref()
+        .ok_or(crate::Error::InvalidOption)?;
 
     let resolved_target = manager
         .resolve(target, DnsQueryKind::A | DnsQueryKind::Aaaa, true, None)
@@ -148,6 +153,7 @@ where
     write_ping_line(context, target, &resolved_target).await?;
     ping_loop(
         context,
+        manager,
         &resolved_target,
         count,
         timeout_seconds,

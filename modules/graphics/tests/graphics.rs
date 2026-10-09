@@ -18,11 +18,11 @@ async fn main() {
     use drivers_native::window_screen;
     use graphics::{InputKind, Point, get_recommended_buffer_size, lvgl};
 
-    let _ = users::initialize();
-
-    let task_instance = task::initialize();
-
-    time::initialize(&drivers_std::devices::TimeDevice).expect("Error initializing time manager");
+    let task_instance = Box::leak(Box::new(task::Manager::new()));
+    let _users = users::Manager::new();
+    let time_manager = Box::leak(Box::new(
+        time::Manager::new(&drivers_std::devices::TimeDevice).unwrap(),
+    ));
 
     const RESOLUTION: Point = Point::new(800, 480);
 
@@ -34,6 +34,7 @@ async fn main() {
     let _task = task_instance.get_current_task_identifier().await;
 
     let graphics = graphics::initialize(
+        time_manager,
         Box::leak(Box::new(screen_device)),
         Box::leak(Box::new(pointer_device)),
         InputKind::Pointer,

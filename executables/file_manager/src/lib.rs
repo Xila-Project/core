@@ -50,13 +50,16 @@ impl FileManagerExecutable {
 }
 
 impl ExecutableTrait for FileManagerExecutable {
-    fn main(standard: Standard, arguments: Vec<String>) -> executable::MainFuture {
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
 
-pub async fn main(_: Standard, _: Vec<String>) -> core::result::Result<(), NonZeroUsize> {
-    let mut file_manager = FileManager::new()
+pub async fn main(
+    standard: Standard<'static>,
+    _: Vec<String>,
+) -> core::result::Result<(), NonZeroUsize> {
+    let mut file_manager = FileManager::new(standard.context)
         .await
         .map_err(|_| NonZeroUsize::new(1).unwrap())?;
 
