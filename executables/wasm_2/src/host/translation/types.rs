@@ -1,3 +1,5 @@
+use super::GuestValue;
+
 #[cfg(all(feature = "memory_32", not(feature = "memory_64")))]
 pub type WasiIsize = i32;
 #[cfg(feature = "memory_64")]
@@ -47,4 +49,3 @@ impl GuestValue for WasiVector {
         self.length.encode(&mut bytes[WasmUsize::SIZE..]);
     }
 }
-use super::GuestValue;
