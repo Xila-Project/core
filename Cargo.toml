@@ -182,6 +182,7 @@ members = [
   "modules/device",
   "executables/weather",
   "executables/wasm_2",
+  "executables/wasm_2/tests/wasm_test",
 ]
 
 [patch.crates-io]

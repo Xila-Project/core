@@ -28,3 +28,7 @@ abi_definitions = { workspace = true }
 command_line_shell = { workspace = true }
 executable = { workspace = true, features = ["building"] }
 testing = { workspace = true }
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
