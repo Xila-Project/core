@@ -1,0 +1,30 @@
+[package]
+name = "wasm_2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wasmi = { version = "1.1.0", default-features = false, features = [
+  "prefer-btree-collections",
+  "extra-checks",
+], optional = true }
+xila = { path = "../../", optional = true }
+getargs-derive = { git = "https://github.com/AlixANNERAUD/getargs-derive.git", branch = "main", optional = true }
+getargs = { version = "0.5", optional = true }
+
+[features]
+guest = []
+host = ["dep:wasmi", "dep:xila", "dep:getargs-derive", "dep:getargs"]
+default = ["host", "memory_32"]
+memory_32 = []
+memory_64 = []
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dev-dependencies]
+drivers_native = { workspace = true }
+drivers_core = { workspace = true }
+drivers_shared = { workspace = true }
+drivers_std = { workspace = true }
+abi_definitions = { workspace = true }
+command_line_shell = { workspace = true }
+executable = { workspace = true, features = ["building"] }
+testing = { workspace = true }
