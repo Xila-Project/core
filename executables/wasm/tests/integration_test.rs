@@ -20,7 +20,7 @@ async fn main() {
 
     let binary_path = build_crate(&"wasm_wasm_test").unwrap();
     load_to_virtual_file_system(
-        context.task_manager.clone(),
+        context.task_manager,
         virtual_file_system,
         binary_path,
         "/test_wasm.wasm",

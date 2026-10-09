@@ -96,7 +96,7 @@ mod tests {
 
         load_to_virtual_file_system(
             task_instance,
-            virtual_file_system,
+            &virtual_file_system,
             source_path,
             destination_path,
         )
@@ -109,7 +109,7 @@ mod tests {
         let mut buffer = vec![0; test_file.len()];
 
         virtual_file_system::File::read_from_path(
-            virtual_file_system,
+            &virtual_file_system,
             task,
             &destination_path,
             &mut buffer,

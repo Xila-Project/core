@@ -21,7 +21,7 @@ async fn main() {
 
     let binary_path = build_crate(&"weather").unwrap();
     load_to_virtual_file_system(
-        task_instance.as_ref(),
+        task_instance,
         virtual_file_system,
         binary_path,
         "/binaries/weather.wasm",
