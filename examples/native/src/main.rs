@@ -276,7 +276,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
                     .await
                     .unwrap()
             ),
-            (&"/binaries/wasm", wasm::WasmExecutable)
+            (&"/binaries/wasm", wasm_2::WasmExecutable),
         ]
     )
     .await

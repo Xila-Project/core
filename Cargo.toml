@@ -105,6 +105,7 @@ file_manager = { path = "executables/file_manager" }
 command_line_shell = { path = "executables/shell/command_line" }
 graphical_shell = { path = "executables/shell/graphical" }
 wasm = { path = "executables/wasm" }
+wasm_2 = { path = "executables/wasm_2" }
 terminal = { path = "executables/terminal" }
 settings = { path = "executables/settings" }
 calculator = { path = "executables/calculator" }
@@ -180,6 +181,8 @@ members = [
   "modules/testing",
   "modules/device",
   "executables/weather",
+  "executables/wasm_2",
+  "executables/wasm_2/tests/wasm_test",
 ]
 
 [patch.crates-io]
