@@ -1,8 +1,15 @@
 #![no_std]
 
 #[cfg(target_arch = "wasm32")]
-#[xila::task::run(task_path = xila::task, executor = drivers_wasm::executor::instantiate_static_executor!())]
-async fn main() {
+static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
+
+#[cfg(target_arch = "wasm32")]
+#[xila::task::run(
+    task_path = xila::task,
+    executor = drivers_wasm::executor::instantiate_static_executor!(),
+    manager = &TASK_MANAGER
+)]
+async fn main(task_manager: &'static xila::task::Manager) {
     drivers_wasm::memory::instantiate_global_allocator!();
 
     extern crate alloc;
@@ -28,7 +35,6 @@ async fn main() {
     log::initialize(&drivers_wasm::log::Logger).unwrap();
 
     // Initialize the task manager
-    let task_manager: &'static task::Manager = Box::leak(Box::new(task::Manager::new()));
     let task = task_manager.get_current_task_identifier().await;
     let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
     let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(

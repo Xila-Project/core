@@ -92,7 +92,7 @@ impl Manager {
 
     /// Create a new task manager instance,
     /// create a root task and register current thread as the root task main thread.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Manager(RwLock::new(Inner {
             tasks: BTreeMap::new(),
             identifiers: BTreeMap::new(),

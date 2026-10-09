@@ -18,6 +18,9 @@ struct TaskArguments {
 
     #[darling(default = "default_executor")]
     pub executor: syn::Expr,
+
+    #[darling(default)]
+    pub manager: Option<syn::Expr>,
 }
 
 impl TaskArguments {
@@ -180,16 +183,20 @@ pub fn test(arguments: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// Functions must:
 /// - Be async
-/// - Have no arguments
+/// - Accept one `&'static Manager` argument
 /// - Have no return type (or return unit type `()`)
 ///
 /// # Usage
 ///
-/// The macro accepts an executor expression as a parameter:
+/// The macro accepts an executor expression and a reference to the manager
+/// owned by the composition root:
 ///
 /// ```rust,ignore
-/// #[task_macros::run(drivers_std::executor::instantiate_static_executor!())]
-/// async fn my_function() {
+/// #[task_macros::run(
+///     executor = drivers_std::executor::instantiate_static_executor!(),
+///     manager = &TASK_MANAGER
+/// )]
+/// async fn my_function(task_manager: &'static task::Manager) {
 ///     println!("Running with custom executor!");
 /// }
 /// ```
@@ -203,13 +210,20 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
 
     let task_path = arguments.task_path;
     let executor_expression = arguments.executor;
+    let Some(manager_expression) = arguments.manager else {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "run requires `manager = <expression>`",
+        )
+        .to_compile_error()
+        .into();
+    };
 
     // Extract function details
     let function_name = &input_function.sig.ident;
     let function_name_string = function_name.to_string();
     let manager_setup = quote! {
-        let manager: &'static #task_path::Manager =
-            ::std::boxed::Box::leak(::std::boxed::Box::new(#task_path::Manager::new()));
+        let manager: &'static #task_path::Manager = #manager_expression;
     };
 
     // Check if function is async
@@ -224,11 +238,12 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
         .into();
     }
 
-    // Check if function has no arguments
-    if !input_function.sig.inputs.is_empty() {
+    // The run manager owns the executor spawner and must also be used by the
+    // async entry point for any tasks it spawns.
+    if input_function.sig.inputs.len() != 1 {
         return syn::Error::new_spanned(
             &input_function.sig.inputs,
-            "Functions with Run_with_executor must not have any arguments",
+            "Functions with Run_with_executor must accept one &'static Manager argument",
         )
         .to_compile_error()
         .into();
@@ -287,7 +302,7 @@ pub fn run(arguments: TokenStream, input: TokenStream) -> TokenStream {
                             #function_name_string,
                             Some(__SPAWNER),
                             async move |_task| {
-                                __inner().await;
+                                __inner(manager).await;
                             }
                         ).await
                     }).expect("Failed to spawn task");

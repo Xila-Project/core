@@ -1,6 +1,12 @@
+static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-#[xila::task::run(task_path = xila::task, executor = drivers_std::executor::instantiate_static_executor!())]
-async fn main() {
+#[xila::task::run(
+    task_path = xila::task,
+    executor = drivers_std::executor::instantiate_static_executor!(),
+    manager = &TASK_MANAGER
+)]
+async fn main(task_manager: &'static xila::task::Manager) {
     drivers_std::memory::instantiate_global_allocator!();
 
     extern crate alloc;
@@ -34,7 +40,6 @@ async fn main() {
 
     // Initialize the task manager
 
-    let task_manager: &'static task::Manager = Box::leak(Box::new(task::Manager::new()));
     let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
     let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(
         time::Manager::new(&drivers_std::devices::TimeDevice).unwrap(),
