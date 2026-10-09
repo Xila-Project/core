@@ -17,6 +17,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  wasm-translation:
+    name: WASM translation (${{ matrix.memory }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        memory: [memory_32, memory_64]
+    steps:
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup | Coverage and Miri components
+        run: |
+          rustup component add --toolchain stable llvm-tools-preview
+          rustup component add --toolchain nightly miri rust-src
+
+      - name: Check | Translation coverage
+        run: >-
+          cargo +stable llvm-cov
+          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --no-default-features --features ${{ matrix.memory }}
+          --ignore-filename-regex '(tests\.rs|tests/translation/src/lib\.rs)$'
+          --fail-under-lines 100 --fail-under-functions 100
+
+      - name: Check | Translation Miri
+        run: >-
+          cargo +nightly miri test
+          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --no-default-features --features ${{ matrix.memory }}
+
+      - name: Check | Borrowing compile-fail doctests
+        run: >-
+          cargo +stable test --doc
+          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --no-default-features --features ${{ matrix.memory }}
+
+      - name: Check | 64-bit guest on 32-bit host (Miri)
+        if: matrix.memory == 'memory_64'
+        run: >-
+          cargo +nightly miri test
+          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --no-default-features --features memory_64
+          --target i686-unknown-linux-gnu
+
+      - name: Check | Little-endian ABI on big-endian host (Miri)
+        if: matrix.memory == 'memory_32'
+        run: >-
+          cargo +nightly miri test
+          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --no-default-features --features memory_32
+          --target powerpc-unknown-linux-gnu
+
   format:
     name: Format checks
     runs-on: ubuntu-latest
