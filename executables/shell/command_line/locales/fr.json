@@ -25,6 +25,7 @@
   "Failed to resolve domain: {}": "Échec de la résolution du domaine: {}",
   "Failed to set current directory: {}": "Échec de la définition du répertoire courant: {}",
   "Failed to set environment variable: {}": "Échec de la définition de la variable d'environnement: {}",
+  "Failed to set metadata: {}": "Échec de la définition des métadonnées : {}",
   "Failed to set task user: {}": "Échec de la définition de l'utilisateur de la tâche: {}",
   "Failed to tokenize command line": "Échec de la tokenisation de la ligne de commande",
   "Format error": "Erreur de formatage",
