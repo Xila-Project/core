@@ -196,6 +196,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
         virtual_file_system,
         task,
         &[
+            (&"/binaries/wasm", wasm::WasmExecutable),
             (
                 &"/binaries/graphical_shell",
                 graphical_shell::ShellExecutable

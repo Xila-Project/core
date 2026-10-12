@@ -1,8 +1,68 @@
-# Browser WASM example
+# Browser example
 
-Run `cargo make generate-fonts` from the repository root, then `trunk serve`
-from this directory. Use localhost or HTTPS in a browser supporting OPFS,
+From the repository root, generate the LVGL fonts and build the example:
+
+```sh
+cargo make generate-fonts
+cargo +stable build -p wasm_example --target wasm32-unknown-unknown
+```
+
+To serve it in a browser, install [Trunk](https://trunkrs.dev/) and run:
+
+```sh
+cd examples/wasm
+trunk serve
+```
+
+Use localhost or HTTPS in a browser supporting OPFS,
 `FileSystemFileHandle.createWritable`, and Web Locks.
+
+## Running guest WebAssembly applications
+
+The example mounts the Wasmi-backed runtime at `/binaries/wasm`, with the same
+graphics bindings as the native example. From Xila's terminal, launch a guest
+that is already present in Xila's virtual filesystem:
+
+```text
+/binaries/wasm /path/to/guest.wasm
+```
+
+WASI Preview 1 command guests should export `_start: () -> ()`. Use
+`/binaries/wasm --install /path/to/guest.wasm` to call `__install: () -> ()`
+instead. Graphical guests must use compatible Xila graphics bindings; see the
+[runtime documentation](../../executables/wasm/README.md) for supported APIs and
+limits.
+
+## Browser limitations
+
+- The example persists its filesystem in OPFS; see the storage and durability
+  limits below. Guest files must be present before launching; there is no upload
+  mechanism.
+- Guests run cooperatively in Wasmi on the browser's executor, not as separate
+  native browser WebAssembly instances. Fuel exhaustion and supported WASI
+  suspension calls yield to the executor.
+- There is no Xila network manager in this example. The browser HTTP device
+  uses Fetch and remains subject to browser security restrictions, including
+  CORS; it does not provide raw sockets.
+- Runtime limitations still apply, including the supported graphics subset,
+  clock-only WASI polling, unsupported suspension in WebAssembly start sections,
+  and the currently unused stack-size option.
+
+## Browser verification
+
+Verified in headless Chromium 154 with a Trunk development build using Rust
+stable. Temporary startup probes loaded guest files into the example's VFS and
+launched them through the mounted `/binaries/wasm` executable:
+
+- A minimal guest executed a host call, exhausted and replenished its fuel,
+  resumed after WASI `sched_yield`, and handled success and nonzero `proc_exit`.
+- The real `calculator` guest, built for `wasm32-wasip1`, evaluated `1 + 2 = 3`
+  through LVGL button events, used WASI clock polling, and exited successfully
+  with its window removed after a close request.
+
+The probes and guest binaries are not included in normal example startup. This
+is focused browser validation, not a claim of full WASI/graphics compatibility
+or support across all browsers.
 
 ## Persistent storage
 
