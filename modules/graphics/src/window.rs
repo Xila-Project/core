@@ -176,6 +176,12 @@ impl Window {
         self.event_queue.pop_front()
     }
 
+    /// Forget queued targets before their LVGL storage can be reused. This only
+    /// compares addresses; it never dereferences the potentially deleted target.
+    pub fn discard_events_for_target(&mut self, target: *mut lvgl::lv_obj_t) {
+        self.event_queue.retain(|event| event.target != target);
+    }
+
     pub fn as_object(&self) -> &lvgl::lv_obj_t {
         &self.object
     }

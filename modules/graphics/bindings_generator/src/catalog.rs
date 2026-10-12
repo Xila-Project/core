@@ -23,6 +23,51 @@ pub struct Call {
 }
 
 impl Call {
+    /// Ensure a handwritten adapter still agrees with the discovered C ABI.
+    /// Context-only helper arguments are not part of the guest contract.
+    pub fn validate_signature(
+        &self,
+        arguments: &[&str],
+        output: Option<&str>,
+    ) -> Result<(), GeneratorError> {
+        fn normalize(text: &str) -> String {
+            text.chars().filter(|c| !c.is_whitespace()).collect()
+        }
+        let actual: Vec<_> = self
+            .signature
+            .inputs
+            .iter()
+            .filter_map(|arg| {
+                let FnArg::Typed(arg) = arg else { return None };
+                let Pat::Ident(name) = &*arg.pat else {
+                    return None;
+                };
+                if name.ident.to_string().starts_with("__") {
+                    return None;
+                }
+                Some(normalize(&arg.ty.to_token_stream().to_string()))
+            })
+            .collect();
+        let result = match &self.signature.output {
+            ReturnType::Default => None,
+            ReturnType::Type(_, ty) => Some(normalize(&ty.to_token_stream().to_string())),
+        };
+        if self.signature.variadic.is_some()
+            || actual
+                != arguments
+                    .iter()
+                    .map(|arg| normalize(arg))
+                    .collect::<Vec<_>>()
+            || result != output.map(normalize)
+        {
+            return Err(GeneratorError(format!(
+                "adapter signature changed for {}",
+                self.name
+            )));
+        }
+        Ok(())
+    }
+
     /// Conservative policy: pointer lifetimes cannot be inferred from a C signature.
     /// Strings, arrays, native structures and unions need explicit adapters.
     pub fn generic_safe(&self) -> bool {

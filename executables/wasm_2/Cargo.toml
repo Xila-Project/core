@@ -2,6 +2,7 @@
 name = "wasm_2"
 version = "0.1.0"
 edition = "2024"
+build = "build/main.rs"
 
 [dependencies]
 wasmi = { version = "1.1.0", default-features = false, features = [
@@ -18,6 +19,12 @@ host = ["dep:wasmi", "dep:xila", "dep:getargs-derive", "dep:getargs"]
 default = ["host", "memory_32"]
 memory_32 = []
 memory_64 = []
+graphics = ["xila?/graphics", "dep:graphics_bindgen", "dep:lvgl_rust_sys", "dep:quote"]
+
+[build-dependencies]
+graphics_bindgen = { path = "../../modules/graphics/bindings_generator", optional = true }
+lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false, optional = true }
+quote = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dev-dependencies]
 drivers_native = { workspace = true }
@@ -28,6 +35,7 @@ abi_definitions = { workspace = true }
 command_line_shell = { workspace = true }
 executable = { workspace = true, features = ["building"] }
 testing = { workspace = true }
+wat = "1"
 
 [[test]]
 name = "integration_test"

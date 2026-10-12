@@ -107,6 +107,8 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
         &engine,
         GlobalStore {
             context,
+            #[cfg(feature = "graphics")]
+            graphics: super::graphics::GraphicsState::new(context.graphics_manager),
             wasi: WasiContext {
                 files: alloc::collections::BTreeMap::new(),
                 next_fd: 3,
@@ -168,6 +170,8 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
     let mut linker = Linker::<GlobalStore>::new(&engine);
 
     wasi::register::add_wasi_to_linker(&mut linker)?;
+    #[cfg(feature = "graphics")]
+    super::graphics::wasmi::add_to_linker(&mut linker)?;
 
     linker.func_wrap(
         "host",

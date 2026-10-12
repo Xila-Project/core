@@ -155,3 +155,29 @@ fn actual_lvgl_catalog_matches_legacy_numbering() {
         );
     }
 }
+
+#[test]
+fn adapters_reject_changed_pointer_or_result_encodings() {
+    let catalog = CallCatalog::parse(
+        "unsafe extern \"C\" { fn lv_obj_create(parent: *mut lv_obj_t) -> *mut lv_obj_t; }",
+    )
+    .unwrap();
+    let call = catalog
+        .calls()
+        .iter()
+        .find(|call| call.name == "object_create")
+        .unwrap();
+    assert!(
+        call.validate_signature(&["*mut lv_obj_t"], Some("*mut lv_obj_t"))
+            .is_ok()
+    );
+    assert!(
+        call.validate_signature(&["*const lv_obj_t"], Some("*mut lv_obj_t"))
+            .is_err()
+    );
+    assert!(
+        call.validate_signature(&["*mut lv_obj_t"], Some("u16"))
+            .is_err()
+    );
+    assert!(call.validate_signature(&[], None).is_err());
+}
