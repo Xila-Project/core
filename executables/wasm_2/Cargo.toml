@@ -19,7 +19,12 @@ host = ["dep:wasmi", "dep:xila", "dep:getargs-derive", "dep:getargs"]
 default = ["host", "memory_32"]
 memory_32 = []
 memory_64 = []
-graphics = ["xila?/graphics", "dep:graphics_bindgen", "dep:lvgl_rust_sys", "dep:quote"]
+graphics = [
+  "xila?/graphics",
+  "dep:graphics_bindgen",
+  "dep:lvgl_rust_sys",
+  "dep:quote",
+]
 
 [build-dependencies]
 graphics_bindgen = { path = "../../modules/graphics/bindings_generator", optional = true }

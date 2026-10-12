@@ -232,7 +232,14 @@ fn generate_enumeration(
     path: impl AsRef<Path>,
     lvgl_functions: &LvglContext,
 ) -> Result<(), String> {
-    let token_stream = enumeration::generate_code(lvgl_functions.get_signatures().to_vec());
+    let enumeration = enumeration::generate_code(lvgl_functions.get_signatures().to_vec());
+    // Xila custom events are not Rust enum discriminants. Keep the code numeric
+    // and derive it from the same LVGL build used by the native graphics module.
+    let close_requested = lvgl_rust_sys::lv_event_code_t_LV_EVENT_LAST + 3;
+    let token_stream = quote! {
+        #enumeration
+        pub const EVENT_CLOSE_REQUESTED: u32 = #close_requested;
+    };
 
     write_token_stream_to_file(path, token_stream)?;
 

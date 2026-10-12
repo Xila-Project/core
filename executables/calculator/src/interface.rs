@@ -2,10 +2,11 @@ use crate::{evaluator::Evaluator, parser::Parser};
 use embedded_i18n::translate;
 use std::{ptr::null_mut, thread::sleep};
 use wasm::{
-    self, Color, EventCode, FlexFlow, Object, ObjectFlag, buttonmatrix_create,
-    buttonmatrix_get_selected_button, buttonmatrix_set_map, label_create, label_set_text,
-    object_add_flag, object_create, object_set_flex_flow, object_set_flex_grow, object_set_height,
-    object_set_width, percentage, size_content, window_create, window_pop_event, window_set_icon,
+    self, Color, EVENT_CLOSE_REQUESTED, EventCode, FlexFlow, Object, ObjectFlag,
+    buttonmatrix_create, buttonmatrix_get_selected_button, buttonmatrix_set_map, label_create,
+    label_set_text, object_add_flag, object_create, object_set_flex_flow, object_set_flex_grow,
+    object_set_height, object_set_width, percentage, size_content, window_create, window_pop_event,
+    window_set_icon,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -417,32 +418,34 @@ impl Interface {
         self.current_expression.push(op);
     }
 
-    pub unsafe fn run(&mut self) {
+    pub unsafe fn run(&mut self) -> wasm::Result<()> {
         // Create GUI components
         // Initial display update
-        let _ = self.update_display();
+        self.update_display()?;
 
         // Main event loop
         loop {
-            let mut code = EventCode::All;
+            let mut code = EventCode::All as u32;
             let mut target: *mut Object = null_mut();
 
             unsafe {
-                let _ = window_pop_event(
+                window_pop_event(
                     self.window,
                     &mut code as *mut _ as *mut _,
                     &mut target as *mut _ as *mut _,
-                );
+                )?;
             }
 
-            if code == EventCode::Clicked {
+            if code == EVENT_CLOSE_REQUESTED {
+                return Ok(());
+            } else if code == EventCode::Clicked as u32 {
                 // Check if the event came from our button matrix
                 if target == self.button_matrix {
                     unsafe {
-                        let _ = self.handle_button_matrix_event();
+                        self.handle_button_matrix_event()?;
                     }
                 }
-            } else if code == EventCode::All {
+            } else if code == EventCode::All as u32 {
                 sleep(std::time::Duration::from_millis(10));
             }
         }

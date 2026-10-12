@@ -140,3 +140,24 @@ sleep/fuel, close/cleanup, and Calculator acceptance. Test interfaces use the
 same types as the consuming tasks. Review-focus cases are assigned above.
 No full LVGL migration, general polling, native struct pointer ABI, or unrelated
 application work is included.
+
+## Execution progress
+
+- [x] Task 1: shared ABI generator (`ce6c554`); guest outputs preserved, with
+  an independent frozen full-catalog compatibility check added during acceptance.
+- [x] Task 2: portable graphics marshalling (`63cd17f`); 100% line/function
+  coverage and Miri on both widths and big-endian host simulation.
+- [x] Task 3: graphics core and thin Wasmi adapter (`69394c0`); headless native
+  tests cover ownership, event targets, deletion, capability isolation, and maps.
+- [x] Task 4: cooperative polling/execution (`0e8e3a9`); scheduler-progress,
+  trap/exit, clock-ID, and portable record tests pass.
+- [x] Task 5: real Calculator acceptance; automated `1 + 2 = 3`, close/cleanup,
+  and native graphical-session startup/console-close smoke test pass. Arithmetic
+  was automated headlessly, not manually clicked in the native display.
+- [ ] Final independent review and any important fixes.
+
+Implementation choices: retain the calling instance's Wasmi Memory handle in
+pending clock calls (never a guest borrow); do not address the unrelated console
+EOF read-count bug in this graphics port. The closed-stdin integration variant
+failed; the same fixture with a line of input passes. Unsupported polling kinds
+and graphics calls remain explicit errors, as designed.

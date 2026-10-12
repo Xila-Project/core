@@ -181,3 +181,29 @@ fn adapters_reject_changed_pointer_or_result_encodings() {
     );
     assert!(call.validate_signature(&[], None).is_err());
 }
+
+#[test]
+fn full_catalog_matches_frozen_pre_refactor_guest_abi() {
+    let catalog = CallCatalog::parse(lvgl_rust_sys::_bindgen_raw_src()).unwrap();
+    let enumeration: syn::ItemEnum = syn::parse2(graphics_bindgen::enumeration::generate_code(
+        catalog.signatures(),
+    ))
+    .unwrap();
+    // FNV-1a over "Variant:ID\n", captured from the original guest enum before
+    // this refactor. This independent oracle catches filter/naming/order changes
+    // even when both the host and guest generators change together.
+    let mut digest = 0xcbf29ce484222325_u64;
+    for variant in &enumeration.variants {
+        let (_, syn::Expr::Lit(literal)) = variant.discriminant.as_ref().unwrap() else {
+            panic!("nonliteral ID")
+        };
+        let syn::Lit::Int(id) = &literal.lit else {
+            panic!("noninteger ID")
+        };
+        for byte in format!("{}:{}\n", variant.ident, id.base10_parse::<u16>().unwrap()).bytes() {
+            digest = (digest ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+        }
+    }
+    assert_eq!(enumeration.variants.len(), 725);
+    assert_eq!(digest, 0x1213a3ccf6f93a4a);
+}

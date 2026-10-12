@@ -7,7 +7,7 @@ async fn main() {
     extern crate alloc;
 
     use drivers_std::loader::load_to_virtual_file_system;
-    use wasm::WasmExecutable;
+    use wasm_2::WasmExecutable;
     use xila::executable;
     use xila::executable::{build_crate, mount_executables};
 
@@ -37,7 +37,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let result = executable::execute(
+    let handle = executable::execute(
         context,
         "/binaries/wasm",
         vec!["/binaries/calculator.wasm".to_string()],
@@ -45,15 +45,32 @@ async fn main() {
         None,
     )
     .await
-    .unwrap()
-    .join()
-    .await;
+    .unwrap();
 
-    //    let result = executable::execute("/binaries/command_line_shell", vec![], standard, None)
-    //        .await
-    //        .unwrap()
-    //        .join()
-    //        .await;
+    // This standalone display has no graphical shell's close button. Allow a
+    // normal close request from the console, without blocking the async executor.
+    let close = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let request = close.clone();
+    println!("Calculator is running with Wasmi. Press Enter here to close it.");
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).unwrap();
+        request.store(true, std::sync::atomic::Ordering::Release);
+    });
+    let manager = context.graphics_manager.unwrap();
+    loop {
+        if close.load(std::sync::atomic::Ordering::Acquire)
+            && manager.get_window_count().await.unwrap() > 0
+        {
+            let identifier = manager.get_window_identifier(0).await.unwrap();
+            manager.send_window_close_request(identifier).await.unwrap();
+            break;
+        }
+        xila::task::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    let result = handle.join().await;
 
     assert!(result == 0);
+    assert_eq!(manager.get_window_count().await.unwrap(), 0);
 }
