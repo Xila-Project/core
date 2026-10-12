@@ -3,14 +3,13 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use crate::utilities::context::LvglContext;
+use crate::utilities::enumeration;
 use crate::utilities::file::write_token_stream_to_file;
 use crate::utilities::format::{format_rust, snake_to_upper_camel_case};
 use crate::utilities::function::{get_function_identifier, is_public_input};
-use crate::utilities::{self, enumeration};
 use cbindgen::{EnumConfig, ExportConfig, FunctionConfig, RenameRule};
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
-use syn::visit::Visit;
 use syn::{FnArg, Ident, ReturnType, Signature, Type};
 
 fn convert_type(mut ty: Type) -> Type {
@@ -112,7 +111,7 @@ fn generate_xila_graphics_call(signature: &Signature) -> TokenStream {
         .map(get_passed_input)
         .collect::<Vec<_>>();
 
-    let remaining_arguments = 7 - passed_arguments.len();
+    let remaining_arguments = graphics_bindgen::MAX_ARGUMENTS - passed_arguments.len();
     for _ in 0..remaining_arguments {
         passed_arguments.push(quote! { 0 });
     }
@@ -303,13 +302,7 @@ fn generate_c_functions_module_body(path: impl AsRef<Path>) -> Result<(), String
 
 pub fn generate(output_path: &Path) {
     let input = lvgl_rust_sys::_bindgen_raw_src();
-    let parsed_input = syn::parse_file(input).expect("Error parsing input file");
-
-    let mut context = LvglContext::default();
-    context.set_function_filtering(Some(LvglContext::filter_function));
-    context.visit_file(&parsed_input);
-    context.set_function_filtering(None);
-    context.visit_file(&syn::parse2(utilities::additional::get()).unwrap());
+    let context = LvglContext::parse(input).expect("Error parsing LVGL ABI");
 
     let crate_directory = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 

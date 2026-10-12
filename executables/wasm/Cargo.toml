@@ -28,6 +28,7 @@ default_host = ["host", "graphics", "wasm32"]
 default_guest = ["guest", "graphics", "c_bindings"]
 
 [build-dependencies]
+graphics_bindgen = { path = "../../modules/graphics/bindings_generator" }
 wasm_abi_bindings = { path = "bindings", features = [
   "wasm32",
 ] } # To force the build script to run when the bindings are updated

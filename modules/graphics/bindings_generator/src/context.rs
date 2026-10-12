@@ -1,20 +1,23 @@
 use quote::ToTokens;
-use syn::{ForeignItemFn, ItemFn, ItemStruct, ItemType, ItemUnion, Signature, visit::Visit};
-
-use super::type_tree::TypeTree;
+use syn::{ForeignItemFn, ItemFn, Signature, visit::Visit};
 
 #[derive(Default)]
 pub struct LvglContext {
     signatures: Vec<Signature>,
     definitions: Vec<ItemFn>,
-    type_tree: TypeTree,
-    types: Vec<ItemType>,
-    structures: Vec<ItemStruct>,
-    unions: Vec<ItemUnion>,
     function_filtering: Option<fn(&Signature) -> bool>,
 }
 
 impl LvglContext {
+    pub fn parse(source: &str) -> syn::Result<Self> {
+        let mut context = Self::default();
+        context.set_function_filtering(Some(Self::filter_function));
+        context.visit_file(&syn::parse_file(source)?);
+        context.set_function_filtering(None);
+        context.visit_file(&syn::parse2(crate::additional::get())?);
+        Ok(context)
+    }
+
     pub fn set_function_filtering(&mut self, function_filtering: Option<fn(&Signature) -> bool>) {
         self.function_filtering = function_filtering;
     }
@@ -161,23 +164,6 @@ impl Visit<'_> for LvglContext {
         }
 
         self.signatures.push(foreign_item_function.sig.clone());
-    }
-
-    fn visit_item_type(&mut self, i: &ItemType) {
-        self.type_tree.insert(
-            i.ident.to_token_stream().to_string(),
-            i.ty.to_token_stream().to_string(),
-        );
-
-        self.types.push(i.clone());
-    }
-
-    fn visit_item_struct(&mut self, i: &'_ ItemStruct) {
-        self.structures.push(i.clone());
-    }
-
-    fn visit_item_union(&mut self, i: &'_ ItemUnion) {
-        self.unions.push(i.clone());
     }
 
     fn visit_item_fn(&mut self, i: &'_ syn::ItemFn) {

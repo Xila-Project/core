@@ -2,7 +2,7 @@ use proc_macro2::{Literal, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{Ident, Signature};
 
-use crate::utilities::{format::snake_ident_to_upper_camel, function::get_function_identifier};
+use crate::{function::get_function_identifier, naming::snake_ident_to_upper_camel};
 
 pub fn get_variant_identifier(identifier: &Ident) -> Ident {
     let identifier = get_function_identifier("", identifier);
@@ -10,16 +10,14 @@ pub fn get_variant_identifier(identifier: &Ident) -> Ident {
 }
 
 pub fn generate_code(signatures: Vec<Signature>) -> TokenStream {
-    let mut signatures = signatures.clone();
+    let catalog = crate::CallCatalog::from_signatures(signatures).expect("invalid graphics ABI");
 
-    signatures.sort_by_key(|x| x.ident.to_string().to_lowercase());
-
-    let variants = &signatures
-        .into_iter()
-        .enumerate()
-        .map(|(i, signature)| {
-            let identifier = get_variant_identifier(&signature.ident);
-            let value = Literal::usize_unsuffixed(i);
+    let variants = &catalog
+        .calls()
+        .iter()
+        .map(|call| {
+            let identifier = get_variant_identifier(&call.signature.ident);
+            let value = Literal::usize_unsuffixed(call.id as usize);
 
             quote! { #identifier = #value }
         })

@@ -1,12 +1,11 @@
 use crate::utilities::{
-    self, context::LvglContext, enumeration, file::write_token_stream_to_file,
-    function::split_inputs,
+    context::LvglContext, enumeration, file::write_token_stream_to_file, function::split_inputs,
 };
 use std::path::Path;
 
 use proc_macro2::{Literal, TokenStream};
 use quote::{ToTokens, format_ident, quote};
-use syn::{FnArg, ItemFn, ReturnType, Signature, visit::Visit};
+use syn::{FnArg, ItemFn, ReturnType, Signature};
 
 fn generate_conversion_for_output(r#return: &ReturnType) -> Result<Option<TokenStream>, String> {
     match r#return {
@@ -191,13 +190,7 @@ pub fn generate_inner(output_path: &Path, context: &LvglContext) -> Result<(), S
 
 pub fn generate(out_path: &Path) -> Result<(), ()> {
     let input = lvgl_rust_sys::_bindgen_raw_src();
-    let parsed_input = syn::parse_file(input).expect("Error parsing input file");
-
-    let mut context = LvglContext::default();
-    context.set_function_filtering(Some(LvglContext::filter_function));
-    context.visit_file(&parsed_input);
-    context.set_function_filtering(None);
-    context.visit_file(&syn::parse2(utilities::additional::get()).unwrap());
+    let context = LvglContext::parse(input).expect("Error parsing LVGL ABI");
 
     generate_inner(out_path, &context).expect("Error generating native bindings");
 

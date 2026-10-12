@@ -1,6 +1,6 @@
 # Calculator graphics on Wasmi
 
-Status: proposed; awaiting user approval.
+Status: approved by the user; implementation planning in progress.
 
 ## Intent
 
@@ -9,6 +9,8 @@ using the context available through Wasmi rather than resolving graphics through
 global state. The user chose Calculator as the first application to test.
 The user also requested improving the LVGL binding generator's readability and
 simplicity alongside the port.
+The user prefers bindings decoupled from the VM for testing, provided this does
+not impose substantial resource costs.
 
 Success for this milestone means the calculator opens, renders its display and
 button matrix, accepts button clicks, evaluates an expression, and updates its
@@ -46,11 +48,33 @@ first error and must not be copied as-is).
 
 ## Context and capability boundary
 
+Separate the VM adapter from the graphics binding implementation. The Wasmi
+adapter alone handles `Caller`, `Store`, `Linker`, export lookup, and suspension.
+It extracts the context's graphics capability, per-execution graphics state,
+borrowed linear memory, and integer call arguments, then invokes a dispatcher.
+The dispatcher, object registry, and marshalling adapters must not use Wasmi
+APIs or resolve capabilities from globals. Their inputs are explicit Rust
+references, borrowed bytes, and fixed-width ABI values, allowing tests without
+constructing a VM. Wasmi-specific registration is generated/emitted separately.
+
+Builder's proposed choice: begin with separate modules rather than adding a
+runtime framework or requiring all runtimes to migrate. Extract a small shared
+`no_std` core crate only if that makes source reuse or isolated testing simpler.
+Reuse the existing checked-memory implementation where practical; avoid copying
+its logic or reintroducing unsafe conversions to achieve separation. A separate
+implementation module is acceptable for this milestone if its public boundary
+is VM-independent and its sources can be tested independently.
+
+The separation itself must introduce no heap allocations, guest-buffer copies,
+dynamic dispatch, or extra per-object storage. Retained button maps and existing
+object-lifetime bookkeeping are inherent graphics costs, not an abstraction
+cost. Do not add a generic VM trait hierarchy or bring WAMR into Wasmi's path.
+
 Graphics registration is feature-gated. The feature enables the corresponding
 Xila/executable graphics capability without making graphics mandatory for
 non-graphical Wasmi use.
 
-Resolve the manager from `Caller<GlobalStore>` -> `GlobalStore.context` ->
+In the thin Wasmi adapter, resolve the manager from `Caller<GlobalStore>` -> `GlobalStore.context` ->
 `ExecutableContext.graphics_manager`. An absent manager returns a controlled
 error. Never call `graphics::ffi_manager()` from the new bindings or cleanup.
 The context also supplies task/time dependencies needed for yielding and sleep.
@@ -79,6 +103,9 @@ concerns with small, named types/functions:
 3. Describe each call's public guest arguments, host-only context arguments,
    result encoding, and pointer ownership policy.
 4. Emit runtime-specific host dispatch and guest wrappers from that description.
+
+Generate VM-independent graphics dispatch separately from import registration;
+the core generator model must not embed WAMR/Wasmi environment types.
 
 Builder chooses the smallest shared build-only location that fits the existing
 crate structure. Avoid depending on WAMR in Wasmi's generator/runtime, and avoid
@@ -155,6 +182,9 @@ in the calculator; avoid unrelated evaluator, parser, or installation changes.
 
 ## Validation
 
+- Test the core graphics dispatcher and marshalling directly with explicit
+  memory/state/capability inputs, without building a Wasmi store. Keep separate
+  adapter tests for registration, context extraction, and real guest calls.
 - Tests for invalid IDs/counts, missing graphics capability, forged/stale/wrong
   widget handles, parent deletion, and VM isolation.
 - Guest-memory tests for unaligned outputs, missing/unterminated strings,
