@@ -1,7 +1,7 @@
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-#[cfg(all(feature = "host", feature = "graphics"))]
+#[cfg(feature = "host")]
 #[xila::task::test(task_path = xila::task)]
-#[ignore = "This test is meant to be run interactively"]
+#[ignore = "The guest's stdin test requires interactive input"]
 async fn main() {
     drivers_std::memory::instantiate_global_allocator!();
 
@@ -12,10 +12,13 @@ async fn main() {
     use drivers_std::loader::load_to_virtual_file_system;
     use wasm::WasmExecutable;
     use xila::executable::{build_crate, mount_executables};
+    use xila::file_system::Path;
+    use xila::log;
+    use xila::virtual_file_system::File;
 
-    let standard = testing::initialize(true, false).await;
+    let standard = testing::initialize(false, false).await;
     let context = standard.context;
-    let virtual_file_system = &context.virtual_file_system;
+    let virtual_file_system = context.virtual_file_system;
     let task = context.task_manager.get_current_task_identifier().await;
 
     let binary_path = build_crate(&"wasm_wasm_test").unwrap();
@@ -34,11 +37,13 @@ async fn main() {
         task,
         &[
             ("/binaries/command_line_shell", ShellExecutable),
-            ("/binaries/wasm", WasmExecutable)
+            ("/binaries/wasm", WasmExecutable),
         ]
     )
     .await
     .unwrap();
+
+    log::information!("Executing Wasmi test...");
 
     let result = executable::execute(
         context,
@@ -52,11 +57,16 @@ async fn main() {
     .join()
     .await;
 
-    //    let result = executable::execute("/binaries/command_line_shell", vec![], standard, None)
-    //        .await
-    //        .unwrap()
-    //        .join()
-    //        .await;
-
     assert!(result == 0);
+
+    let mut contents = Vec::new();
+    File::read_from_path(
+        virtual_file_system,
+        task,
+        &Path::new("/test.txt"),
+        &mut contents,
+    )
+    .await
+    .unwrap();
+    assert_eq!(contents, b"Hello World from WASM!");
 }

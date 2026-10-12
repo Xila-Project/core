@@ -66,6 +66,7 @@ args = [
   "wasm32-unknown-unknown",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
 ]
@@ -88,6 +89,7 @@ args = [
   "doc",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",
@@ -124,6 +126,7 @@ args = [
   "clippy",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",
@@ -162,7 +165,7 @@ args = ["build", "${@}"]
 install_crate = "cargo-llvm-cov"
 toolchain = "stable"
 command = "cargo"
-args = ["llvm-cov", "--workspace", "${@}"]
+args = ["llvm-cov", "--workspace", "--coverage-host-only", "${@}"]
 
 [tasks.before-commit]
 dependencies = ["format", "check", "doc", "clippy"]

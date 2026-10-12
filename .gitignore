@@ -9,3 +9,6 @@ Cargo.lock
 *.generated.c
 
 node_modules
+
+# Local agent planning/design documents; never commit them.
+/docs/superpowers/

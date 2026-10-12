@@ -1,9 +1,5 @@
 #![allow(clippy::upper_case_acronyms)]
 
-pub mod additional;
-pub mod context;
-pub mod enumeration;
+pub use graphics_bindgen::{context, enumeration, function};
 pub mod file;
 pub mod format;
-pub mod function;
-pub mod type_tree;

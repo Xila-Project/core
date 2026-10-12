@@ -167,7 +167,10 @@ impl FileManager {
                 return Err(Error::FailedToCreateObject);
             }
             let up_label = lvgl::lv_label_create(self.up_button);
-            lvgl::lv_label_set_text(up_label, lvgl::LV_SYMBOL_UP as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                up_label,
+                lvgl::LV_SYMBOL_UP as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(up_label);
 
             // Remove event handler - events bubble up to window
@@ -179,7 +182,10 @@ impl FileManager {
             }
 
             let home_label = lvgl::lv_label_create(self.home_button);
-            lvgl::lv_label_set_text(home_label, lvgl::LV_SYMBOL_HOME as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                home_label,
+                lvgl::LV_SYMBOL_HOME as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(home_label);
 
             // Remove event handler - events bubble up to window
@@ -194,7 +200,7 @@ impl FileManager {
 
             lvgl::lv_label_set_text(
                 refresh_label,
-                lvgl::LV_SYMBOL_REFRESH as *const _ as *const i8,
+                lvgl::LV_SYMBOL_REFRESH as *const _ as *const core::ffi::c_char,
             );
             lvgl::lv_obj_center(refresh_label);
 
@@ -220,7 +226,10 @@ impl FileManager {
             }
 
             let go_label = lvgl::lv_label_create(self.go_button);
-            lvgl::lv_label_set_text(go_label, lvgl::LV_SYMBOL_RIGHT as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                go_label,
+                lvgl::LV_SYMBOL_RIGHT as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(go_label);
 
             self.update_path_label();
@@ -399,7 +408,8 @@ impl FileManager {
         unsafe {
             if !self.path_text_area.is_null() {
                 // Get the text from the text area
-                let text_ptr: *const i8 = lvgl::lv_textarea_get_text(self.path_text_area);
+                let text_ptr: *const core::ffi::c_char =
+                    lvgl::lv_textarea_get_text(self.path_text_area);
                 if !text_ptr.is_null() {
                     // Convert C string to Rust string
                     let text_cstr = core::ffi::CStr::from_ptr(text_ptr);

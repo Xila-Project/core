@@ -21,12 +21,6 @@ rustflags = [
 DEP_LV_CONFIG_PATH = { value = "modules/graphics/include", relative = true }
 LVGL_FONTS_DIR = { value = "modules/graphics/fonts_generator/generated_fonts", relative = true }
 
-CFLAGS = "-Wno-error=int-conversion" # Fix for wasm-micro-runtime issue #4377
-
-WAMR_BUILD_PLATFORM = "XILA"
-
-WAMR_SHARED_PLATFORM_CONFIG = { value = "executables/wasm/bindings/wamr/shared_platform.cmake", relative = true }
-LLVM_LIB_CFG_PATH = "/usr/lib/llvm-19/cmake/"
 LITTLEFS_CONFIG = { value = "modules/little_fs/include/little_fs_config.h", relative = true }
 EMBEDDED_I18N_LOCALE = "en"
 EMBEDDED_I18N_FALLBACK = "en"
