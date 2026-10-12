@@ -182,6 +182,17 @@ impl Window {
         self.event_queue.retain(|event| event.target != target);
     }
 
+    /// Preserve event codes while preventing queued addresses from acquiring a
+    /// newly registered capability when native object storage is recycled.
+    /// Only compares addresses; it does not dereference event targets.
+    pub fn clear_event_targets_for(&mut self, target: *mut lvgl::lv_obj_t) {
+        for event in &mut self.event_queue {
+            if event.target == target {
+                event.target = ptr::null_mut();
+            }
+        }
+    }
+
     pub fn as_object(&self) -> &lvgl::lv_obj_t {
         &self.object
     }

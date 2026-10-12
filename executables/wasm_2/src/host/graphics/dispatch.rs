@@ -41,6 +41,7 @@ pub fn dispatch(
         }
     }
     let _lock = manager.synchronous_lock();
+    state.reap_deleted_maps();
     let [a, b, c, ..] = call.arguments;
     match function {
         Function::WindowCreate
@@ -74,6 +75,7 @@ pub fn dispatch(
         }
         Function::ObjectDelete => {
             unsafe { lvgl::lv_obj_delete(state.object(a, None)?) };
+            state.reap_deleted_maps();
         }
         Function::WindowSetIcon => {
             let pointer = state.object(a, Some(Kind::Window))?;

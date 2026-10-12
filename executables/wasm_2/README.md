@@ -55,10 +55,15 @@ tests, 100% line/function coverage commands, and Miri commands are documented in
   execution. Native deletion notifications invalidate handles and remove stale
   queued event targets. Teardown deletes owned windows and their children using
   the same context-provided manager and lock, including on traps.
+  Registration clears matching pre-existing queued targets to null before
+  issuing a new handle, so native address reuse cannot grant an old unknown
+  event a new capability. Event codes are preserved.
 - LVGL copies label strings synchronously. Button-map strings and the native
   pointer table are copied into stable VM-owned storage because LVGL retains
   them. Guest memory growth/mutation does not invalidate the map. A replacement
   switches LVGL to the new map before releasing the old map.
+  Deleted widgets' maps are reclaimed after native deletion returns (or on the
+  next dispatch for external deletions); only small handle tombstones persist.
 
 Enable the optional `graphics` feature for host bindings. Select the Xila
 rendering feature appropriate to the platform (e.g.

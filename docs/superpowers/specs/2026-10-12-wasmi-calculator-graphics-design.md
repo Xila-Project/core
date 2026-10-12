@@ -1,6 +1,6 @@
 # Calculator graphics on Wasmi
 
-Status: approved and implemented; final independent review in progress.
+Status: approved and implemented; independent review fixes verified.
 
 ## Intent
 

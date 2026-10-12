@@ -66,6 +66,17 @@ impl GraphicsState {
         }
     }
 
+    /// Caller holds the manager lock after any native deletion has returned.
+    /// DELETE callbacks only invalidate: LVGL can still read maps while tearing
+    /// down an object, so release retained buffers here, not in the callback.
+    pub(crate) fn reap_deleted_maps(&mut self) {
+        for entry in &mut self.entries {
+            if entry.notification.live.get().is_null() {
+                entry.map = None;
+            }
+        }
+    }
+
     fn entry(&self, handle: WasmUsize) -> Result<&Entry> {
         let index = usize::try_from(handle)
             .ok()
@@ -126,6 +137,16 @@ impl GraphicsState {
             live: Cell::new(pointer),
             root,
         });
+        // This is the capability's birth boundary. Queued events predate its
+        // registration and may refer to an unregistered object's recycled
+        // address. Preserve their codes, but never grant them this new handle.
+        let window = notification
+            .root
+            .as_ref()
+            .map_or(pointer, |root| root.live.get());
+        if let Some(mut window) = unsafe { Window::from_raw(window) } {
+            unsafe { window.as_mut().clear_event_targets_for(pointer) };
+        }
         let callback = Rc::into_raw(notification.clone());
         let descriptor = unsafe {
             lvgl::lv_obj_add_event_cb(

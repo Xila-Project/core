@@ -154,10 +154,52 @@ application work is included.
 - [x] Task 5: real Calculator acceptance; automated `1 + 2 = 3`, close/cleanup,
   and native graphical-session startup/console-close smoke test pass. Arithmetic
   was automated headlessly, not manually clicked in the native display.
-- [ ] Final independent review and any important fixes.
+- [x] Final independent review: two Important lifetime findings reproduced and
+  fixed (dead-map reclamation and unknown queued targets after native address
+  reuse). The interactive test's early-exit/console-close hang is a deferred Minor.
 
 Implementation choices: retain the calling instance's Wasmi Memory handle in
 pending clock calls (never a guest borrow); do not address the unrelated console
 EOF read-count bug in this graphics port. The closed-stdin integration variant
 failed; the same fixture with a line of input passes. Unsupported polling kinds
 and graphics calls remain explicit errors, as designed.
+
+### Final review evidence
+
+Independent review found no Critical issues, two Important issues and one Minor.
+The Important issues both reproduced before fixing: 16 deleted mapped widgets
+retained 131712 bytes; a queued unknown native click acquired a newly issued
+handle after actual native-address reuse. Regression tests now cover reclamation
+after explicit, parent and external deletion and the recycled-address event case.
+Fresh suites pass: 26 catalog/Wasmi tests for memory32 and 19 Wasmi tests for
+memory64, including real Calculator arithmetic and cleanup for memory32.
+Native graphical startup/console-close and no_std wasm32 graphics checks pass.
+Portable translation coverage remains 100% lines/functions; regions are reported
+separately. Miri passed on x86_64, i686 and big-endian PowerPC before the native
+registry fixes; those fixes do not change the portable source harness.
+
+The deferred Minor is the interactive display test's hang if the guest finishes
+before console-close handling; a follow-up should poll completion alongside close.
+
+### Rulings and residual risks
+
+- Preserve variadic catalog entries for numbering while excluding safe emission;
+  changing this decision risks ABI shifts.
+- Retain the calling instance's Wasmi Memory handle for pending polling, never a
+  guest borrow; an incorrect handle would cause an embedder instance mismatch.
+- Leave the unrelated console EOF read-count bug unchanged; closed stdin still
+  fails the existing integration fixture.
+- Use a capability-registration birth boundary instead of new generation data:
+  queued matching targets are cleared to null before a handle is issued; event
+  codes remain intact. An incomplete fence would still permit stale misrouting.
+- Unsupported graphics/FD polling, start-section suspension and inherited
+  startup-clock semantics remain documented milestone limitations.
+- Evaluator/parser/button behavior and installation remain outside this port;
+  existing limitations there are not resolved.
+- Arbitrary native reparenting, callback removal or fabricated DELETE events are
+  unsupported; such native misuse could break ownership/lifetime guarantees.
+- Legacy WAMR safety beyond generator compatibility was not reviewed; legacy
+  runtime defects can remain.
+- Manual graphical arithmetic and hardware correctness were not established;
+  platform-specific issues may remain. User-owned unrelated files were untouched
+  and are unvalidated by this work.

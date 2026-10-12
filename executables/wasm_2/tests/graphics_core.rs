@@ -389,6 +389,74 @@ async fn checked_graphics_core_owns_objects_maps_and_events() {
     );
     drop(state);
     assert_eq!(manager.get_window_count().await.unwrap(), 0);
+    // Unknown native targets have no registry DELETE callback. Reusing their
+    // address must not turn an already queued click into a newly issued handle.
+    let mut state = GraphicsState::new(Some(manager));
+    call(&mut state, &mut memory, Function::WindowCreate, &[], 1).unwrap();
+    let root = handle(&memory);
+    let root_pointer = manager.get_window_identifier(0).await.unwrap() as *mut lvgl::lv_obj_t;
+    let old_pointer = {
+        let _lock = manager.synchronous_lock();
+        unsafe {
+            let unknown = lvgl::lv_obj_create(root_pointer);
+            lvgl::lv_obj_add_flag(unknown, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_EVENT_BUBBLE);
+            lvgl::lv_obj_send_event(
+                unknown,
+                lvgl::lv_event_code_t_LV_EVENT_CLICKED,
+                core::ptr::null_mut(),
+            );
+            lvgl::lv_obj_delete(unknown);
+            unknown
+        }
+    };
+    let mut recycled = false;
+    for _ in 0..200 {
+        call(&mut state, &mut memory, Function::ObjectCreate, &[root], 1).unwrap();
+        let new_handle = handle(&memory);
+        let pointer = {
+            let _lock = manager.synchronous_lock();
+            unsafe { lvgl::lv_obj_get_child(root_pointer, 0) }
+        };
+        if pointer == old_pointer {
+            recycled = true;
+            let mut old_click = false;
+            for _ in 0..1024 {
+                call(
+                    &mut state,
+                    &mut memory,
+                    Function::WindowPopEvent,
+                    &[root, 101, 107],
+                    0,
+                )
+                .unwrap();
+                let code = memory.read(GuestPointer::<u32>::new(101)).unwrap();
+                if code == lvgl::lv_event_code_t_LV_EVENT_CLICKED {
+                    old_click = true;
+                    assert_eq!(
+                        memory.read(GuestPointer::<WasmUsize>::new(107)),
+                        Some(0),
+                        "old native click acquired new handle {new_handle}"
+                    );
+                }
+                if code == 0 {
+                    break;
+                }
+            }
+            assert!(old_click, "preserve unknown events with a null target");
+            break;
+        }
+        call(
+            &mut state,
+            &mut memory,
+            Function::ObjectDelete,
+            &[new_handle],
+            0,
+        )
+        .unwrap();
+    }
+    assert!(recycled, "test must actually exercise native address reuse");
+    drop(state);
+    assert_eq!(manager.get_window_count().await.unwrap(), 0);
     let mut state = GraphicsState::new(Some(manager));
     call(&mut state, &mut memory, Function::WindowCreate, &[], 1).unwrap();
     let root = handle(&memory);
