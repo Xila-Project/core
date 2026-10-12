@@ -81,7 +81,7 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
     let context = standard.context;
     let WasmArguments {
         path,
-        install: _,
+        install,
         stack_size: _,
         instruction_limit,
     } = arguments;
@@ -189,7 +189,12 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
     store.set_fuel(instruction_limit.get() as u64)?;
     match linker.instantiate_and_start(&mut store, &module) {
         Ok(instance) => {
-            let start = instance.get_typed_func::<(), ()>(&store, START_FUNCTION_NAME)?;
+            let entry = if install {
+                INSTALL_FUNCTION_NAME
+            } else {
+                START_FUNCTION_NAME
+            };
+            let start = instance.get_typed_func::<(), ()>(&store, entry)?;
             super::execution::run(&mut store, start, instruction_limit).await
         }
         Err(e) => {

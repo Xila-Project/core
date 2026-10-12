@@ -113,7 +113,9 @@ not an independent hardware monotonic-clock source.
 Fuel exhaustion and `sched_yield` yield to the executor. Clock polling uses
 resumable Wasmi host calls; suspension is VM-local. WebAssembly start-section
 suspension is not supported; WASI command guests should use exported `_start`.
-Installation and the command-line stack-size option remain unimplemented.
+`--install` selects the guest's `__install: () -> ()` export instead of `_start`.
+A missing or incorrectly typed install export fails without launching main.
+The command-line stack-size option remains unimplemented.
 
 The existing stdin fixture passes with a line of input. Running it with closed
 stdin (`/dev/null`) exposes an unrelated `drivers_std::StandardInDevice` bug:
