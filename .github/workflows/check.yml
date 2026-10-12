@@ -17,8 +17,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select checks
+    # The PR files API is capped at 3000 files; larger PRs run the full suite.
+    if: github.event_name == 'pull_request' && github.event.pull_request.changed_files <= 3000
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      translation: ${{ steps.filter.outputs.translation }}
+      format: ${{ steps.filter.outputs.format }}
+      host: ${{ steps.filter.outputs.host }}
+      guest: ${{ steps.filter.outputs.guest }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - 'modules/**'
+              - '**/Cargo.{toml,lock}'
+              - '**/.cargo/**'
+              - '**/Makefile.toml'
+              - '**/build.rs'
+              - '**/build/**'
+              - '**/rust-toolchain{,.toml}'
+              - '.github/workflows/**'
+              - '.github/actions/**'
+              - 'package{,-lock}.json'
+              - '**/.{gitignore,editorconfig,npmrc}'
+              - '**/{.,}taplo.toml'
+              - '**/{.,}rustfmt.toml'
+              - '**/.prettier*'
+              - '**/prettier.config.*'
+            translation:
+              - *shared
+              - 'executables/wasm/src/host/translation/**'
+              - 'executables/wasm/src/host/graphics/{error,marshal,marshal_tests}.rs'
+              - 'executables/wasm/src/host/wasi/{poll_memory,poll_tests,types}.rs'
+              - 'executables/wasm/tests/translation/**'
+            format:
+              - *shared
+              - '**/*.{rs,toml,json}'
+            host:
+              - *shared
+              - 'src/**'
+              - 'drivers/**'
+              - 'executables/**'
+              - 'examples/native/**'
+              - 'examples/wasm/**/*.rs'
+            guest:
+              - *shared
+              - 'src/**'
+              - 'drivers/{core,shared,wasm}/**'
+              - 'executables/!(wasm)/**'
+              - 'executables/wasm/src/guest/**'
+              - 'executables/wasm/src/lib.rs'
+              - 'examples/wasm/**'
+
+  # Job-level skips satisfy required checks. Main/manual runs and filter failures
+  # run the full suite; !cancelled() permits runs after a skipped dependency.
   wasm-translation:
     name: WASM translation (${{ matrix.memory }})
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -74,6 +137,8 @@ jobs:
 
   format:
     name: Format checks
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.format == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -99,7 +164,10 @@ jobs:
 
   host:
     name: Host checks
-    needs: [format]
+    needs: [changes, format]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -134,7 +202,10 @@ jobs:
 
   guest:
     name: Guest checks
-    needs: [format]
+    needs: [changes, format]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.guest == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
