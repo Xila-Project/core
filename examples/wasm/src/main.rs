@@ -1,6 +1,9 @@
 #![no_std]
 
 #[cfg(target_arch = "wasm32")]
+mod storage;
+
+#[cfg(target_arch = "wasm32")]
 static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 
 #[cfg(target_arch = "wasm32")]
@@ -19,15 +22,14 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use alloc::vec;
     use drivers_wasm::devices::graphics::GraphicsDevices;
     use xila::bootsplash::Bootsplash;
-    use xila::executable::ExecutableContext;
     use xila::executable::{self, Standard, mount_executables};
-    use xila::file_system::mbr::{Mbr, PartitionKind};
-    use xila::file_system::{self, XILA_DISK_SIGNATURE};
+    use xila::file_system::mbr::Mbr;
+    use xila::file_system::{MountOperations, Path};
     use xila::log;
     use xila::task;
     use xila::time::{self, Duration};
     use xila::virtual_file_system::mount_static;
-    use xila::{authentication, graphics, little_fs, users, virtual_file_system};
+    use xila::{authentication, graphics, users, virtual_file_system};
 
     console_error_panic_hook::set_once();
 
@@ -84,25 +86,20 @@ async fn main(task_manager: &'static xila::task::Manager) {
         .unwrap();
 
     // - Initialize the file system
-    // Create a memory device
-    let drive = file_system::MemoryDevice::<512>::new_static(16 * 1024 * 1024);
-    //let drive = create_device!(drivers_wasm::devices::DriveDevice::new(Path::new("xila_drive.img")));
+    // Open the origin's persistent disk before synchronous MBR/LittleFS setup.
+    let drive: &'static drivers_wasm::devices::DriveDevice = Box::leak(Box::new(
+        drivers_wasm::devices::DriveDevice::new(Path::new("xila_drive.img"), 16 * 1024 * 1024)
+            .await
+            .expect("Failed to open OPFS disk (use HTTPS/localhost and close other Xila tabs)"),
+    ));
 
-    // Create a partition type
-    let partition = Mbr::find_or_create_partition_with_signature(
-        drive,
-        XILA_DISK_SIGNATURE,
-        PartitionKind::Xila,
-    )
-    .unwrap();
-    let partition = Box::leak(Box::new(partition));
+    // Format only an empty disk; mount errors on saved images are fatal.
+    let file_system = storage::mount(drive)
+        .expect("Failed to mount OPFS disk; existing data was not reformatted");
 
     // Print MBR information
     let mbr = Mbr::read_from_device(drive).unwrap();
     log::information!("MBR Information: {mbr}");
-
-    // Mount the file system
-    let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
 
     // Initialize the virtual file system
     let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
@@ -243,32 +240,41 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    // - - Create the default user
-    let group_identifier = users::GroupIdentifier::new(1000);
-
+    // - - Load saved accounts, or create defaults only on a fresh disk.
     let authentication_context = authentication::Context {
         virtual_file_system,
         task_manager,
         users_manager,
         task,
     };
-    let _ = authentication::create_group(
-        &authentication_context,
-        "administrator",
-        Some(group_identifier),
-    )
-    .await
-    .unwrap();
+    storage::initialize_users(&authentication_context, drive.is_new())
+        .await
+        .expect("Failed to initialize users and groups");
 
-    let _ = authentication::create_user(
-        &authentication_context,
-        "administrator",
-        "",
-        group_identifier,
-        None,
-    )
-    .await
-    .unwrap();
+    drive
+        .sync()
+        .await
+        .expect("Failed to save OPFS disk at boot");
+    log::information!("OPFS disk saved at boot");
+
+    // Main-thread OPFS commits are asynchronous. Keep one autosave running and
+    // explicitly join it before the final shutdown save.
+    use core::sync::atomic::{AtomicBool, Ordering};
+    let autosave_running: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(true)));
+    let (autosave, _) = task_manager
+        .spawn(task, "OPFS autosave", None, move |_| async move {
+            loop {
+                task::Manager::sleep(Duration::from_secs(1)).await;
+                if !autosave_running.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Err(error) = drive.sync().await {
+                    log::error!("Failed to save OPFS disk: {error}");
+                }
+            }
+        })
+        .await
+        .unwrap();
 
     // - - Set the environment variables
     task_manager
@@ -308,7 +314,14 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .join()
     .await;
 
+    autosave_running.store(false, Ordering::Relaxed);
+    autosave.join().await;
     virtual_file_system.uninitialize().await;
+    drive
+        .sync()
+        .await
+        .expect("Failed to save OPFS disk at shutdown");
+    drive.unmount().expect("Failed to release OPFS disk");
 }
 
 #[cfg(not(target_arch = "wasm32"))]
