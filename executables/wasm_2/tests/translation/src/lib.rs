@@ -45,6 +45,11 @@ pub mod marshal;
 #[cfg(test)]
 #[path = "../../../src/host/graphics/marshal_tests.rs"]
 mod marshal_tests;
+#[path = "../../../src/host/wasi/poll_memory.rs"]
+pub mod poll_memory;
+#[cfg(test)]
+#[path = "../../../src/host/wasi/poll_tests.rs"]
+mod poll_tests;
 
 #[cfg(test)]
 #[path = "../../../src/host/wasi/types.rs"]

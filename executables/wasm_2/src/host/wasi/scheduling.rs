@@ -9,9 +9,10 @@ define_wasi_module! {
     module: "wasi_snapshot_preview1";
 
     fn sched_yield(
-        _caller: Caller<GlobalStore>,
+        caller: Caller<GlobalStore>,
     ) -> Result<WasiResult, wasmi::Error> {
-        xila::task::block_on(xila::task::yield_now());
-        Ok(0)
+        let mut caller=caller;
+        caller.data_mut().pending=Some(crate::host::execution::PendingCall::Yield);
+        Err(wasmi::Error::host(crate::host::execution::Suspend))
     }
 }

@@ -5,6 +5,7 @@ use crate::host::wasi::WasiContext;
 pub struct GlobalStore {
     pub context: &'static xila::executable::ExecutableContext,
     pub wasi: WasiContext,
+    pub pending: Option<super::execution::PendingCall>,
     #[cfg(feature = "graphics")]
     pub graphics: super::graphics::GraphicsState,
 }

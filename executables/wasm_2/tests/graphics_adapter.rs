@@ -18,6 +18,7 @@ async fn store(
         engine,
         GlobalStore {
             context,
+            pending: None,
             graphics: GraphicsState::new(context.graphics_manager),
             wasi: WasiContext {
                 files: Default::default(),

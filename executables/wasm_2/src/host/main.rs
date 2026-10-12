@@ -6,7 +6,7 @@ use alloc::{
 };
 use core::fmt::Write;
 use getargs_derive::GetArgs;
-use wasmi::{Caller, Config, Engine, Linker, Module, Store, TypedResumableCall};
+use wasmi::{Caller, Config, Engine, Linker, Module, Store};
 use xila::{
     executable::{ExecutableContext, Standard},
     file_system::{Kind, Path},
@@ -107,6 +107,7 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
         &engine,
         GlobalStore {
             context,
+            pending: None,
             #[cfg(feature = "graphics")]
             graphics: super::graphics::GraphicsState::new(context.graphics_manager),
             wasi: WasiContext {
@@ -185,33 +186,11 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
         },
     )?;
 
+    store.set_fuel(instruction_limit.get() as u64)?;
     match linker.instantiate_and_start(&mut store, &module) {
         Ok(instance) => {
             let start = instance.get_typed_func::<(), ()>(&store, START_FUNCTION_NAME)?;
-            store.set_fuel(instruction_limit.get() as u64)?;
-
-            let mut call = start.call_resumable(&mut store, ())?;
-            loop {
-                call = match call {
-                    TypedResumableCall::Finished(()) => return Ok(()),
-                    TypedResumableCall::OutOfFuel(call) => {
-                        store.set_fuel(instruction_limit.get() as u64)?;
-                        call.resume(&mut store)?
-                    }
-                    TypedResumableCall::HostTrap(_) => {
-                        let code = store
-                            .data()
-                            .wasi
-                            .exit_code
-                            .ok_or_else(|| wasmi::Error::new("unhandled WASI host trap"))?;
-                        return if code == 0 {
-                            Ok(())
-                        } else {
-                            Err(Error::Runtime(code))
-                        };
-                    }
-                };
-            }
+            super::execution::run(&mut store, start, instruction_limit).await
         }
         Err(e) => {
             if let Some(code) = store.data().wasi.exit_code {

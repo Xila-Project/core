@@ -4,6 +4,8 @@ mod environment;
 mod error;
 mod file;
 mod path;
+mod poll;
+pub mod poll_memory;
 mod process;
 mod random;
 pub mod register;

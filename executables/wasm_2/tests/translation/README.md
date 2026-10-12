@@ -68,6 +68,10 @@ bytes), null/empty-string sentinels, and retained native pointer validity after
 moving the owner or modifying/dropping guest memory. Miri checks those native
 pointer dereferences independently of LVGL or a Wasmi store.
 
+Clock polling tests include the explicit 48-byte subscription and 32-byte event
+layouts, zeroed padding, relative/absolute deadlines, multiple subscriptions,
+unsupported kinds/clocks, output overlap, overflow, and the 64-subscription cap.
+
 Compile-fail doctests verify that mutable byte ranges and table iterators prevent
 conflicting writes, and that borrowed bytes cannot outlive their backing buffer.
 
