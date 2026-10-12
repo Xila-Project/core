@@ -114,7 +114,7 @@ weather = { path = "executables/weather" }
 miniserde = { version = "0.1" }
 bindgen = { version = "0.73" }
 cbindgen = { version = "0.29" }
-syn = { version = "2.0" }
+syn = { version = "3.0" }
 quote = { version = "1.0" }
 proc-macro2 = { version = "1.0" }
 lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false }

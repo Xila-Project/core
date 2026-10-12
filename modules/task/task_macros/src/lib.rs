@@ -3,6 +3,9 @@ use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{ItemFn, parse_macro_input, parse_str};
 
+#[cfg(test)]
+mod tests;
+
 fn default_task_path() -> syn::Expr {
     parse_str("task").unwrap()
 }
