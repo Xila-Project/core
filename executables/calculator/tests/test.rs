@@ -7,7 +7,7 @@ async fn main() {
     extern crate alloc;
 
     use drivers_std::loader::load_to_virtual_file_system;
-    use wasm_2::WasmExecutable;
+    use wasm::WasmExecutable;
     use xila::executable;
     use xila::executable::{build_crate, mount_executables};
 

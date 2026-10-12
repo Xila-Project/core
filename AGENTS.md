@@ -25,6 +25,7 @@ These tasks are defined in `Makefile.toml`; CI is the source of truth for target
 
 # Non-Negotiables
 
+- Keep `docs/superpowers/` planning and design documents local-only. Never stage or commit them; preserve local copies when removing them from Git tracking.
 - Make the smallest focused change that follows the existing crate structure and conventions.
 - Validate changes with the narrowest relevant checks, using CI's host/guest checks as the source of truth for those targets. Host and guest checks do not establish hardware-target correctness; report what was actually checked and any target/toolchain limitations.
 - Do not assume documentation in adjacent repositories is current; prefer this repository's source, manifests, and CI configuration as ground truth.

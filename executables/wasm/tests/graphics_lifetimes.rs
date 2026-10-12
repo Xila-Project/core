@@ -4,7 +4,7 @@ drivers_std::memory::instantiate_global_allocator!();
 #[path = "support/graphics.rs"]
 mod support;
 
-use wasm_2::{
+use wasm::{
     graphics::{Function, GraphicsCall, GraphicsState, dispatch},
     translation::{GuestMemory, GuestPointer, GuestValue, WasmUsize},
 };

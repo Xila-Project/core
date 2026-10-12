@@ -1,7 +1,7 @@
 # Wasmi runtime
 
-`wasm_2` is the Wasmi-based runtime. The original `wasm` runtime remains available;
-Calculator still uses its guest wrappers, with compatible generated call IDs.
+`wasm` is the Wasmi-based runtime and includes the guest graphics wrappers.
+It replaces the original WAMR implementation, preserving generated call IDs.
 
 ## Test Calculator
 
@@ -12,7 +12,7 @@ rustup target add --toolchain stable wasm32-wasip1
 
 # Headless acceptance: builds the real guest, enters 1 + 2 = through LVGL
 # button events, checks the displayed result, requests close, checks cleanup.
-cargo +stable test -p wasm_2 --features graphics \
+cargo +stable test -p wasm --features graphics \
   --target x86_64-unknown-linux-gnu --test calculator
 
 # Interactive native display. Click calculator buttons; press Enter in the
@@ -30,8 +30,8 @@ Other focused tests:
 
 ```sh
 cargo +stable test -p graphics_bindgen --target x86_64-unknown-linux-gnu
-cargo +stable test -p wasm_2 --features graphics --target x86_64-unknown-linux-gnu
-cargo +stable test -p wasm_2 --no-default-features \
+cargo +stable test -p wasm --features graphics --target x86_64-unknown-linux-gnu
+cargo +stable test -p wasm --no-default-features \
   --features host,graphics,memory_64 --target x86_64-unknown-linux-gnu
 ```
 
@@ -69,6 +69,17 @@ Enable the optional `graphics` feature for host bindings. Select the Xila
 rendering feature appropriate to the platform (e.g.
 `xila/graphics_rendering_xrgb8888` for a standalone host library check). Normal
 non-graphical runtime use does not enable graphics.
+
+Guest-only consumers must disable defaults to avoid enabling the host runtime:
+
+```toml
+wasm = { workspace = true, default-features = false, features = ["guest", "graphics", "memory_32"] }
+```
+
+`default_guest` additionally enables C wrappers and emits `xila_graphics.h` in
+the build output directory. No build step rewrites the guest source files.
+Weather's guest and host-test wiring compile against this crate, but graphical
+execution still requires APIs beyond the Calculator subset listed below.
 
 ### Supported calls and limits
 

@@ -66,6 +66,7 @@ args = [
   "wasm32-unknown-unknown",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
 ]
@@ -88,6 +89,7 @@ args = [
   "doc",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",
@@ -124,6 +126,7 @@ args = [
   "clippy",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",

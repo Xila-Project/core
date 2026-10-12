@@ -1,12 +1,12 @@
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::path::Path;
 
 use crate::utilities::context::LvglContext;
 use crate::utilities::enumeration;
 use crate::utilities::file::write_token_stream_to_file;
-use crate::utilities::format::{format_rust, snake_to_upper_camel_case};
+use crate::utilities::format::snake_to_upper_camel_case;
 use crate::utilities::function::{get_function_identifier, is_public_input};
+#[cfg(feature = "c_bindings")]
 use cbindgen::{EnumConfig, ExportConfig, FunctionConfig, RenameRule};
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
@@ -136,6 +136,7 @@ fn generate_xila_graphics_call(signature: &Signature) -> TokenStream {
     }
 }
 
+#[cfg(feature = "c_bindings")]
 fn generate_c_function(signature: &Signature) -> TokenStream {
     let filtered_inputs = signature
         .inputs
@@ -264,6 +265,7 @@ fn generate_functions(path: impl AsRef<Path>, lvgl_functions: &LvglContext) -> R
     Ok(())
 }
 
+#[cfg(feature = "c_bindings")]
 fn generate_c_abi_functions(
     path: impl AsRef<Path>,
     lvgl_functions: &LvglContext,
@@ -290,48 +292,21 @@ fn generate_c_abi_functions(
     Ok(())
 }
 
-fn is_c_bindings_enabled() -> bool {
-    env::var_os("CARGO_FEATURE_C_BINDINGS").is_some()
-}
-
-fn generate_c_functions_module_body(path: impl AsRef<Path>) -> Result<(), String> {
-    let token_stream = quote! {
-        include!(concat!(env!("OUT_DIR"), "/c_functions.generated.rs"));
-    };
-
-    fs::write(&path, token_stream.to_string())
-        .map_err(|e| format!("Error writing to file: {}", e))?;
-
-    format_rust(path)?;
-
-    Ok(())
-}
-
 pub fn generate(output_path: &Path) {
     let input = lvgl_rust_sys::_bindgen_raw_src();
     let context = LvglContext::parse(input).expect("Error parsing LVGL ABI");
 
-    let crate_directory = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-
     let enumerations_generated_path = output_path.join("enumeration.generated.rs");
     let functions_generated_path = output_path.join("functions.generated.rs");
-    let c_functions_generated_path = output_path.join("c_functions.generated.rs");
-    let c_functions_module_path = crate_directory
-        .join("src")
-        .join("guest")
-        .join("graphics")
-        .join("c_functions.rs");
-    let c_header_path = output_path.join("xila_graphics.h");
 
     generate_enumeration(&enumerations_generated_path, &context).unwrap();
 
     generate_functions(&functions_generated_path, &context).unwrap();
 
-    if is_c_bindings_enabled() {
-        // Overwrite c_functions.rs file with generated C ABI functions
-        // This is workaround for cbindgen macro expansion limitations
-        generate_c_abi_functions(&c_functions_module_path, &context).unwrap();
-
+    #[cfg(feature = "c_bindings")]
+    {
+        let c_functions_generated_path = output_path.join("c_functions.generated.rs");
+        let c_header_path = output_path.join("xila_graphics.h");
         generate_c_abi_functions(&c_functions_generated_path, &context).unwrap();
 
         let configuration: cbindgen::Config = cbindgen::Config {
@@ -358,13 +333,17 @@ pub fn generate(output_path: &Path) {
         };
 
         cbindgen::Builder::new()
-            .with_crate(crate_directory)
+            // Parse expanded inputs directly, without temporarily overwriting
+            // source files or recursively enabling this crate's host defaults.
+            .with_src(&c_functions_generated_path)
+            .with_src(&enumerations_generated_path)
+            .with_src(
+                std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                    .join("src/guest/graphics/prelude.rs"),
+            )
             .with_config(configuration)
             .generate()
             .expect("Unable to generate bindings")
             .write_to_file(&c_header_path);
-
-        // Restore c_functions.rs file
-        generate_c_functions_module_body(&c_functions_module_path).unwrap();
     }
 }

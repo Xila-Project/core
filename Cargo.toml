@@ -105,7 +105,6 @@ file_manager = { path = "executables/file_manager" }
 command_line_shell = { path = "executables/shell/command_line" }
 graphical_shell = { path = "executables/shell/graphical" }
 wasm = { path = "executables/wasm" }
-wasm_2 = { path = "executables/wasm_2" }
 terminal = { path = "executables/terminal" }
 settings = { path = "executables/settings" }
 calculator = { path = "executables/calculator" }
@@ -156,7 +155,6 @@ members = [
   "executables/shell/command_line",
   "modules/executable",
   "executables/wasm",
-  "executables/wasm/bindings",
   "executables/wasm/tests/wasm_test",
   "executables/shell/graphical",
   "executables/terminal",
@@ -181,13 +179,8 @@ members = [
   "modules/testing",
   "modules/device",
   "executables/weather",
-  "executables/wasm_2",
   "modules/graphics/bindings_generator",
-  "executables/wasm_2/tests/wasm_test",
 ]
 
 [patch.crates-io]
 littlefs2-sys = { git = "https://github.com/AlixANNERAUD/littlefs2-sys.git", branch = "main" }
-
-[patch."https://github.com/bytecodealliance/wamr-rust-sdk.git"]
-wamr-rust-sdk = { git = "https://github.com/AlixANNERAUD/wamr-rust-sdk.git", branch = "instruction-metering-resume" }

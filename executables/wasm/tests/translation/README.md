@@ -3,7 +3,7 @@
 This standalone test crate compiles the actual production translation sources
 and WASI record codecs using `#[path]`. It does not copy the implementation or
 require the OS integration. Its Wasmi dependency uses the same version requirement
-and features as `wasm_2`.
+and features as `wasm`.
 
 ## Borrowed-memory API
 
@@ -51,8 +51,8 @@ encodings with zeroed padding, independently of their native Rust layouts.
 From the repository root:
 
 ```sh
-cargo +stable test --manifest-path executables/wasm_2/tests/translation/Cargo.toml
-cargo +stable test --manifest-path executables/wasm_2/tests/translation/Cargo.toml --no-default-features --features memory_64
+cargo +stable test --manifest-path executables/wasm/tests/translation/Cargo.toml
+cargo +stable test --manifest-path executables/wasm/tests/translation/Cargo.toml --no-default-features --features memory_64
 ```
 
 Tests cover independent little-endian scalar and WASI-record fixtures, padding,
@@ -82,7 +82,7 @@ both `memory_32` and `memory_64`:
 
 ```sh
 cargo +stable llvm-cov \
-  --manifest-path executables/wasm_2/tests/translation/Cargo.toml \
+  --manifest-path executables/wasm/tests/translation/Cargo.toml \
   --no-default-features --features memory_32 \
   --ignore-filename-regex '(tests\.rs|tests/translation/src/lib\.rs)$' \
   --fail-under-lines 100 --fail-under-functions 100
@@ -98,10 +98,10 @@ generic instantiation. The gate is not a proof of correctness for arbitrary inpu
 
 ```sh
 rustup component add --toolchain nightly miri rust-src
-cargo +nightly miri test --manifest-path executables/wasm_2/tests/translation/Cargo.toml
-cargo +nightly miri test --manifest-path executables/wasm_2/tests/translation/Cargo.toml --no-default-features --features memory_64
-cargo +nightly miri test --manifest-path executables/wasm_2/tests/translation/Cargo.toml --no-default-features --features memory_64 --target i686-unknown-linux-gnu
-cargo +nightly miri test --manifest-path executables/wasm_2/tests/translation/Cargo.toml --target powerpc-unknown-linux-gnu
+cargo +nightly miri test --manifest-path executables/wasm/tests/translation/Cargo.toml
+cargo +nightly miri test --manifest-path executables/wasm/tests/translation/Cargo.toml --no-default-features --features memory_64
+cargo +nightly miri test --manifest-path executables/wasm/tests/translation/Cargo.toml --no-default-features --features memory_64 --target i686-unknown-linux-gnu
+cargo +nightly miri test --manifest-path executables/wasm/tests/translation/Cargo.toml --target powerpc-unknown-linux-gnu
 ```
 
 The 32-bit simulated host exercises guest-to-host narrowing conversions; the

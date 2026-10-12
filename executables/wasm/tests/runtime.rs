@@ -8,7 +8,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
 };
-use wasm_2::{GlobalStore, WasiContext, add_wasi_to_linker, execution::run};
+use wasm::{GlobalStore, WasiContext, add_wasi_to_linker, execution::run};
 use wasmi::{Config, Engine, Linker, Module, Store};
 
 #[xila::task::test(task_path=xila::task)]
@@ -82,7 +82,7 @@ async fn resumable_execution_yields_sleeps_and_preserves_real_traps() {
             GlobalStore {
                 context,
                 #[cfg(feature = "graphics")]
-                graphics: wasm_2::graphics::GraphicsState::new(context.graphics_manager),
+                graphics: wasm::graphics::GraphicsState::new(context.graphics_manager),
                 pending: None,
                 wasi: WasiContext {
                     files: Default::default(),
@@ -111,7 +111,7 @@ async fn resumable_execution_yields_sleeps_and_preserves_real_traps() {
             );
         }
         if kind == "sleep" {
-            use wasm_2::translation::{GuestMemory, GuestPointer, WasmUsize};
+            use wasm::translation::{GuestMemory, GuestPointer, WasmUsize};
             let memory = instance.get_memory(&store, "memory").unwrap();
             let view = GuestMemory::new(memory.data_mut(&mut store));
             assert_eq!(view.read(GuestPointer::<WasmUsize>::new(200)), Some(1));

@@ -60,7 +60,7 @@ async fn real_calculator_guest_evaluates_buttons_and_closes_on_wasmi() {
         context,
         context.virtual_file_system,
         task,
-        &[("/binaries/wasm", wasm_2::WasmExecutable)]
+        &[("/binaries/wasm", wasm::WasmExecutable)]
     )
     .await
     .unwrap();

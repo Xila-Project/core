@@ -4,7 +4,7 @@ drivers_std::memory::instantiate_global_allocator!();
 #[path = "support/graphics.rs"]
 mod support;
 
-use wasm_2::{
+use wasm::{
     GlobalStore, WasiContext,
     graphics::{Function, GraphicsState, wasmi::add_to_linker},
 };
@@ -107,15 +107,15 @@ async fn wasmi_adapter_uses_context_and_checked_exports() {
     let invoke = instance
         .get_typed_func::<(
             i32,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
-            wasm_2::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
+            wasm::translation::WasmUsize,
             i32,
-            wasm_2::translation::WasmUsize,
+            wasm::translation::WasmUsize,
         ), i32>(&store, "invoke")
         .unwrap();
     let memory = instance.get_memory(&store, "memory").unwrap();
@@ -147,7 +147,7 @@ async fn wasmi_adapter_uses_context_and_checked_exports() {
         0
     );
     {
-        use wasm_2::translation::{GuestMemory, GuestPointer, GuestValue, WasmUsize};
+        use wasm::translation::{GuestMemory, GuestPointer, GuestValue, WasmUsize};
         let mut view = GuestMemory::new(memory.data_mut(&mut store));
         view.write(GuestPointer::new(300), 301 as WasmUsize)
             .unwrap();

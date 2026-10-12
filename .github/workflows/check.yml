@@ -39,7 +39,7 @@ jobs:
       - name: Check | Translation coverage
         run: >-
           cargo +stable llvm-cov
-          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
           --ignore-filename-regex '(tests\.rs|tests/translation/src/lib\.rs)$'
           --fail-under-lines 100 --fail-under-functions 100
@@ -47,20 +47,20 @@ jobs:
       - name: Check | Translation Miri
         run: >-
           cargo +nightly miri test
-          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | Borrowing compile-fail doctests
         run: >-
           cargo +stable test --doc
-          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | 64-bit guest on 32-bit host (Miri)
         if: matrix.memory == 'memory_64'
         run: >-
           cargo +nightly miri test
-          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_64
           --target i686-unknown-linux-gnu
 
@@ -68,7 +68,7 @@ jobs:
         if: matrix.memory == 'memory_32'
         run: >-
           cargo +nightly miri test
-          --manifest-path executables/wasm_2/tests/translation/Cargo.toml
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_32
           --target powerpc-unknown-linux-gnu
 
@@ -112,8 +112,8 @@ jobs:
       - name: Check | Clippy (Host)
         run: cargo make clippy-host
 
-      - name: Check | Clippy (Host - wasm_abi_bindings)
-        run: cargo +stable clippy -p wasm_abi_bindings --features bindings_generation,wasm32
+      - name: Check | Clippy (Host - Wasmi)
+        run: cargo +stable clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
 
       - name: Check | Documentation (Host)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host

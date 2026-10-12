@@ -7,7 +7,11 @@ edition = "2024"
 embedded-i18n = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm = { workspace = true, features = ["guest", "graphics"] }
+wasm = { workspace = true, default-features = false, features = [
+  "guest",
+  "graphics",
+  "memory_32",
+] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dev-dependencies]
 task = { workspace = true, features = ["test_harness"] }
@@ -21,7 +25,7 @@ drivers_std = { workspace = true }
 drivers_shared = { workspace = true }
 drivers_native = { workspace = true }
 testing = { workspace = true }
-wasm_2 = { workspace = true, features = ["graphics"] }
+wasm = { workspace = true, features = ["graphics"] }
 
 [[test]]
 name = "calculator_test"
