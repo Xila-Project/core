@@ -113,16 +113,14 @@ impl Manager {
             return Err(Error::DuplicateUserIdentifier); // Shouldn't happen
         }
 
-        // - Add user to the primary group
-        if !inner
+        // Saved groups are loaded before users, so primary membership may
+        // already exist. Duplicate user identifiers/names were checked above.
+        inner
             .groups
             .get_mut(&primary_group)
             .ok_or(Error::InvalidGroupIdentifier)?
             .users
-            .insert(identifier)
-        {
-            return Err(Error::DuplicateUserIdentifier); // Shouldn't happen
-        }
+            .insert(identifier);
 
         Ok(())
     }
@@ -315,6 +313,21 @@ mod tests {
             .await
             .unwrap();
         assert!(manager.exists_user(identifier).await.unwrap());
+    }
+
+    #[test]
+    async fn create_user_with_restored_primary_group_membership() {
+        let manager = Manager::new();
+        let user = UserIdentifier::new(42);
+        let group = GroupIdentifier::new(1000);
+        manager.add_group(group, "saved", &[user]).await.unwrap();
+        assert_eq!(manager.add_user(user, "bob", group).await, Ok(()));
+        assert_eq!(manager.get_user_name(user).await.unwrap(), "bob");
+        assert_eq!(manager.get_group_users(group).await.unwrap(), [user]);
+        assert_eq!(
+            manager.add_user(user, "bob", group).await,
+            Err(Error::DuplicateUserIdentifier)
+        );
     }
 
     #[test]
