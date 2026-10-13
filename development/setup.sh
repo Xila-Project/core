@@ -19,4 +19,4 @@ rustup toolchain install "$XILA_NIGHTLY_TOOLCHAIN" --profile minimal --component
 rustup target add --toolchain "$XILA_NIGHTLY_TOOLCHAIN" wasm32-unknown-unknown
 npm ci
 
-echo "Setup complete. Run cargo make check, or see development/README.md."
+echo "Setup complete. Run cargo make check, or see readme.md."

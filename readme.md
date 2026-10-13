@@ -10,11 +10,63 @@ This repository contains the core of Xila. It contains the code for xila's core 
 
 ## 🛠️ Build
 
-For an optional Devbox environment with pinned tools and host display access, see
-[the local development guide](development/README.md). Manual setup below remains
-supported. CI uses the same pinned Devbox tools and setup script.
+### Optional Devbox environment
 
-### ✅ Requirements
+From a checkout on **x86_64 Linux**, install [Devbox](https://www.jetify.com/docs/devbox/installing_devbox/)
+at the version in `.devbox-version`, then run:
+
+```bash
+devbox shell
+devbox run setup
+cargo make check                 # Linux x86_64 host + WASM guest
+cargo make clippy
+cargo make format-rust -- --check
+cargo make format-toml --check
+npm exec prettier -- --check "**/*.json"
+```
+
+Devbox installs Nix if needed. Setup installs the pinned Rust toolchains/WASM
+targets and runs `npm ci`. Exit with `exit`; your normal setup stays unchanged.
+Remove `.dev-environment/` and `.devbox/` after leaving to clear local caches.
+Initial setup needs internet access, including GitHub, artifacts.nixos.org,
+cache.nixos.org, static.rust-lang.org, crates.io and registry.npmjs.org.
+
+Devbox provides a host-native shell with JSON configuration and pinned native
+libraries. Containers need GUI/device forwarding; mise leaves native packages
+to the OS; direct Nix/devenv requires maintaining Nix configuration. Devbox is
+optional locally; manual setup below remains supported.
+
+Version sources are `.devbox-version` (CLI), `devbox.json`/`devbox.lock` (native
+tools, including Taplo 0.9.3), `development/toolchains.env` (Rust) and
+`package-lock.json` (npm). CI uses the same setup and `devbox run` for the existing
+formatting, host/WASM, coverage, Miri and deployment checks. For local coverage,
+add `llvm-tools-preview` to the pinned stable toolchain; for Miri, add `miri` to
+the pinned nightly. Tool pins do not freeze the untracked Cargo lockfiles or
+moving Git dependencies. Update the version sources together and repeat the
+checks and GUI smoke test.
+
+Run `devbox run gui` from a **Wayland desktop** and verify rendering, input and
+window closing. Enter without `--pure` to retain the host display, runtime
+directory and session bus. Working host GPU drivers are required; compilation
+does not validate GUI behavior. Windows needs x86_64 WSL2/WSLg, with GUI behavior
+still requiring validation. Native Windows, macOS, ARM Linux and NixOS are not
+validated by this environment; the current host target and native event loop
+depend on Linux/Wayland.
+
+For the browser example, inside the shell:
+
+```bash
+cargo build -p calculator --target wasm32-wasip1 --release
+cargo make generate-fonts
+(cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk serve)
+```
+
+Use `trunk build` instead of `trunk serve` for a build check. Open the served URL
+to check rendering and input. ESP-IDF/vendor toolchains, flashing and serial
+permissions require separate setup using the guides below; leave Devbox first.
+Host/WASM checks do not establish ESP32, nRF, STM32 or other hardware correctness.
+
+### ✅ Manual requirements
 
 Please install the following dependencies to build core:
 
@@ -53,6 +105,7 @@ cargo make run -p native_example
 or
 
 ```bash
+cargo +stable build -p calculator --target wasm32-wasip1 --release
 cargo make generate-fonts
 cd examples/wasm && trunk serve
 ```
