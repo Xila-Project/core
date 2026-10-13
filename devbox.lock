@@ -22,9 +22,6 @@
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#llvmPackages.libclang.lib": {
       "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#llvmPackages.libclang.lib"
     },
-    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#glibc.dev": {
-      "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#glibc.dev"
-    },
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#mold": {
       "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#mold"
     },

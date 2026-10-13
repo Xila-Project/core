@@ -14,8 +14,6 @@ export RUSTUP_TOOLCHAIN="$XILA_RUST_TOOLCHAIN"
 export PATH="$CARGO_HOME/bin:$PATH"
 
 xila_profile="$XILA_DEV_ROOT/.devbox/nix/profile/default"
-xila_clang_resource="$(clang -print-resource-dir)" || return 1
 export LIBCLANG_PATH="$xila_profile/lib"
-export BINDGEN_EXTRA_CLANG_ARGS="-isystem \"$xila_profile/include\" -isystem \"$xila_clang_resource/include\""
 export LD_LIBRARY_PATH="$xila_profile/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-unset xila_profile xila_clang_resource
+unset xila_profile

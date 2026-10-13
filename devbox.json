@@ -8,7 +8,6 @@
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#clang_multi",
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#gcc_multi",
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#llvmPackages.libclang.lib",
-    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#glibc.dev",
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#mold",
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#pkg-config",
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#cmake",
@@ -22,6 +21,10 @@
   ],
   "nixpkgs": {
     "commit": "7fd4004d0511991fff3a0524856a9be09e28c5f0"
+  },
+  "env": {
+    "CC": "clang",
+    "CXX": "clang++"
   },
   "shell": {
     "init_hook": [". ./development/activate.sh"],
