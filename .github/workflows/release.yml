@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: versioned-release
+  cancel-in-progress: false
+
+jobs:
+  select:
+    name: Validate release candidate
+    if: github.repository == 'xila-project/core' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
+      release: ${{ steps.candidate.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check release policy
+        run: python3 -m unittest discover -s development/tests -p 'test_release.py' -v
+      - name: Select release candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 development/release.py check-version)
+          release=$(python3 development/release.py candidate --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA")
+          printf 'version=%s\nrelease=%s\n' "$version" "$release" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build downloadable examples
+    needs: select
+    if: needs.select.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Build fonts and bundled WASI applications
+        run: |
+          cargo make generate-fonts
+          cargo build -p calculator -p weather --target wasm32-wasip1 --profile release-wasm
+          # The browser example embeds this established release-profile path.
+          mkdir -p target/wasm32-wasip1/release
+          cp target/wasm32-wasip1/release-wasm/calculator.wasm target/wasm32-wasip1/release/calculator.wasm
+      - name: Build native example
+        run: cargo build -p native_example --target x86_64-unknown-linux-gnu --release
+      - name: Build browser demonstration
+        working-directory: examples/wasm
+        env:
+          EMBEDDED_I18N_LOCALE: en
+        run: RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./
+      - name: Package archives and checksums
+        run: >-
+          python3 development/release.py package --output release-assets
+          --sha "$GITHUB_SHA"
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: versioned-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish complete versioned release
+    needs: [select, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Create version tag and draft
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+          version: 0.3.172
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: versioned-release-assets
+          path: release-assets
+      - name: Verify, upload and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.select.outputs.version }}
+        run: >-
+          python3 development/release.py publish
+          --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA"
+          --tag "v$RELEASE_VERSION" --assets release-assets
+
+  release-pr:
+    name: Prepare Release PR
+    needs: [select, publish]
+    if: >-
+      ${{ !cancelled() && needs.select.result == 'success' &&
+          (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Open or update Release PR
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+          version: 0.3.172
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || github.token }}

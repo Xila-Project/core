@@ -1,0 +1,26 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+          title = os.environ["PR_TITLE"]
+          if not re.fullmatch(r"(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\([^\r\n()]+\))?!?: [^\r\n]+", title):
+              sys.exit("Use a Conventional Commit PR title, e.g. feat: add a driver or fix!: change an API")
+          PY
