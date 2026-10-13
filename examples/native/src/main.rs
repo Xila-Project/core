@@ -39,15 +39,13 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use xila::virtual_file_system::mount_static;
 
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    if arguments
-        .iter()
-        .any(|argument| argument == "--help" || argument == "-h")
-    {
-        println!("{}", cli::HELP);
-        return;
-    }
     let config = match cli::parse(arguments.iter().map(String::as_str)) {
         Ok(config) => config,
+        Err(error) if error.is_help() || error.is_version() => {
+            println!("{error}");
+            // Returning from this task does not stop the native executor.
+            std::process::exit(0);
+        }
         Err(error) => {
             eprintln!("Invalid command-line arguments: {error}\nTry --help for usage.");
             std::process::exit(2);

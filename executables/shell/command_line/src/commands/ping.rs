@@ -17,7 +17,7 @@ impl UserCommand for PingCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> crate::Result<()>
+    ) -> crate::Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -29,13 +29,14 @@ impl UserCommand for PingCommand {
 const ICMP_IDENTIFIER: u16 = 0x22b;
 
 #[derive(GetArgs)]
+#[command(name = "ping", about = "Send ICMP echo requests.")]
 struct PingArguments<'a> {
     target: &'a str,
-    #[arg(short = 'c', long = "count", default = 4)]
+    #[arg(short = 'c', long = "count", default_value_t = 4)]
     count: u16,
-    #[arg(short = 't', long = "timeout", default = 5)]
+    #[arg(short = 't', long = "timeout", default_value_t = 5)]
     timeout: u64,
-    #[arg(short = 's', long = "size", default = 56)]
+    #[arg(short = 's', long = "size", default_value_t = 56)]
     size: usize,
 }
 
@@ -115,7 +116,7 @@ async fn ping_loop<C: CommandContext>(
 async fn execute_ping<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> crate::Result<()>
+) -> crate::Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
@@ -160,4 +161,33 @@ where
         payload_size,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PingArguments;
+    use alloc::string::ToString;
+
+    #[test]
+    fn preserves_defaults_and_option_names() {
+        let parsed = PingArguments::from_args(["localhost"].into_iter()).unwrap();
+        assert_eq!((parsed.count, parsed.timeout, parsed.size), (4, 5, 56));
+        let parsed = PingArguments::from_args(
+            ["-c", "2", "--timeout", "3", "--size=32", "localhost"].into_iter(),
+        )
+        .unwrap();
+        assert_eq!((parsed.count, parsed.timeout, parsed.size), (2, 3, 32));
+    }
+
+    #[test]
+    fn suggests_misspelled_timeout_option() {
+        let error = PingArguments::from_args(["localhost", "--timout", "3"].into_iter())
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("similar argument exists: '--timeout'")
+        );
+    }
 }

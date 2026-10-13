@@ -30,7 +30,7 @@ impl WasiContext {
     pub fn get_synchronous_file(&mut self, fd: u32) -> Option<&mut SynchronousFile<'static>> {
         self.files
             .get_mut(&fd)
-            .and_then(|item| item.into_synchronous_file())
+            .and_then(|item| item.as_synchronous_file_mut())
     }
 
     pub fn is_directory(&self, fd: u32) -> bool {
@@ -43,7 +43,7 @@ impl WasiContext {
     ) -> Option<&mut SynchronousDirectory<'static>> {
         self.files
             .get_mut(&fd)
-            .and_then(|item| item.into_synchronous_directory())
+            .and_then(|item| item.as_synchronous_directory_mut())
     }
 
     pub fn pop_file_system_item(&mut self, fd: u32) -> Option<FileSystemItem> {
@@ -83,7 +83,7 @@ impl FileSystemItem {
         }
     }
 
-    pub fn into_synchronous_file(&mut self) -> Option<&mut SynchronousFile<'static>> {
+    pub fn as_synchronous_file_mut(&mut self) -> Option<&mut SynchronousFile<'static>> {
         match self {
             FileSystemItem::StandardInput(file) => Some(&mut file.file),
             FileSystemItem::StandardOutput(file) => Some(&mut file.file),
@@ -93,11 +93,29 @@ impl FileSystemItem {
         }
     }
 
-    pub fn into_synchronous_directory(&mut self) -> Option<&mut SynchronousDirectory<'static>> {
+    pub fn as_synchronous_directory_mut(&mut self) -> Option<&mut SynchronousDirectory<'static>> {
         match self {
             FileSystemItem::Directory(dir) => Some(&mut dir.directory),
             _ => None,
         }
+    }
+
+    /// Compatibility name for borrowing the contained file.
+    #[allow(
+        clippy::wrong_self_convention,
+        reason = "Preserve the existing public borrowed-view API"
+    )]
+    pub fn into_synchronous_file(&mut self) -> Option<&mut SynchronousFile<'static>> {
+        self.as_synchronous_file_mut()
+    }
+
+    /// Compatibility name for borrowing the contained directory.
+    #[allow(
+        clippy::wrong_self_convention,
+        reason = "Preserve the existing public borrowed-view API"
+    )]
+    pub fn into_synchronous_directory(&mut self) -> Option<&mut SynchronousDirectory<'static>> {
+        self.as_synchronous_directory_mut()
     }
 }
 

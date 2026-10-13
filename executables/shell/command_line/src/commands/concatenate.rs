@@ -17,7 +17,7 @@ impl UserCommand for ConcatenateCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,

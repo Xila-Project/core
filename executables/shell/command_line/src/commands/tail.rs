@@ -16,7 +16,7 @@ impl UserCommand for TailCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -26,9 +26,10 @@ impl UserCommand for TailCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "tail", about = "Print the last lines of a file.")]
 struct TailArguments<'a> {
     path: &'a str,
-    #[arg(short = 'n', long = "lines", default = 10)]
+    #[arg(short = 'n', long = "lines", default_value_t = 10)]
     lines: usize,
 }
 
@@ -107,7 +108,7 @@ async fn read_tail_bytes(mut file: File<'_>, lines_to_keep: usize) -> Result<Vec
 async fn execute_tail<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

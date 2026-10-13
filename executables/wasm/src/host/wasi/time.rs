@@ -18,7 +18,7 @@ define_wasi_module! {
         resolution_ptr: WasmUsize,
     ) -> Result<WasiResult, wasmi::Error> {
         let mut caller = caller;
-        let memory = get_memory(&mut caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
+        let memory = get_memory(&caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
         let resolution = caller.data().context.time_manager
             .get_current_time_since_startup()
             .map_err(|_| wasmi::Error::new("time error"))?;
@@ -35,7 +35,7 @@ define_wasi_module! {
         time_ptr: WasmUsize,
     ) -> Result<WasiResult, wasmi::Error> {
         let mut caller = caller;
-        let memory = get_memory(&mut caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
+        let memory = get_memory(&caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
         let manager=caller.data().context.time_manager;
         let now = match clock_id {
             0=>manager.get_current_time(),

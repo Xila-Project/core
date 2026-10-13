@@ -88,7 +88,7 @@ target = { path = "modules/target" }
 network = { path = "modules/network" }
 peripherals = { path = "modules/peripherals" }
 bootsplash = { path = "modules/bootsplash" }
-embedded-i18n = { git = "https://github.com/AlixANNERAUD/embedded-i18n.git" }
+embedded-i18n = { git = "https://github.com/AlixANNERAUD/embedded-i18n.git", rev = "ebee35ac41c56b6073d1c169fa37db694230653c" }
 testing = { path = "modules/testing" }
 device = { path = "modules/device" }
 
@@ -135,7 +135,7 @@ embedded-io = { version = "0.7", features = ["alloc"] }
 embedded-tls = { version = "0.19", default-features = false, features = [
   "alloc",
 ] }
-getargs-derive = { git = "https://github.com/AlixANNERAUD/getargs-derive.git", branch = "main" }
+getargs-derive = { git = "https://github.com/AlixANNERAUD/getargs-derive.git", rev = "65b20961504ad5ba387ea13f0e9501036941ab17" } # v0.1.0
 
 [workspace]
 members = [

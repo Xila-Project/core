@@ -19,7 +19,7 @@ impl UserCommand for CreateDirectoryCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -34,7 +34,7 @@ impl UserCommand for RemoveFileCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -49,7 +49,7 @@ impl UserCommand for RemoveDirectoryCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -59,12 +59,20 @@ impl UserCommand for RemoveDirectoryCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "mkdir", about = "Create a directory.")]
 struct DirectoryCreateArguments<'a> {
     path: &'a str,
 }
 
 #[derive(GetArgs)]
+#[command(name = "rmdir", about = "Remove a directory.")]
 struct DirectoryRemoveArguments<'a> {
+    path: &'a str,
+}
+
+#[derive(GetArgs)]
+#[command(name = "rm", about = "Remove a file.")]
+struct FileRemoveArguments<'a> {
     path: &'a str,
 }
 
@@ -100,7 +108,7 @@ fn can_remove_with_rmdir(kind: Kind) -> bool {
 async fn execute_create_directory<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
@@ -121,12 +129,12 @@ where
 async fn execute_remove_file<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
 {
-    let DirectoryRemoveArguments { path } = DirectoryRemoveArguments::parse(options)?;
+    let FileRemoveArguments { path } = FileRemoveArguments::parse(options)?;
     let path = resolve_path(context, path)?;
 
     let statistics = context
@@ -151,7 +159,7 @@ where
 async fn execute_remove_directory<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

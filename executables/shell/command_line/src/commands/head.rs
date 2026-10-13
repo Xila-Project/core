@@ -16,7 +16,7 @@ impl UserCommand for HeadCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -26,9 +26,10 @@ impl UserCommand for HeadCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "head", about = "Print the first lines of a file.")]
 struct HeadArguments<'a> {
     path: &'a str,
-    #[arg(short = 'n', long = "lines", default = 10)]
+    #[arg(short = 'n', long = "lines", default_value_t = 10)]
     lines: usize,
 }
 
@@ -85,7 +86,7 @@ async fn read_head_bytes(mut file: File<'_>, lines_to_keep: usize) -> Result<Vec
 async fn execute_head<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
@@ -171,5 +172,28 @@ mod tests {
         let parsed = parsed.unwrap();
         assert_eq!(parsed.lines, 2);
         assert_eq!(parsed.path, "notes.txt");
+    }
+
+    #[test]
+    fn preserves_default_and_zero_line_counts() {
+        let parsed = HeadArguments::from_args(["notes.txt"].into_iter()).unwrap();
+        assert_eq!(parsed.lines, 10);
+        let parsed = HeadArguments::from_args(["notes.txt", "--lines", "0"].into_iter()).unwrap();
+        assert_eq!(parsed.lines, 0);
+    }
+
+    #[test]
+    fn accepts_hyphenated_path_after_end_of_options() {
+        let parsed = HeadArguments::from_args(["--", "-notes.txt"].into_iter()).unwrap();
+        assert_eq!(parsed.path, "-notes.txt");
+    }
+
+    #[test]
+    fn help_names_the_builtin_command() {
+        let error = HeadArguments::from_args(["--help"].into_iter())
+            .err()
+            .unwrap();
+        assert!(error.is_help());
+        assert!(alloc::string::ToString::to_string(&error).contains("Usage: head"));
     }
 }

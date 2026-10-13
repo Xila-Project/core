@@ -17,7 +17,7 @@ impl UserCommand for DnsResolveCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -27,17 +27,18 @@ impl UserCommand for DnsResolveCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "dns_resolve", about = "Resolve a DNS name.")]
 struct DnsResolveArguments<'a> {
     domain: &'a str,
-    #[arg(flag, short = 'a', long = "a")]
+    #[arg(short = 'a', long = "a")]
     a_enabled: bool,
-    #[arg(flag, short = 'A', long = "aaaa")]
+    #[arg(short = 'A', long = "aaaa")]
     aaaa_enabled: bool,
-    #[arg(flag, short = 'c', long = "cname")]
+    #[arg(short = 'c', long = "cname")]
     cname_enabled: bool,
-    #[arg(flag, short = 'n', long = "ns")]
+    #[arg(short = 'n', long = "ns")]
     ns_enabled: bool,
-    #[arg(flag, short = 's', long = "soa")]
+    #[arg(short = 's', long = "soa")]
     soa_enabled: bool,
 }
 
@@ -101,7 +102,7 @@ async fn resolve_record<C: CommandContext>(
 async fn execute_dns_resolve<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

@@ -13,7 +13,7 @@ impl UserCommand for ClearCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -23,9 +23,13 @@ impl UserCommand for ClearCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "clear", about = "Clear the terminal.")]
 struct ClearArguments {}
 
-fn execute_clear<'a, I, C>(context: &mut C, options: &mut Options<&'a str, I>) -> Result<()>
+fn execute_clear<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

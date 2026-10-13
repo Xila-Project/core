@@ -13,7 +13,7 @@ impl UserCommand for ChangeDirectoryCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -23,6 +23,7 @@ impl UserCommand for ChangeDirectoryCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "cd", about = "Change the current directory.")]
 struct ChangeDirectoryArguments<'a> {
     path: &'a str,
 }
@@ -30,7 +31,7 @@ struct ChangeDirectoryArguments<'a> {
 async fn execute_change_directory<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

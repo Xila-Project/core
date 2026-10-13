@@ -4,6 +4,9 @@ use std::string::{String, ToString};
 pub const MINIMUM_DISK_SIZE: u64 = (xila::file_system::mbr::Mbr::MINIMUM_START_BLOCK + 2)
     * xila::file_system::mbr::Mbr::SIZE as u64;
 
+// The parser displays range expressions literally; keep its numeric bound and help in sync.
+const _: () = assert!(MINIMUM_DISK_SIZE == 1049600);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InterfaceMode {
     Graphical,
@@ -20,92 +23,77 @@ pub struct Config {
 }
 
 #[derive(GetArgs)]
+#[command(
+    name = "native_example",
+    about = "Run the Xila native example.",
+    version
+)]
 struct Arguments<'a> {
-    #[arg(flag, short = 'g', long = "gui")]
+    /// Use the graphical interface (default).
+    #[arg(short = 'g', long = "gui", conflicts_with = "terminal")]
     gui: bool,
-    #[arg(flag, short = 't', long = "terminal")]
+    /// Use the terminal interface.
+    #[arg(short = 't', long = "terminal")]
     terminal: bool,
-    #[arg(flag, short = 'n', long = "network")]
+    /// Enable networking (default).
+    #[arg(short = 'n', long = "network", conflicts_with = "no_network")]
     network: bool,
-    #[arg(flag, short = 'N', long = "no-network")]
+    /// Disable networking.
+    #[arg(short = 'N', long = "no-network")]
     no_network: bool,
-    #[arg(short = 'r', long = "resolution", default = "800x600")]
-    resolution: &'a str,
-    #[arg(short = 'p', long = "disk-path", default = "./drive.img")]
+    /// Display resolution; each dimension must be between 1 and 32767.
+    #[arg(short = 'r', long = "resolution", default_value = "800x600", value_name = "WIDTHxHEIGHT", value_parser = parse_resolution)]
+    resolution: (i16, i16),
+    /// Backing disk image.
+    #[arg(
+        short = 'p',
+        long = "disk-path",
+        default_value = "./drive.img",
+        value_name = "PATH",
+        allow_hyphen_values = true
+    )]
     disk_path: &'a str,
-    #[arg(short = 's', long = "disk-size", default = 16 * 1024 * 1024)]
+    /// Capacity in bytes (minimum: 1049600 for the MBR and filesystem).
+    #[arg(short = 's', long = "disk-size", default_value_t = 16 * 1024 * 1024, value_name = "BYTES", value_parser = 1049600..)]
     disk_size: u64,
-    #[arg(short = 'i', long = "interface-name", default = "xila0")]
+    /// Host TUN/TAP interface.
+    #[arg(short = 'i', long = "interface-name", default_value = "xila0", value_name = "NAME", value_parser = non_empty, allow_hyphen_values = true)]
     interface_name: &'a str,
 }
 
-pub fn parse<'a, I>(arguments: I) -> Result<Config, String>
+fn parse_resolution(value: &str) -> Result<(i16, i16), ()> {
+    let (width, height) = value.split_once('x').ok_or(())?;
+    let width = width.parse::<i16>().map_err(|_| ())?;
+    let height = height.parse::<i16>().map_err(|_| ())?;
+    if width <= 0 || height <= 0 {
+        return Err(());
+    }
+    Ok((width, height))
+}
+
+fn non_empty(value: &str) -> Result<&str, ()> {
+    if value.is_empty() { Err(()) } else { Ok(value) }
+}
+
+pub fn parse<'a, I>(arguments: I) -> Result<Config, getargs_derive::Error<'a>>
 where
     I: IntoIterator<Item = &'a str>,
 {
-    let mut options = getargs::Options::new(arguments.into_iter());
-    let arguments = Arguments::parse(&mut options).map_err(|error| error.to_string())?;
-
-    if arguments.gui && arguments.terminal {
-        return Err("--gui and --terminal cannot be used together".to_string());
-    }
-
-    if arguments.network && arguments.no_network {
-        return Err("--network and --no-network cannot be used together".to_string());
-    }
-
-    let (width, height) = arguments.resolution.split_once('x').ok_or_else(|| {
-        "--resolution must be in WIDTHxHEIGHT form (for example, 800x600)".to_string()
-    })?;
-    let width = width
-        .parse::<i16>()
-        .ok()
-        .filter(|value| *value > 0)
-        .ok_or_else(|| "--resolution width must be between 1 and 32767".to_string())?;
-    let height = height
-        .parse::<i16>()
-        .ok()
-        .filter(|value| *value > 0)
-        .ok_or_else(|| "--resolution height must be between 1 and 32767".to_string())?;
-
-    if arguments.disk_size < MINIMUM_DISK_SIZE {
-        return Err(format!(
-            "--disk-size must be at least {MINIMUM_DISK_SIZE} bytes for the MBR and filesystem"
-        ));
-    }
-
-    if arguments.interface_name.is_empty() {
-        return Err("--interface-name cannot be empty".to_string());
-    }
+    let arguments = Arguments::from_args(arguments.into_iter())?;
 
     Ok(Config {
-        interface: if arguments.terminal {
-            InterfaceMode::Terminal
-        } else {
+        interface: if arguments.gui || !arguments.terminal {
             InterfaceMode::Graphical
+        } else {
+            InterfaceMode::Terminal
         },
-        networking: !arguments.no_network,
-        resolution: (width, height),
+        networking: arguments.network || !arguments.no_network,
+        resolution: arguments.resolution,
         disk_path: arguments.disk_path.to_string(),
         disk_size: arguments.disk_size,
         interface_name: arguments.interface_name.to_string(),
     })
 }
-
-pub const HELP: &str = "Usage: native_example [OPTIONS]\n\
-Run the Xila native example. Defaults preserve the current setup.\n\
-\n\
-Options:\n\
-  -g, --gui                    Use the graphical interface (default)\n\
-  -t, --terminal               Use the terminal interface\n\
-  -n, --network                Enable networking (default)\n\
-  -N, --no-network             Disable networking\n\
-  -r, --resolution WIDTHxHEIGHT\n\
-                               Display resolution (default: 800x600)\n\
-  -p, --disk-path PATH         Backing disk image (default: ./drive.img)\n\
-  -s, --disk-size BYTES        Capacity in bytes (default: 16777216; minimum: 1049600)\n\
-  -i, --interface-name NAME    Host TUN/TAP interface (default: xila0)\n\
-  -h, --help                   Show this help\n";
 
 #[cfg(test)]
 mod tests {
@@ -148,9 +136,18 @@ mod tests {
     }
 
     #[test]
+    fn preserves_hyphen_prefixed_string_option_values() {
+        let config = parse(["--disk-path", "-drive.img", "--interface-name", "-xila0"]).unwrap();
+        assert_eq!(config.disk_path, "-drive.img");
+        assert_eq!(config.interface_name, "-xila0");
+    }
+
+    #[test]
     fn rejects_conflicting_modes() {
         assert!(parse(["--terminal", "--gui"]).is_err());
         assert!(parse(["--network", "--no-network"]).is_err());
+        assert!(parse(["--gui", "--terminal"]).is_err());
+        assert!(parse(["--no-network", "--network"]).is_err());
     }
 
     #[test]
@@ -164,5 +161,62 @@ mod tests {
         assert!(parse(["--disk-size", &minimum]).is_ok());
         assert!(parse(["--interface-name", ""]).is_err());
         assert!(parse(["--unknown"]).is_err());
+    }
+
+    #[test]
+    fn generated_help_and_version_are_information_requests() {
+        for flag in ["--help", "-h", "--version", "-V"] {
+            let error = parse([flag]).err().unwrap();
+            assert!(error.is_help() || error.is_version());
+            assert!(error.to_string().contains("native_example"));
+        }
+    }
+
+    #[test]
+    fn malformed_values_are_borrowed_parser_errors() {
+        let value = String::from("not-a-resolution");
+        let error = parse(["--resolution", value.as_str()]).err().unwrap();
+        assert!(
+            matches!(error, getargs_derive::Error::InvalidValue { value: actual, .. }
+            if actual.as_ptr() == value.as_ptr())
+        );
+    }
+
+    #[test]
+    fn parser_relations_and_ranges_report_the_offending_options() {
+        let error = parse(["--gui", "--terminal"]).err().unwrap();
+        assert!(matches!(
+            error,
+            getargs_derive::Error::ArgumentConflict { .. }
+        ));
+        let error = parse(["--disk-size", "1"]).err().unwrap();
+        assert!(matches!(
+            error,
+            getargs_derive::Error::ValueOutOfRange { value: "1", .. }
+        ));
+    }
+
+    #[test]
+    fn disk_size_error_reports_the_numeric_minimum() {
+        let value = String::from("1");
+        let error = parse(["--disk-size", value.as_str()]).err().unwrap();
+        assert_eq!(
+            error.to_string(),
+            "invalid value '1' for '--disk-size <BYTES>': 1 is not in 1049600.."
+        );
+        assert!(
+            matches!(error, getargs_derive::Error::ValueOutOfRange { value: actual, .. }
+            if actual.as_ptr() == value.as_ptr())
+        );
+    }
+
+    #[test]
+    fn suggests_misspelled_resolution_option() {
+        let error = parse(["--resoluton", "800x600"]).err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("similar argument exists: '--resolution'")
+        );
     }
 }

@@ -32,7 +32,7 @@ define_wasi_module! {
     fn fd_readdir(caller: Caller<GlobalStore>, fd: i32, buf_ptr: WasmUsize, buf_len: WasmUsize, cookie: u64, nread_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             {
                 let guest = borrow_memory(&memory, &mut caller);
                 guest.validate_slice(GuestSlice::<u8>::new(buf_ptr, buf_len)).ok_or(Error::Fault)?;

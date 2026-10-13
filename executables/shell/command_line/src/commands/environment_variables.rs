@@ -15,7 +15,7 @@ impl UserCommand for SetEnvironmentVariableCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -30,7 +30,7 @@ impl UserCommand for RemoveEnvironmentVariableCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -45,7 +45,7 @@ impl UserCommand for PrintEnvironmentVariableCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -55,25 +55,31 @@ impl UserCommand for PrintEnvironmentVariableCommand {
 }
 
 #[derive(GetArgs)]
+#[command(
+    name = "export",
+    about = "Set an environment variable using NAME=VALUE."
+)]
 struct SetEnvironmentVariableArguments<'a> {
     argument: &'a str,
 }
 
 #[derive(GetArgs)]
+#[command(name = "unset", about = "Remove an environment variable.")]
 struct RemoveEnvironmentVariableArguments<'a> {
     name: &'a str,
 }
 
 #[derive(GetArgs)]
+#[command(name = "printenv", about = "Print one or all environment variables.")]
 struct GetEnvironmentVariableArguments<'a> {
-    #[arg(positional, default = "")]
+    #[arg(default_value = "")]
     key: &'a str,
 }
 
 async fn execute_set_environment_variable<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
@@ -94,7 +100,7 @@ where
 async fn execute_remove_environment_variable<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
@@ -113,7 +119,7 @@ where
 async fn execute_print_environment_variable<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

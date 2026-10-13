@@ -6,7 +6,6 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    InvalidArgument(getargs_derive::Error),
     Wasm(wasmi::Error),
     Linker(wasmi::errors::LinkerError),
     Runtime(i32),

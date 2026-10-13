@@ -23,7 +23,7 @@ impl From<Error> for CombinedError {
 macro_rules! wrap_function {
     ($body:expr) => {{
         // Evaluates $body directly inside a try-block pattern
-        let result: Result<(), crate::host::wasi::error::CombinedError> = (|| $body)();
+        let result: crate::host::wasi::error::CombinedResult<()> = (|| $body)();
 
         match result {
             Ok(()) => Ok(0),

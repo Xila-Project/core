@@ -95,7 +95,7 @@ define_wasi_module! {
             let (task_id, directory) = base_path(&caller, fd)?;
             let relative = core::str::from_utf8(&path_bytes).map_err(|_| Error::Ilseq)?;
             let absolute_path = resolve_guest_path(&directory, relative)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let opened_fd_out = GuestPointer::<i32>::new(opened_fd_ptr);
             borrow_memory(&memory, &mut caller).validate_pointer(opened_fd_out).ok_or(Error::Fault)?;
             let read = (rights_base & 2) != 0;
@@ -127,7 +127,7 @@ define_wasi_module! {
             let absolute_path = resolve_guest_path(&directory, relative)?;
             let stats = task::block_on(caller.data().context.virtual_file_system.get_statistics(&absolute_path)).map_err(vfs_error)?;
             let filestat = make_filestat(&stats);
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             borrow_memory(&memory, &mut caller).write(GuestPointer::new(buf_ptr), filestat).ok_or(Error::Fault)?;
             Ok(())
         })

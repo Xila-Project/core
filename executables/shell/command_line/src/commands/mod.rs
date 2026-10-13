@@ -74,7 +74,7 @@ pub trait UserCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext;
@@ -139,12 +139,12 @@ pub async fn dispatch_user_command<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
     paths: &[&Path],
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,
 {
-    match kind {
+    let result = match kind {
         UserCommandKind::Exit => ExitCommand.execute(context, options, paths).await,
         UserCommandKind::ChangeDirectory => {
             ChangeDirectoryCommand
@@ -195,6 +195,14 @@ where
         UserCommandKind::WordCount => WordCountCommand.execute(context, options, paths).await,
         UserCommandKind::Head => HeadCommand.execute(context, options, paths).await,
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
+    };
+
+    match result {
+        Err(crate::Error::ArgumentParsing(error)) if error.is_help() || error.is_version() => {
+            context.write_out_fmt(format_args!("{error}\n"))?;
+            Ok(())
+        }
+        result => result,
     }
 }
 
@@ -212,6 +220,89 @@ where
 #[cfg(test)]
 mod tests {
     use super::{UserCommandKind, resolve_user_command};
+
+    struct HelpContext {
+        output: alloc::string::String,
+    }
+
+    impl super::CommandContext for HelpContext {
+        fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
+            panic!("help must not access OS services")
+        }
+        fn task_id(&self) -> xila::task::TaskIdentifier {
+            panic!("help must not access the current task")
+        }
+        fn current_directory(&self) -> &xila::file_system::Path {
+            panic!("help must not access the filesystem")
+        }
+        fn set_current_directory(&mut self, _: xila::file_system::PathOwned) {
+            panic!("help must not change directory")
+        }
+        fn stop(&mut self) {
+            panic!("exit --help must not stop the shell")
+        }
+        fn write_out_fmt(&mut self, arguments: core::fmt::Arguments<'_>) -> crate::Result<()> {
+            use core::fmt::Write;
+            self.output.write_fmt(arguments).map_err(Into::into)
+        }
+        async fn write_out(&mut self, _: &[u8]) {
+            panic!("unexpected byte output")
+        }
+        async fn write_out_line(&mut self, _: &[u8]) {
+            panic!("unexpected line output")
+        }
+        fn standard(&mut self) -> &mut xila::executable::Standard<'static> {
+            panic!("help must not write to stderr")
+        }
+    }
+
+    #[test]
+    fn builtin_help_is_successful_output_without_side_effects() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+
+        for (name, kind) in [
+            ("head", UserCommandKind::Head),
+            ("exit", UserCommandKind::Exit),
+            ("ping", UserCommandKind::Ping),
+            ("ls", UserCommandKind::List),
+            ("tail", UserCommandKind::Tail),
+            ("wc", UserCommandKind::WordCount),
+            ("cd", UserCommandKind::ChangeDirectory),
+            ("clear", UserCommandKind::Clear),
+            ("mkdir", UserCommandKind::CreateDirectory),
+            ("rm", UserCommandKind::RemoveFile),
+            ("rmdir", UserCommandKind::RemoveDirectory),
+            ("stat", UserCommandKind::Statistics),
+            ("export", UserCommandKind::SetEnvironmentVariable),
+            ("unset", UserCommandKind::RemoveEnvironmentVariable),
+            ("printenv", UserCommandKind::PrintEnvironmentVariable),
+            ("which", UserCommandKind::Which),
+            ("dns_resolve", UserCommandKind::DnsResolve),
+            ("ip", UserCommandKind::Ip),
+        ] {
+            let mut context = HelpContext {
+                output: alloc::string::String::new(),
+            };
+            let mut options = getargs::Options::new(["--help"].into_iter());
+            {
+                let mut future = core::pin::pin!(super::dispatch_user_command(
+                    kind,
+                    &mut context,
+                    &mut options,
+                    &[]
+                ));
+                let mut task_context = Context::from_waker(Waker::noop());
+                assert!(matches!(
+                    future.as_mut().poll(&mut task_context),
+                    Poll::Ready(Ok(()))
+                ));
+            }
+            assert!(context.output.contains(&alloc::format!("Usage: {name}")));
+        }
+    }
 
     #[test]
     fn resolves_all_supported_user_commands() {
