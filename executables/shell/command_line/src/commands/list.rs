@@ -18,7 +18,7 @@ impl UserCommand for ListCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -28,11 +28,27 @@ impl UserCommand for ListCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "ls", about = "List a directory.")]
 struct ListArguments<'a> {
-    #[arg(positional, default = "")]
+    #[arg(default_value = "")]
     path: &'a str,
-    #[arg(flag, short = 'l', long = "long")]
+    #[arg(short = 'l', long = "long")]
     long: bool,
+}
+
+#[cfg(test)]
+mod parser_tests {
+    use super::ListArguments;
+
+    #[test]
+    fn optional_path_and_long_flag_keep_their_defaults() {
+        let parsed = ListArguments::from_args([].into_iter()).unwrap();
+        assert_eq!(parsed.path, "");
+        assert!(!parsed.long);
+        let parsed = ListArguments::from_args(["-l", "/"].into_iter()).unwrap();
+        assert_eq!(parsed.path, "/");
+        assert!(parsed.long);
+    }
 }
 
 fn resolve_list_path<C: CommandContext>(context: &C, path: &str) -> xila::file_system::PathOwned {
@@ -98,7 +114,7 @@ async fn write_long_entry<C: CommandContext>(
 async fn execute_list<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

@@ -85,8 +85,8 @@ pub struct Context<'a> {
 /// ```rust
 /// use authentication::load_all_users_and_groups;
 ///
-/// async fn example() -> Result<(), authentication::Error> {
-///     load_all_users_and_groups().await?;
+/// async fn example(context: &authentication::Context<'_>) -> Result<(), authentication::Error> {
+///     load_all_users_and_groups(context).await?;
 ///     Ok(())
 /// }
 /// ```

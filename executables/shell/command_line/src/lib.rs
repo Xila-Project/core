@@ -130,7 +130,7 @@ impl Shell {
             None => return Ok(()),
         };
 
-        let result = match resolve_user_command(next_positional) {
+        let result: Result<(), Error<'a>> = match resolve_user_command(next_positional) {
             Some(user_command) => {
                 let mut context = ShellCommandContext::new(self);
                 dispatch_user_command(user_command, &mut context, &mut options, paths).await

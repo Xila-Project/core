@@ -13,7 +13,7 @@ impl UserCommand for EchoCommand {
         context: &mut C,
         arguments: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,

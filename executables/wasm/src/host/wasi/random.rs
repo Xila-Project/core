@@ -22,7 +22,7 @@ define_wasi_module! {
     ) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             borrow_memory(&memory, &mut caller)
                 .validate_slice(GuestSlice::<u8>::new(buf_ptr, buf_len)).ok_or(Error::Fault)?;
             let mut random_bytes = alloc::vec![0; usize::try_from(buf_len).map_err(|_| Error::Fault)?];

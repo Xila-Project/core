@@ -24,14 +24,92 @@ const DEFAULT_STACK_SIZE: usize = 4096;
 const START_FUNCTION_NAME: &str = "_start";
 const INSTALL_FUNCTION_NAME: &str = "__install";
 
+#[cfg(test)]
+mod parser_tests {
+    use super::WasmArguments;
+    use alloc::string::ToString;
+
+    #[test]
+    fn defaults_and_install_flag_preserve_existing_behavior() {
+        let parsed = WasmArguments::from_args(["app.wasm"].into_iter()).unwrap();
+        assert_eq!(parsed.path, "app.wasm");
+        assert!(!parsed.install);
+        assert_eq!(parsed.stack_size, 4096);
+        assert_eq!(parsed.instruction_limit.get(), 100_000);
+        let parsed = WasmArguments::from_args(["--install", "app.wasm"].into_iter()).unwrap();
+        assert!(parsed.install);
+    }
+
+    #[test]
+    fn preserves_named_limits_and_inferred_short_flags() {
+        for stack in ["--stack-size", "-s"] {
+            let parsed = WasmArguments::from_args(
+                [stack, "8192", "--instruction-limit", "42", "app.wasm"].into_iter(),
+            )
+            .unwrap();
+            assert_eq!(parsed.stack_size, 8192);
+            assert_eq!(parsed.instruction_limit.get(), 42);
+        }
+        let parsed = WasmArguments::from_args(["-i", "app.wasm"].into_iter()).unwrap();
+        assert!(parsed.install);
+    }
+
+    #[test]
+    fn rejects_invalid_instruction_limit() {
+        for value in ["0", "many", "4294967296"] {
+            let error =
+                WasmArguments::from_args(["--instruction-limit", value, "app.wasm"].into_iter())
+                    .err()
+                    .unwrap();
+            assert!(
+                matches!(error, getargs_derive::Error::InvalidValue { value: actual, .. } if actual == value)
+            );
+        }
+    }
+
+    #[test]
+    fn generated_help_and_version_do_not_require_a_path() {
+        let error = WasmArguments::from_args(["--help"].into_iter())
+            .err()
+            .unwrap();
+        assert!(error.is_help());
+        assert!(error.to_string().contains("Usage: wasm"));
+        let error = WasmArguments::from_args(["--version"].into_iter())
+            .err()
+            .unwrap();
+        assert!(error.is_version());
+    }
+
+    #[test]
+    fn misspelled_install_gets_a_suggestion() {
+        let error = WasmArguments::from_args(["--instal", "app.wasm"].into_iter())
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("similar argument exists: '--install'")
+        );
+    }
+}
+
 #[derive(GetArgs)]
+#[command(
+    name = "wasm",
+    about = "Run or install a WebAssembly executable.",
+    version
+)]
 struct WasmArguments<'a> {
+    /// Path to the executable in the Xila filesystem.
     path: &'a str,
-    #[arg(flag)]
+    /// Run the install entry point instead of the main entry point.
+    #[arg(short = 'i', long)]
     install: bool,
-    #[arg(default = DEFAULT_STACK_SIZE)]
+    /// Legacy stack-size setting; currently managed by wasmi rather than applied here.
+    #[arg(short = 's', long, default_value_t = DEFAULT_STACK_SIZE)]
     stack_size: usize,
-    #[arg(default = NonZeroU32::new(100_000).unwrap())]
+    /// Maximum number of instructions per execution slice.
+    #[arg(long, default_value_t = NonZeroU32::new(100_000).unwrap())]
     instruction_limit: NonZeroU32,
 }
 
@@ -41,6 +119,10 @@ pub async fn main(
 ) -> core::result::Result<(), NonZeroUsize> {
     let arguments = match WasmArguments::from_args(arguments.iter().map(|s| s.as_str())) {
         Ok(args) => args,
+        Err(error) if error.is_help() || error.is_version() => {
+            writeln!(standard.out(), "{error}").ok();
+            return Ok(());
+        }
         Err(e) => {
             writeln!(standard.error(), "Error parsing arguments: {}", e).unwrap();
             return Err(NonZeroUsize::new(1).unwrap());
@@ -82,7 +164,7 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
     let WasmArguments {
         path,
         install,
-        stack_size: _,
+        stack_size: _stack_size,
         instruction_limit,
     } = arguments;
 

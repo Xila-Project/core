@@ -14,7 +14,7 @@ impl UserCommand for ExitCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -24,9 +24,13 @@ impl UserCommand for ExitCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "exit", about = "Exit the shell.")]
 struct ExitArguments {}
 
-fn execute_exit<'a, I, C>(context: &mut C, options: &mut Options<&'a str, I>) -> Result<()>
+fn execute_exit<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

@@ -15,7 +15,7 @@ impl UserCommand for WhichCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -25,6 +25,7 @@ impl UserCommand for WhichCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "which", about = "Find an executable.")]
 struct WhichArguments<'a> {
     command: &'a str,
 }
@@ -71,7 +72,7 @@ async fn execute_which<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
     paths: &[&Path],
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

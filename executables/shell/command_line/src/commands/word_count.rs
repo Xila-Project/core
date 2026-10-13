@@ -16,7 +16,7 @@ impl UserCommand for WordCountCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -26,16 +26,17 @@ impl UserCommand for WordCountCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "wc", about = "Count characters, words and lines.")]
 struct WordCountArguments<'a> {
-    #[arg(positional, default = "")]
+    #[arg(default_value = "")]
     path: &'a str,
-    #[arg(flag, short = 'c', long = "characters", default = false)]
+    #[arg(short = 'c', long = "characters")]
     characters: bool,
-    #[arg(flag, short = 'w', long = "words", default = false)]
+    #[arg(short = 'w', long = "words")]
     words: bool,
-    #[arg(flag, short = 'l', long = "lines", default = false)]
+    #[arg(short = 'l', long = "lines")]
     lines: bool,
-    #[arg(flag, short = 'L', long = "longest-line", default = false)]
+    #[arg(short = 'L', long = "longest-line")]
     longest_line: bool,
 }
 
@@ -154,7 +155,7 @@ fn write_counts<C: CommandContext>(
 async fn execute_word_count<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

@@ -22,7 +22,7 @@ define_wasi_module! {
     fn fd_read(caller: Caller<GlobalStore>, fd: i32, iovs: WasmUsize, iovs_len: WasmUsize, nread_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let (vectors, nread_offset) = {
                 let guest = borrow_memory(&memory, &mut caller);
                 guest.validate_pointer(GuestPointer::<WasmUsize>::new(nread_ptr)).ok_or(Error::Fault)?;
@@ -65,7 +65,7 @@ define_wasi_module! {
     fn fd_write(caller: Caller<GlobalStore>, fd: i32, iovs: WasmUsize, iovs_len: WasmUsize, nwritten_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let (buffers, nwritten_offset) = {
                 let guest = borrow_memory(&memory, &mut caller);
                 guest.validate_pointer(GuestPointer::<WasmUsize>::new(nwritten_ptr)).ok_or(Error::Fault)?;
@@ -111,7 +111,7 @@ define_wasi_module! {
     fn fd_seek(caller: Caller<GlobalStore>, fd: i32, offset: i64, whence: i32, newoffset_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let position = match whence { 0 if offset >= 0 => Position::Start(offset as u64), 0 => Err(Error::Inval)?, 1 => Position::Current(offset), 2 => Position::End(offset), _ => Err(Error::Inval)? };
             let is_directory = caller.data().wasi.is_directory(fd as u32);
             let new_position = match caller.data_mut().wasi.get_synchronous_file(fd as u32) {
@@ -127,7 +127,7 @@ define_wasi_module! {
     fn fd_fdstat_get(caller: Caller<GlobalStore>, fd: i32, stat_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let filetype = caller.data_mut().wasi.get_file_system_item(fd as u32).ok_or(Error::Badf)?.file_type();
             borrow_memory(&memory, &mut caller).write(GuestPointer::new(stat_ptr),
                 Fdstat { filetype, flags: 0, rights_base: u64::MAX, rights_inheriting: u64::MAX }).ok_or(Error::Fault)?;
@@ -138,7 +138,7 @@ define_wasi_module! {
     fn fd_filestat_get(caller: Caller<GlobalStore>, fd: i32, stat_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let (filetype, metadata) = {
                 let item = caller.data_mut().wasi.get_file_system_item(fd as u32).ok_or(Error::Badf)?;
                 let filetype = item.file_type();
@@ -158,7 +158,7 @@ define_wasi_module! {
         wrap_function!({
             let mut caller = caller;
             let name_len = u32::try_from(caller.data().wasi.prestats.get(fd.saturating_sub(3) as usize).filter(|_| fd >= 3).ok_or(Error::Badf)?.name.len()).map_err(|_| Error::Overflow)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             borrow_memory(&memory, &mut caller).write(GuestPointer::new(prestat_ptr),
                 PrestatAbi { tag: 0, dir: PrestatDir { pr_name_len: name_len } }).ok_or(Error::Fault)?;
             Ok(())
@@ -170,7 +170,7 @@ define_wasi_module! {
             let name = caller.data().wasi.prestats.get(fd.saturating_sub(3) as usize).filter(|_| fd >= 3).ok_or(Error::Badf)?.name.clone();
             if name.len() > path_len as usize { return Err(Error::Nametoolong.into()); }
             let mut caller = caller;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             borrow_memory(&memory, &mut caller).bytes_mut(GuestSlice::new(path_ptr, path_len))
                 .ok_or(Error::Fault)?[..name.len()].copy_from_slice(&name);
             Ok(())

@@ -10,7 +10,7 @@ impl UserCommand for PrintWorkingDirectoryCommand {
         context: &mut C,
         _options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> crate::Result<()>
+    ) -> crate::Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,

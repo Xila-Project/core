@@ -8,6 +8,7 @@ macro_rules! define_wasi_module {
     ) => {
         // 1. Generate the actual functions
         $(
+            #[allow(clippy::too_many_arguments, reason = "WASI ABI signatures define the parameter count")]
             pub fn $fn_name ( $($arg : $arg_ty),* ) -> $ret {
                 xila::log::trace!("WASI: {}", stringify!($fn_name));
                 $body

@@ -18,7 +18,7 @@ impl UserCommand for StatisticsCommand {
         context: &mut C,
         options: &mut Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> Result<()>
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -28,6 +28,7 @@ impl UserCommand for StatisticsCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "stat", about = "Show file metadata.")]
 struct StatisticsArguments<'a> {
     path: &'a str,
 }
@@ -123,7 +124,7 @@ fn format_statistics(
 async fn execute_statistics<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
-) -> Result<()>
+) -> Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

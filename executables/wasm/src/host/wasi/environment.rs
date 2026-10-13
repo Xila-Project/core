@@ -32,7 +32,7 @@ define_wasi_module! {
             let mut caller = caller;
             let args = caller.data().wasi.arguments.clone();
             let (_, total) = count_arguments_sizes(&args)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let mut guest = borrow_memory(&memory, &mut caller);
             let pointer_table = GuestSlice::<WasmAdress>::new(argv, args.len() as WasmUsize);
             let output = GuestSlice::new(argv_buf, total);
@@ -59,7 +59,7 @@ define_wasi_module! {
         wrap_function!({
             let mut caller = caller;
             let sizes = count_arguments_sizes(&caller.data().wasi.arguments)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let mut guest = borrow_memory(&memory, &mut caller);
             let argc = GuestPointer::<WasmUsize>::new(argc_ptr);
             let size = GuestPointer::<WasmUsize>::new(argv_buf_size_ptr);
@@ -86,7 +86,7 @@ define_wasi_module! {
             }
             let buf_len = encoded.iter().try_fold(0usize, |n, v| n.checked_add(v.len())).ok_or(Error::Overflow)?;
             let buf_len = WasmUsize::try_from(buf_len).map_err(|_| Error::Overflow)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let mut guest = borrow_memory(&memory, &mut caller);
             let table = GuestSlice::<WasmAdress>::new(environ, encoded.len() as WasmUsize);
             let out = GuestSlice::new(environ_buf, buf_len);
@@ -114,7 +114,7 @@ define_wasi_module! {
             let count = WasmUsize::try_from(vars.len()).map_err(|_| Error::Overflow)?;
             let size = vars.iter().try_fold(0usize, |n, (name, value)| n.checked_add(name.len() + value.len() + 2)).ok_or(Error::Overflow)?;
             let size = WasmUsize::try_from(size).map_err(|_| Error::Overflow)?;
-            let memory = get_memory(&mut caller).ok_or(Error::Fault)?;
+            let memory = get_memory(&caller).ok_or(Error::Fault)?;
             let mut guest = borrow_memory(&memory, &mut caller);
             let count_out = GuestPointer::<WasmUsize>::new(count_ptr);
             let size_out = GuestPointer::<WasmUsize>::new(size_ptr);

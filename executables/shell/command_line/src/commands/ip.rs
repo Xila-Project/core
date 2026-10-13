@@ -17,7 +17,7 @@ impl UserCommand for IpCommand {
         context: &mut C,
         options: &mut getargs::Options<&'a str, I>,
         _paths: &[&Path],
-    ) -> crate::Result<()>
+    ) -> crate::Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
         C: CommandContext,
@@ -27,6 +27,7 @@ impl UserCommand for IpCommand {
 }
 
 #[derive(GetArgs)]
+#[command(name = "ip", about = "Show network addresses or routes.")]
 struct IpArguments<'a> {
     command: &'a str,
 }
@@ -187,7 +188,7 @@ async fn show_address<C: CommandContext>(
 async fn execute_ip<'a, I, C>(
     context: &mut C,
     options: &mut getargs::Options<&'a str, I>,
-) -> crate::Result<()>
+) -> crate::Result<(), crate::Error<'a>>
 where
     I: Iterator<Item = &'a str>,
     C: CommandContext,

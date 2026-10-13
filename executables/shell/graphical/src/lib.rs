@@ -24,8 +24,10 @@ use xila::graphics;
 use xila::task;
 
 #[derive(GetArgs)]
+#[command(name = "graphical_shell", about = "Run the graphical shell.", version)]
 struct GraphicalShellArguments {
-    #[arg(flag, short = 'k', long = "show-keyboard")]
+    /// Show the on-screen keyboard.
+    #[arg(short = 'k', long = "show-keyboard")]
     show_keyboard: bool,
 }
 
@@ -33,15 +35,18 @@ pub async fn main(
     mut standard: Standard<'static>,
     arguments: Vec<String>,
 ) -> Result<(), NonZeroUsize> {
-    let arguments = arguments.iter().map(|s| s.as_str());
-
-    let mut options = getargs::Options::new(arguments);
-
-    let GraphicalShellArguments { show_keyboard } = GraphicalShellArguments::parse(&mut options)
-        .map_err(|e| {
-            writeln!(standard.error(), "{}", e).ok();
-            NonZeroUsize::new(1).unwrap()
-        })?;
+    let GraphicalShellArguments { show_keyboard } =
+        match GraphicalShellArguments::from_args(arguments.iter().map(String::as_str)) {
+            Ok(arguments) => arguments,
+            Err(error) if error.is_help() || error.is_version() => {
+                writeln!(standard.out(), "{error}").ok();
+                return Ok(());
+            }
+            Err(error) => {
+                writeln!(standard.error(), "{error}").ok();
+                return Err(NonZeroUsize::new(1).unwrap());
+            }
+        };
 
     Shell::new(standard, show_keyboard).await.main().await
 }
@@ -147,5 +152,23 @@ mod tests {
 
         assert!(parsed.is_ok());
         assert!(parsed.unwrap().show_keyboard);
+    }
+
+    #[test]
+    fn keyboard_is_hidden_by_default() {
+        let parsed = GraphicalShellArguments::from_args([].into_iter()).unwrap();
+        assert!(!parsed.show_keyboard);
+    }
+
+    #[test]
+    fn help_and_version_are_information_requests() {
+        for argument in ["--help", "-h", "--version", "-V"] {
+            let error = GraphicalShellArguments::from_args([argument].into_iter())
+                .err()
+                .unwrap();
+            assert!(error.is_help() || error.is_version());
+        }
+        assert!(GraphicalShellArguments::HELP.contains("Usage: graphical_shell"));
+        assert!(GraphicalShellArguments::HELP.contains("--show-keyboard"));
     }
 }
