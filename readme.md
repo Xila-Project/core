@@ -10,11 +10,16 @@ This repository contains the core of Xila. It contains the code for xila's core 
 
 ## 🛠️ Build
 
+For an optional Devbox environment with pinned tools and host display access, see
+[the local development guide](development/README.md). Manual setup below remains
+supported. CI uses the same pinned Devbox tools and setup script.
+
 ### ✅ Requirements
 
 Please install the following dependencies to build core:
 
 - `gcc-multilib`: for cross-compilation purposes.
+- `clang`, `libclang-dev`, and `mold`: for native linking and generated C bindings.
 - [`cargo-make`](https://github.com/sagiegurari/cargo-make): to build the project with `cargo`.
 - `nodejs`: to generate fonts for LVGL ([lv_font_conv](https://github.com/lvgl/lv_font_conv)).
 - `wasm32-wasip1` Rust target: to compile xila virtual machine executables.
@@ -36,6 +41,7 @@ git clone https://github.com/Xila-Project/Core.git
 
 ```bash
 cd Core
+npm ci
 ```
 
 3. Run one of the examples:

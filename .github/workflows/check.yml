@@ -12,6 +12,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+defaults:
+  run:
+    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -45,6 +49,9 @@ jobs:
               - '**/rust-toolchain{,.toml}'
               - '.github/workflows/**'
               - '.github/actions/**'
+              - 'devbox.{json,lock}'
+              - '.devbox-version'
+              - 'development/**'
               - 'package{,-lock}.json'
               - '**/.{gitignore,editorconfig,npmrc}'
               - '**/{.,}taplo.toml'
@@ -96,12 +103,12 @@ jobs:
 
       - name: Setup | Coverage and Miri components
         run: |
-          rustup component add --toolchain stable llvm-tools-preview
-          rustup component add --toolchain nightly miri rust-src
+          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
+          rustup component add --toolchain "$XILA_NIGHTLY_TOOLCHAIN" miri rust-src
 
       - name: Check | Translation coverage
         run: >-
-          cargo +stable llvm-cov
+          cargo +${XILA_RUST_TOOLCHAIN} llvm-cov
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
           --ignore-filename-regex '(tests\.rs|tests/translation/src/lib\.rs)$'
@@ -109,20 +116,20 @@ jobs:
 
       - name: Check | Translation Miri
         run: >-
-          cargo +nightly miri test
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | Borrowing compile-fail doctests
         run: >-
-          cargo +stable test --doc
+          cargo +${XILA_RUST_TOOLCHAIN} test --doc
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | 64-bit guest on 32-bit host (Miri)
         if: matrix.memory == 'memory_64'
         run: >-
-          cargo +nightly miri test
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_64
           --target i686-unknown-linux-gnu
@@ -130,7 +137,7 @@ jobs:
       - name: Check | Little-endian ABI on big-endian host (Miri)
         if: matrix.memory == 'memory_32'
         run: >-
-          cargo +nightly miri test
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_32
           --target powerpc-unknown-linux-gnu
@@ -147,11 +154,6 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
-
-      - name: Setup | Install cargo-taplo
-        uses: taiki-e/install-action@v2
-        with:
-          tool: taplo-cli@0.9.3
 
       - name: Check | Formatting (TOML)
         run: cargo make format-toml --check
@@ -181,7 +183,7 @@ jobs:
         run: cargo make clippy-host
 
       - name: Check | Clippy (Host - Wasmi)
-        run: cargo +stable clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
+        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
 
       - name: Check | Documentation (Host)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
@@ -190,7 +192,9 @@ jobs:
         run: cargo make build -p native_example
 
       - name: Run | Test
-        run: cargo make coverage --lcov --output-path lcov.info
+        run: |
+          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
+          cargo make coverage --lcov --output-path lcov.info
 
       - name: Upload | Coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -222,8 +226,7 @@ jobs:
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
       - name: Build | Calculator (WASI)
-        run: cargo +stable build -p calculator --target wasm32-wasip1 --release
+        run: cargo +${XILA_RUST_TOOLCHAIN} build -p calculator --target wasm32-wasip1 --release
 
       - name: Build | Example (WASM)
-        working-directory: ./examples/wasm
-        run: trunk build
+        run: cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build

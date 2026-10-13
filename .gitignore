@@ -9,6 +9,8 @@ Cargo.lock
 *.generated.c
 
 node_modules
+/.dev-environment/
+/.devbox/
 
 # Local agent planning/design documents; never commit them.
 /docs/superpowers/

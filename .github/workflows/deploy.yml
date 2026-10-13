@@ -1,5 +1,5 @@
 name: Deploy
-description: Build and deploy documentation and demonstration to Github Pages
+# Build and deploy documentation and demonstrations to GitHub Pages.
 
 on:
   push:
@@ -14,6 +14,10 @@ permissions:
 concurrency:
   group: "pages"
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
 
 jobs:
   build:
@@ -38,26 +42,24 @@ jobs:
           cp -r ./target/wasm32-unknown-unknown/doc/* ./pages/guest/
 
       - name: Build | WASM demonstration (en)
-        working-directory: ./examples/wasm
         env:
           EMBEDDED_I18N_LOCALE: en
         run: |
-          (cd ../../ && cargo make generate-fonts)
-          (cd ../../ && cargo +stable build -p calculator --target wasm32-wasip1 --release)
-          trunk build --release --public-url ./
-          mkdir -p ../../pages/demonstrations/wasm/en/
-          cp -r ./dist/* ../../pages/demonstrations/wasm/en/
+          cargo make generate-fonts
+          cargo build -p calculator --target wasm32-wasip1 --release
+          (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
+          mkdir -p pages/demonstrations/wasm/en/
+          cp -r examples/wasm/dist/* pages/demonstrations/wasm/en/
 
       - name: Build | WASM demonstration (fr)
-        working-directory: ./examples/wasm
         env:
           EMBEDDED_I18N_LOCALE: fr
         run: |
-          (cd ../../ && cargo make generate-fonts)
-          (cd ../../ && cargo +stable build -p calculator --target wasm32-wasip1 --release)
-          trunk build --release --public-url ./
-          mkdir -p ../../pages/demonstrations/wasm/fr/
-          cp -r ./dist/* ../../pages/demonstrations/wasm/fr/
+          cargo make generate-fonts
+          cargo build -p calculator --target wasm32-wasip1 --release
+          (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
+          mkdir -p pages/demonstrations/wasm/fr/
+          cp -r examples/wasm/dist/* pages/demonstrations/wasm/fr/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

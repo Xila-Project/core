@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.18.4/.schema/devbox.schema.json",
+  "packages": [
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#nodejs_24",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#rustup",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#cargo-make",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#trunk",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#clang_multi",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#gcc_multi",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#llvmPackages.libclang.lib",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#glibc.dev",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#mold",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#pkg-config",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#cmake",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#ninja",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#wayland",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libxkbcommon",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libGL",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#vulkan-loader",
+    "github:NixOS/nixpkgs/ac62194c3917d5f474c1a844b6fd6da2db95077d#taplo",
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#cargo-llvm-cov"
+  ],
+  "nixpkgs": {
+    "commit": "7fd4004d0511991fff3a0524856a9be09e28c5f0"
+  },
+  "shell": {
+    "init_hook": [". ./development/activate.sh"],
+    "scripts": {
+      "setup": "bash development/setup.sh",
+      "check": "cargo make check",
+      "gui": "cargo make run -p native_example"
+    }
+  }
+}
