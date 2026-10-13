@@ -38,4 +38,4 @@ runs:
     - name: Setup | Rust build cache
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ hashFiles('development/toolchains.env', 'development/activate.sh', 'devbox.lock') }}
+        key: ${{ hashFiles('development/toolchains.env', 'devbox.json', 'devbox.lock') }}

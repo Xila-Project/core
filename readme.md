@@ -55,14 +55,13 @@ Devbox provides a native shell and JSON configuration. Containers require GUI
 and device forwarding; mise leaves native dependencies to the OS; direct
 Nix/devenv adds Nix configuration to maintain. Versions live in `.devbox-version`
 (CLI), `devbox.json`/`devbox.lock` (native tools), `development/toolchains.env`
-(Rust) and `package-lock.json` (npm). CI uses these same sources and setup for
+(Rust versions/targets) and `package-lock.json` (npm). CI uses these same sources and setup for
 formatting, host/WASM, coverage, Miri and deployment. For local coverage/Miri,
 add `llvm-tools-preview` to the pinned stable toolchain and `miri` to the pinned
 nightly. Update the version sources together and repeat checks and GUI tests;
 tool pins do not freeze untracked Cargo lockfiles or moving Git dependencies.
 
-Manual workflows still work with the tools/targets from `devbox.json` and
-`development/setup.sh` installed separately, followed by `npm ci`; cargo-make
+Manual workflows still work with the tools/targets from `devbox.json` installed separately, followed by `npm ci`; cargo-make
 defaults to stable outside Devbox.
 
 ESP-IDF, flashing and serial permissions need separate setup: follow the esp-rs
