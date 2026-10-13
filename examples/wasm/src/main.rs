@@ -28,7 +28,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use xila::log;
     use xila::task;
     use xila::time::{self, Duration};
-    use xila::virtual_file_system::mount_static;
+    use xila::virtual_file_system::{File, mount_static};
     use xila::{authentication, graphics, users, virtual_file_system};
 
     console_error_panic_hook::set_once();
@@ -196,6 +196,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
         virtual_file_system,
         task,
         &[
+            (&"/binaries/wasm", wasm::WasmExecutable),
             (
                 &"/binaries/graphical_shell",
                 graphical_shell::ShellExecutable
@@ -239,6 +240,29 @@ async fn main(task_manager: &'static xila::task::Manager) {
     )
     .await
     .unwrap();
+
+    // Bundle Calculator and install its application-drawer shortcut.
+    File::write_to_path(
+        virtual_file_system,
+        task,
+        "/binaries/calculator",
+        include_bytes!("../../../target/wasm32-wasip1/release/calculator.wasm"),
+    )
+    .await
+    .unwrap();
+
+    let install_status = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec!["--install".to_string(), "/binaries/calculator".to_string()],
+        standard.duplicate().await.unwrap(),
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
+    assert_eq!(install_status, 0, "Failed to install bundled Calculator");
 
     // - - Load saved accounts, or create defaults only on a fresh disk.
     let authentication_context = authentication::Context {

@@ -221,6 +221,9 @@ jobs:
       - name: Check | Documentation (Guest)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
+      - name: Build | Calculator (WASI)
+        run: cargo +stable build -p calculator --target wasm32-wasip1 --release
+
       - name: Build | Example (WASM)
         working-directory: ./examples/wasm
         run: trunk build

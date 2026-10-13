@@ -15,6 +15,7 @@ xila = { path = "../../", features = [
 file_manager = { workspace = true }
 command_line_shell = { workspace = true }
 graphical_shell = { workspace = true }
+wasm = { workspace = true, features = ["host", "graphics"] }
 terminal = { workspace = true }
 settings = { workspace = true }
 console_error_panic_hook = "0.1"

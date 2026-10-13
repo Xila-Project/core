@@ -43,6 +43,7 @@ jobs:
           EMBEDDED_I18N_LOCALE: en
         run: |
           (cd ../../ && cargo make generate-fonts)
+          (cd ../../ && cargo +stable build -p calculator --target wasm32-wasip1 --release)
           trunk build --release --public-url ./
           mkdir -p ../../pages/demonstrations/wasm/en/
           cp -r ./dist/* ../../pages/demonstrations/wasm/en/
@@ -53,6 +54,7 @@ jobs:
           EMBEDDED_I18N_LOCALE: fr
         run: |
           (cd ../../ && cargo make generate-fonts)
+          (cd ../../ && cargo +stable build -p calculator --target wasm32-wasip1 --release)
           trunk build --release --public-url ./
           mkdir -p ../../pages/demonstrations/wasm/fr/
           cp -r ./dist/* ../../pages/demonstrations/wasm/fr/
