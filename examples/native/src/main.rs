@@ -1,3 +1,6 @@
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+mod cli;
+
 static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -35,6 +38,22 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use xila::virtual_file_system::File;
     use xila::virtual_file_system::mount_static;
 
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments
+        .iter()
+        .any(|argument| argument == "--help" || argument == "-h")
+    {
+        println!("{}", cli::HELP);
+        return;
+    }
+    let config = match cli::parse(arguments.iter().map(String::as_str)) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Invalid command-line arguments: {error}\nTry --help for usage.");
+            std::process::exit(2);
+        }
+    };
+
     // - Initialize the system
     log::initialize(&drivers_std::log::Logger).unwrap();
 
@@ -46,57 +65,64 @@ async fn main(task_manager: &'static xila::task::Manager) {
     ));
 
     let task = task_manager.get_current_task_identifier().await;
-    // - Initialize the graphics manager
-    // - - Initialize the graphics driver
-    const RESOLUTION: graphics::Point = graphics::Point::new(800, 600);
-    let (screen_device, pointer_device, keyboard_device, mut runner) =
-        drivers_native::window_screen::new(RESOLUTION)
-            .await
-            .unwrap();
-    let (screen_device, pointer_device, keyboard_device) = (
-        Box::leak(Box::new(screen_device)),
-        Box::leak(Box::new(pointer_device)),
-        Box::leak(Box::new(keyboard_device)),
-    );
+    // - Initialize graphics only when using the graphical interface.
+    let (graphics_manager, bootsplash): (Option<&'static graphics::Manager>, Option<Bootsplash>) =
+        if config.interface == cli::InterfaceMode::Graphical {
+            let resolution = graphics::Point::new(config.resolution.0, config.resolution.1);
+            let (screen_device, pointer_device, keyboard_device, mut runner) =
+                drivers_native::window_screen::new(resolution)
+                    .await
+                    .unwrap();
+            let (screen_device, pointer_device, keyboard_device) = (
+                Box::leak(Box::new(screen_device)),
+                Box::leak(Box::new(pointer_device)),
+                Box::leak(Box::new(keyboard_device)),
+            );
 
-    // - - Initialize the graphics manager
-    let graphics_manager = graphics::initialize(
-        time_manager,
-        screen_device,
-        pointer_device,
-        graphics::InputKind::Pointer,
-        graphics::get_minimal_buffer_size(&RESOLUTION),
-        true,
-    )
-    .await;
-    let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
-    graphics::set_ffi_manager(graphics_manager);
+            let graphics_manager = graphics::initialize(
+                time_manager,
+                screen_device,
+                pointer_device,
+                graphics::InputKind::Pointer,
+                graphics::get_minimal_buffer_size(&resolution),
+                true,
+            )
+            .await;
+            let graphics_manager: &'static graphics::Manager =
+                Box::leak(Box::new(graphics_manager));
+            graphics::set_ffi_manager(graphics_manager);
 
-    graphics_manager
-        .add_input_device(keyboard_device, graphics::InputKind::Keypad)
-        .await
-        .unwrap();
+            graphics_manager
+                .add_input_device(keyboard_device, graphics::InputKind::Keypad)
+                .await
+                .unwrap();
 
-    task_manager
-        .spawn(task, "Graphics", None, |_| {
-            graphics_manager.r#loop(task::Manager::sleep)
-        })
-        .await
-        .unwrap();
+            task_manager
+                .spawn(task, "Graphics", None, |_| {
+                    graphics_manager.r#loop(task::Manager::sleep)
+                })
+                .await
+                .unwrap();
 
-    task_manager
-        .spawn(task, "Event Loop", None, async move |_| {
-            runner.run().await;
-        })
-        .await
-        .unwrap();
+            task_manager
+                .spawn(task, "Event Loop", None, async move |_| {
+                    runner.run().await;
+                })
+                .await
+                .unwrap();
 
-    let bootsplash = Bootsplash::new(graphics_manager).await.unwrap();
+            let bootsplash = Bootsplash::new(graphics_manager).await.unwrap();
+            (Some(graphics_manager), Some(bootsplash))
+        } else {
+            (None, None)
+        };
 
     // - Initialize the file system
     // Create a memory device
-    let drive =
-        drivers_std::drive_file::FileDriveDevice::new_static(&"./drive.img", 16 * 1024 * 1024);
+    let drive = drivers_std::drive_file::FileDriveDevice::new_static(
+        &config.disk_path.as_str(),
+        config.disk_size,
+    );
     //let drive = file_system::MemoryDevice::<512>::new_static(16 * 1024 * 1024);
 
     // Create a partition type
@@ -202,36 +228,39 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    let (interface_device, controller_device) = drivers_std::tuntap::new("xila0", false, true)
-        .expect("Failed to create network interface.");
+    if config.networking {
+        let (interface_device, controller_device) =
+            drivers_std::tuntap::new(&config.interface_name, false, true)
+                .expect("Failed to create network interface.");
 
-    network_manager
-        .mount_interface(task, "tunnel0", interface_device, controller_device, None)
+        network_manager
+            .mount_interface(task, "tunnel0", interface_device, controller_device, None)
+            .await
+            .expect("Failed to mount network interface.");
+
+        let mut file = File::open(
+            virtual_file_system,
+            task,
+            "/devices/network/tunnel0",
+            AccessFlags::READ_WRITE.into(),
+        )
         .await
-        .expect("Failed to mount network interface.");
+        .expect("Failed to open network interface file.");
 
-    let mut file = File::open(
-        virtual_file_system,
-        task,
-        "/devices/network/tunnel0",
-        AccessFlags::READ_WRITE.into(),
-    )
-    .await
-    .expect("Failed to open network interface file.");
+        for ip_cidr in drivers_std::tuntap::IP_ADDRESSES {
+            file.control(ADD_IP_ADDRESS, ip_cidr).await.ok();
+        }
 
-    for ip_cidr in drivers_std::tuntap::IP_ADDRESSES {
-        file.control(ADD_IP_ADDRESS, ip_cidr).await.ok();
+        for route in drivers_std::tuntap::ROUTES {
+            file.control(ADD_ROUTE, route).await.ok();
+        }
+
+        for dns_server in drivers_std::tuntap::DEFAULT_DNS_SERVERS {
+            file.control(ADD_DNS_SERVER, dns_server).await.ok();
+        }
+
+        file.close(virtual_file_system).await.unwrap();
     }
-
-    for route in drivers_std::tuntap::ROUTES {
-        file.control(ADD_ROUTE, route).await.ok();
-    }
-
-    for dns_server in drivers_std::tuntap::DEFAULT_DNS_SERVERS {
-        file.control(ADD_DNS_SERVER, dns_server).await.ok();
-    }
-
-    file.close(virtual_file_system).await.unwrap();
 
     // Mount static executables
 
@@ -240,8 +269,8 @@ async fn main(task_manager: &'static xila::task::Manager) {
             task_manager,
             users_manager,
             virtual_file_system,
-            graphics_manager: Some(graphics_manager),
-            network_manager: Some(network_manager),
+            graphics_manager,
+            network_manager: config.networking.then_some(network_manager),
             time_manager,
         }));
 
@@ -382,10 +411,11 @@ async fn main(task_manager: &'static xila::task::Manager) {
         .await
         .unwrap();
 
-    // wait some time to show the bootsplash
-    task::Manager::sleep(Duration::from_secs(2)).await;
-
-    bootsplash.stop(graphics_manager).await.unwrap();
+    if let (Some(bootsplash), Some(graphics_manager)) = (bootsplash, graphics_manager) {
+        // Wait briefly to show the bootsplash.
+        task::Manager::sleep(Duration::from_secs(2)).await;
+        bootsplash.stop(graphics_manager).await.unwrap();
+    }
 
     let standard = Standard::open(
         &"/devices/standard_in",
@@ -399,17 +429,15 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .unwrap();
 
     // - - Execute the shell
-    let _ = executable::execute(
-        executable_context,
-        "/binaries/graphical_shell",
-        vec![],
-        standard,
-        None,
-    )
-    .await
-    .unwrap()
-    .join()
-    .await;
+    let shell_path = match config.interface {
+        cli::InterfaceMode::Graphical => "/binaries/graphical_shell",
+        cli::InterfaceMode::Terminal => "/binaries/command_line_shell",
+    };
+    let _ = executable::execute(executable_context, shell_path, vec![], standard, None)
+        .await
+        .unwrap()
+        .join()
+        .await;
 
     virtual_file_system.uninitialize().await;
 }
