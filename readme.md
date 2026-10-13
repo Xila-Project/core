@@ -10,48 +10,36 @@ This repository contains the core of Xila. It contains the code for xila's core 
 
 ## 🛠️ Build
 
-### Optional Devbox environment
-
-From a checkout on **x86_64 Linux**, install [Devbox](https://www.jetify.com/docs/devbox/installing_devbox/)
-at the version in `.devbox-version`, then run:
+**Devbox is the standard setup for local development and CI on x86_64 Linux.**
+Install [Devbox](https://www.jetify.com/docs/devbox/installing_devbox/) at the
+version recorded in `.devbox-version`, then:
 
 ```bash
+git clone https://github.com/Xila-Project/Core.git
+cd Core
 devbox shell
 devbox run setup
-cargo make check                 # Linux x86_64 host + WASM guest
+devbox run check                # Linux host + WASM guest checks
+```
+
+Devbox installs Nix if needed; setup installs Rust/WASM targets and runs `npm ci`.
+Initial setup requires internet access. Leave with `exit`; `.dev-environment/`
+and `.devbox/` hold removable local caches.
+
+Other checks, inside the shell:
+
+```bash
 cargo make clippy
 cargo make format-rust -- --check
 cargo make format-toml --check
 npm exec prettier -- --check "**/*.json"
 ```
 
-Devbox installs Nix if needed. Setup installs the pinned Rust toolchains/WASM
-targets and runs `npm ci`. Exit with `exit`; your normal setup stays unchanged.
-Remove `.dev-environment/` and `.devbox/` after leaving to clear local caches.
-Initial setup needs internet access, including GitHub, artifacts.nixos.org,
-cache.nixos.org, static.rust-lang.org, crates.io and registry.npmjs.org.
-
-Devbox provides a host-native shell with JSON configuration and pinned native
-libraries. Containers need GUI/device forwarding; mise leaves native packages
-to the OS; direct Nix/devenv requires maintaining Nix configuration. Devbox is
-optional locally; manual setup below remains supported.
-
-Version sources are `.devbox-version` (CLI), `devbox.json`/`devbox.lock` (native
-tools, including Taplo 0.9.3), `development/toolchains.env` (Rust) and
-`package-lock.json` (npm). CI uses the same setup and `devbox run` for the existing
-formatting, host/WASM, coverage, Miri and deployment checks. For local coverage,
-add `llvm-tools-preview` to the pinned stable toolchain; for Miri, add `miri` to
-the pinned nightly. Tool pins do not freeze the untracked Cargo lockfiles or
-moving Git dependencies. Update the version sources together and repeat the
-checks and GUI smoke test.
-
-Run `devbox run gui` from a **Wayland desktop** and verify rendering, input and
-window closing. Enter without `--pure` to retain the host display, runtime
-directory and session bus. Working host GPU drivers are required; compilation
-does not validate GUI behavior. Windows needs x86_64 WSL2/WSLg, with GUI behavior
-still requiring validation. Native Windows, macOS, ARM Linux and NixOS are not
-validated by this environment; the current host target and native event loop
-depend on Linux/Wayland.
+Run `devbox run gui` from a **Wayland desktop** and check rendering, input and
+window closing. Keep the host GPU drivers and enter without `--pure` to retain
+the display, runtime directory and session bus. Windows requires x86_64 WSL2/WSLg
+and a GUI smoke test. Native Windows, macOS, ARM Linux and NixOS are unvalidated;
+the current host checks and native event loop depend on Linux/Wayland.
 
 For the browser example, inside the shell:
 
@@ -61,54 +49,26 @@ cargo make generate-fonts
 (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk serve)
 ```
 
-Use `trunk build` instead of `trunk serve` for a build check. Open the served URL
-to check rendering and input. ESP-IDF/vendor toolchains, flashing and serial
-permissions require separate setup using the guides below; leave Devbox first.
-Host/WASM checks do not establish ESP32, nRF, STM32 or other hardware correctness.
+Use `trunk build` for a build check; open the served URL to test rendering/input.
 
-### ✅ Manual requirements
+Devbox provides a native shell and JSON configuration. Containers require GUI
+and device forwarding; mise leaves native dependencies to the OS; direct
+Nix/devenv adds Nix configuration to maintain. Versions live in `.devbox-version`
+(CLI), `devbox.json`/`devbox.lock` (native tools), `development/toolchains.env`
+(Rust) and `package-lock.json` (npm). CI uses these same sources and setup for
+formatting, host/WASM, coverage, Miri and deployment. For local coverage/Miri,
+add `llvm-tools-preview` to the pinned stable toolchain and `miri` to the pinned
+nightly. Update the version sources together and repeat checks and GUI tests;
+tool pins do not freeze untracked Cargo lockfiles or moving Git dependencies.
 
-Please install the following dependencies to build core:
+Manual workflows still work with the tools/targets from `devbox.json` and
+`development/setup.sh` installed separately, followed by `npm ci`; cargo-make
+defaults to stable outside Devbox.
 
-- `gcc-multilib`: for cross-compilation purposes.
-- `clang`, `libclang-dev`, and `mold`: for native linking and generated C bindings.
-- [`cargo-make`](https://github.com/sagiegurari/cargo-make): to build the project with `cargo`.
-- `nodejs`: to generate fonts for LVGL ([lv_font_conv](https://github.com/lvgl/lv_font_conv)).
-- `wasm32-wasip1` Rust target: to compile xila virtual machine executables.
-- (Optional) `wasm32-unknown-unknown` Rust target: to compile `wasm_example`.
-- (Optional) `nightly` Rust toolchain: to compile the `wasm_example`.
-- (Optional) [`trunk`](https://trunkrs.dev/): to build the `wasm_example`.
-- (Optional) Rust [xtensa-esp32\*-espidf](https://docs.esp-rs.org/book/installation/riscv-and-xtensa.html) toolchain: to compile for ESP32 / ESP32-S series.
-- (Optional) Rust [riscv\*-esp-espidf](https://docs.esp-rs.org/book/installation/riscv.html): to compile for ESP32-H / ESP32-C series.
-
-### 🛠️ Instructions
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/Xila-Project/Core.git
-```
-
-2. Navigate to the project directory:
-
-```bash
-cd Core
-npm ci
-```
-
-3. Run one of the examples:
-
-```bash
-cargo make run -p native_example
-```
-
-or
-
-```bash
-cargo +stable build -p calculator --target wasm32-wasip1 --release
-cargo make generate-fonts
-cd examples/wasm && trunk serve
-```
+ESP-IDF, flashing and serial permissions need separate setup: follow the esp-rs
+[Xtensa](https://docs.esp-rs.org/book/installation/riscv-and-xtensa.html) or
+[RISC-V](https://docs.esp-rs.org/book/installation/riscv.html) guides after leaving
+Devbox. Host/WASM checks do not prove ESP32, nRF, STM32 or other hardware correctness.
 
 ## ℹ️ About
 
