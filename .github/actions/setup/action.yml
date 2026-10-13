@@ -10,7 +10,7 @@ runs:
       run: echo "version=$(cat .devbox-version)" >> "$GITHUB_OUTPUT"
 
     - name: Setup | Devbox
-      uses: jetify-com/devbox-install-action@1af623155b1203817421a7efe5574f59f4a055c6
+      uses: jetify-com/devbox-install-action@v0.15.0
       with:
         devbox-version: ${{ steps.devbox-version.outputs.version }}
         enable-cache: true
