@@ -1,6 +1,9 @@
 use getargs_derive::GetArgs;
 use std::string::{String, ToString};
 
+pub const MINIMUM_DISK_SIZE: u64 = (xila::file_system::mbr::Mbr::MINIMUM_START_BLOCK + 2)
+    * xila::file_system::mbr::Mbr::SIZE as u64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InterfaceMode {
     Graphical,
@@ -65,8 +68,10 @@ where
         .filter(|value| *value > 0)
         .ok_or_else(|| "--resolution height must be between 1 and 32767".to_string())?;
 
-    if arguments.disk_size == 0 {
-        return Err("--disk-size must be greater than zero (in bytes)".to_string());
+    if arguments.disk_size < MINIMUM_DISK_SIZE {
+        return Err(format!(
+            "--disk-size must be at least {MINIMUM_DISK_SIZE} bytes for the MBR and filesystem"
+        ));
     }
 
     if arguments.interface_name.is_empty() {
@@ -98,13 +103,13 @@ Options:\n\
   -r, --resolution WIDTHxHEIGHT\n\
                                Display resolution (default: 800x600)\n\
   -p, --disk-path PATH         Backing disk image (default: ./drive.img)\n\
-  -s, --disk-size BYTES        Disk image capacity (default: 16777216)\n\
+  -s, --disk-size BYTES        Capacity in bytes (default: 16777216; minimum: 1049600)\n\
   -i, --interface-name NAME    Host TUN/TAP interface (default: xila0)\n\
   -h, --help                   Show this help\n";
 
 #[cfg(test)]
 mod tests {
-    use super::{InterfaceMode, parse};
+    use super::{InterfaceMode, MINIMUM_DISK_SIZE, parse};
 
     #[test]
     fn defaults_preserve_the_current_example_setup() {
@@ -153,7 +158,10 @@ mod tests {
         assert!(parse(["--resolution", "0x600"]).is_err());
         assert!(parse(["--resolution", "800"]).is_err());
         assert!(parse(["--resolution", "32768x600"]).is_err());
-        assert!(parse(["--disk-size", "0"]).is_err());
+        let below_minimum = (MINIMUM_DISK_SIZE - 1).to_string();
+        assert!(parse(["--disk-size", &below_minimum]).is_err());
+        let minimum = MINIMUM_DISK_SIZE.to_string();
+        assert!(parse(["--disk-size", &minimum]).is_ok());
         assert!(parse(["--interface-name", ""]).is_err());
         assert!(parse(["--unknown"]).is_err());
     }
