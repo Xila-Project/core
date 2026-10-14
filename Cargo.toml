@@ -14,6 +14,11 @@ opt-level = 's'
 strip = true
 lto = true
 
+[profile.profiling]
+inherits = "release"
+debug = "full"
+strip = false
+
 [dependencies]
 # - Always included
 embedded-i18n = { workspace = true }
