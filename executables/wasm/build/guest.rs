@@ -234,9 +234,8 @@ fn generate_enumeration(
     lvgl_functions: &LvglContext,
 ) -> Result<(), String> {
     let enumeration = enumeration::generate_code(lvgl_functions.get_signatures().to_vec());
-    // Xila custom events are not Rust enum discriminants. Keep the code numeric
-    // and derive it from the same LVGL build used by the native graphics module.
-    let close_requested = lvgl_rust_sys::lv_event_code_t_LV_EVENT_LAST + 3;
+    // Keep the guest contract independent of newly inserted native LVGL events.
+    let close_requested = graphics_bindgen::GUEST_EVENT_LAST + 3;
     let token_stream = quote! {
         #enumeration
         pub const EVENT_CLOSE_REQUESTED: u32 = #close_requested;

@@ -122,7 +122,7 @@ impl Desk {
                     // variant draw this desktop-specific outline instead.
                     lvgl::lv_obj_remove_local_style_prop(
                         part,
-                        lvgl::lv_style_prop_t_LV_STYLE_BORDER_WIDTH,
+                        lvgl::_lv_style_id_t_LV_STYLE_BORDER_WIDTH as lvgl::lv_style_prop_t,
                         lvgl::LV_STATE_DEFAULT,
                     );
                     lvgl::lv_theme_shadcn_set_variant(
@@ -439,7 +439,7 @@ impl Desk {
 
     unsafe fn clear_main_button_pressed_state(&self) {
         unsafe {
-            const STATE: u16 = lvgl::LV_STATE_PRESSED as u16;
+            const STATE: lvgl::lv_state_t = lvgl::LV_STATE_PRESSED;
 
             lvgl::lv_obj_remove_state(self.main_button, STATE);
 
@@ -692,11 +692,11 @@ impl Desk {
                 if (event.target == self.main_button
                     || unsafe { lvgl::lv_obj_get_parent(event.target) == self.main_button }) =>
             unsafe {
-                lvgl::lv_obj_add_state(self.main_button, lvgl::LV_STATE_PRESSED as u16);
+                lvgl::lv_obj_add_state(self.main_button, lvgl::LV_STATE_PRESSED);
                 for i in 0..4 {
                     let part = lvgl::lv_obj_get_child(self.main_button, i);
 
-                    lvgl::lv_obj_add_state(part, lvgl::LV_STATE_PRESSED as u16);
+                    lvgl::lv_obj_add_state(part, lvgl::LV_STATE_PRESSED);
                 }
             },
             EventKind::Released

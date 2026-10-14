@@ -75,6 +75,15 @@ impl LvglContext {
     }
 
     pub fn filter_function(signature: &Signature) -> bool {
+        // Guest IDs are positional. Keep the LVGL 9.3 call set frozen so an
+        // upstream API addition cannot silently renumber existing applications.
+        // This list is used only by the host build-time generator.
+        if !include_str!("guest_api.txt")
+            .lines()
+            .any(|name| signature.ident == name)
+        {
+            return false;
+        }
         let unauthorized_functions = [
             "lv_obj_delete",
             "lv_obj_get_display",
@@ -157,13 +166,24 @@ impl LvglContext {
 
 impl Visit<'_> for LvglContext {
     fn visit_foreign_item_fn(&mut self, foreign_item_function: &ForeignItemFn) {
+        let mut signature = foreign_item_function.sig.clone();
+        // LVGL 9.6 keeps these aliases as C macros, which bindgen cannot expose
+        // as functions. The host's graphics::lvgl module forwards the old names.
+        let legacy_name = match signature.ident.to_string().as_str() {
+            "lv_obj_is_in_widget_tree" => Some("lv_obj_is_valid"),
+            "lv_tabview_set_tab_text" => Some("lv_tabview_rename_tab"),
+            _ => None,
+        };
+        if let Some(name) = legacy_name {
+            signature.ident = syn::Ident::new(name, signature.ident.span());
+        }
         if let Some(filter_function) = self.function_filtering
-            && !filter_function(&foreign_item_function.sig)
+            && !filter_function(&signature)
         {
             return;
         }
 
-        self.signatures.push(foreign_item_function.sig.clone());
+        self.signatures.push(signature);
     }
 
     fn visit_item_fn(&mut self, i: &'_ syn::ItemFn) {

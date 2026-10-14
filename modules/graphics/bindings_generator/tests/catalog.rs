@@ -50,7 +50,7 @@ fn malformed_and_ambiguous_catalogs_have_diagnostics() {
     );
     assert!(duplicate.is_ok()); // lv_object_ isn't a legacy-authorized prefix.
     let too_many = CallCatalog::parse(
-        "unsafe extern \"C\" { fn lv_obj_many(a:u32,b:u32,c:u32,d:u32,e:u32,f:u32,g:u32,h:u32); }",
+        "unsafe extern \"C\" { fn lv_obj_create(a:u32,b:u32,c:u32,d:u32,e:u32,f:u32,g:u32,h:u32); }",
     );
     assert!(too_many.unwrap_err().to_string().contains("seven"));
 }
