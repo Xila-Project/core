@@ -8,23 +8,26 @@
 
 This repository contains the core of Xila. It contains the code for xila's core functionalities like task management, file system, virtual machine, graphics, drivers, etc.
 
-## 🛠️ Build
+## 🛠️ Development
 
-**Devbox is the standard setup for local development and CI on x86_64 Linux.**
+**Use Devbox for development.** It provides the same pinned tools and environment
+as CI on x86_64 Linux (or Windows with WSL2).
 Install [Devbox](https://www.jetify.com/docs/devbox/installing_devbox/) at the
 version recorded in `.devbox-version`, then:
 
 ```bash
-git clone https://github.com/Xila-Project/Core.git
-cd Core
-devbox shell
+git clone https://github.com/Xila-Project/core.git
+cd core
 devbox run setup
-devbox run check                # Linux host + WASM guest checks
+devbox shell
+cargo make check                # Linux host + WASM guest checks
 ```
 
 Devbox installs Nix if needed; setup installs Rust/WASM targets and runs `npm ci`.
-Initial setup requires internet access. Leave with `exit`; `.dev-environment/`
-and `.devbox/` hold removable local caches.
+Run setup once after cloning and again when toolchain or npm dependencies change.
+Inside `devbox shell`, run development commands directly; leave with `exit`.
+Use `devbox run check` to check without entering the shell. Initial setup requires
+internet access; `.dev-environment/` and `.devbox/` hold removable local caches.
 
 Other checks, inside the shell:
 
@@ -55,14 +58,15 @@ Devbox provides a native shell and JSON configuration. Containers require GUI
 and device forwarding; mise leaves native dependencies to the OS; direct
 Nix/devenv adds Nix configuration to maintain. Versions live in `.devbox-version`
 (CLI), `devbox.json`/`devbox.lock` (native tools), `development/toolchains.env`
-(Rust versions/targets) and `package-lock.json` (npm). CI uses these same sources and setup for
-formatting, host/WASM, coverage, Miri and deployment. For local coverage/Miri,
+(Rust toolchains) and `package-lock.json` (npm). Environment initialization and
+setup commands live in `devbox.json`. CI uses the same setup for formatting,
+host/WASM, coverage, Miri and deployment. For local coverage/Miri,
 add `llvm-tools-preview` to the pinned stable toolchain and `miri` to the pinned
 nightly. Update the version sources together and repeat checks and GUI tests;
 tool pins do not freeze untracked Cargo lockfiles or moving Git dependencies.
 
-Manual workflows still work with the tools/targets from `devbox.json` installed separately, followed by `npm ci`; cargo-make
-defaults to stable outside Devbox.
+For a manual setup, install the tools/targets listed in `devbox.json` separately
+and run `npm ci`; cargo-make defaults to stable outside Devbox.
 
 ESP-IDF, flashing and serial permissions need separate setup: follow the esp-rs
 [Xtensa](https://docs.esp-rs.org/book/installation/riscv-and-xtensa.html) or
