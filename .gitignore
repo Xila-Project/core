@@ -14,3 +14,7 @@ node_modules
 
 # Local documentation; never commit it.
 /docs/
+
+# Release build output and Python helper bytecode.
+/release-assets/
+__pycache__/

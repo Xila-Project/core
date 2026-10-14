@@ -21,6 +21,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-policy:
+    name: Release policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check workspace version and release helpers
+        shell: bash
+        run: python3 -m unittest discover -s development/tests -p 'test_release.py' -v
+
   changes:
     name: Select checks
     # The PR files API is capped at 3000 files; larger PRs run the full suite.

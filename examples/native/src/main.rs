@@ -1,4 +1,6 @@
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+mod bundled;
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 mod cli;
 
 static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
@@ -322,7 +324,16 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    let calculator_binary_path = build_crate("calculator").unwrap();
+    let executable_path = std::env::current_exe().unwrap();
+    let [calculator_binary_path, weather_binary_path] =
+        bundled::locate(executable_path.parent().unwrap())
+            .expect("Failed to locate bundled WASI applications")
+            .unwrap_or_else(|| {
+                [
+                    build_crate("calculator").unwrap(),
+                    build_crate("weather").unwrap(),
+                ]
+            });
 
     load_to_virtual_file_system(
         task_manager,
@@ -332,8 +343,6 @@ async fn main(task_manager: &'static xila::task::Manager) {
     )
     .await
     .unwrap();
-
-    let weather_binary_path = build_crate("weather").unwrap();
 
     load_to_virtual_file_system(
         task_manager,
