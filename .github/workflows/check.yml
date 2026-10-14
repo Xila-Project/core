@@ -37,7 +37,7 @@ jobs:
       host: ${{ steps.filter.outputs.host }}
       guest: ${{ steps.filter.outputs.guest }}
     steps:
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
