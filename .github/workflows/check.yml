@@ -96,7 +96,7 @@ jobs:
         memory: [memory_32, memory_64]
     steps:
       - name: Setup | Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -150,7 +150,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Setup | Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -174,7 +174,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Setup | Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -214,7 +214,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Setup | Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: ./.github/actions/setup
