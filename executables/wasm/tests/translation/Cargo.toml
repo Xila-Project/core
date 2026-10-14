@@ -8,7 +8,10 @@ publish = false
 [workspace]
 
 [dependencies]
-wasmi = { version = "1.1.0", default-features = false, features = [
+wasmi = { version = "2.0.0", default-features = false, features = [
+  "validate",
+  "memory64",
+  "auto-dispatch",
   "prefer-btree-collections",
   "extra-checks",
 ] }

@@ -6,6 +6,9 @@ build = "build/main.rs"
 
 [dependencies]
 wasmi = { version = "2.0.0", default-features = false, features = [
+  "validate",
+  "memory64",
+  "auto-dispatch",
   "prefer-btree-collections",
   "extra-checks",
 ], optional = true }

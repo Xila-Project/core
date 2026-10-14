@@ -6,7 +6,7 @@ use alloc::{
 };
 use core::fmt::Write;
 use getargs_derive::GetArgs;
-use wasmi::{Caller, Config, Engine, Linker, Module, Store};
+use wasmi::{Caller, CompilationMode, Config, Engine, Linker, Module, Store};
 use xila::{
     executable::{ExecutableContext, Standard},
     file_system::{Kind, Path},
@@ -170,6 +170,10 @@ async fn main_inner(standard: Standard<'static>, arguments: WasmArguments<'_>) -
 
     let mut configuration = Config::default();
     configuration.consume_fuel(true);
+    // Wasmi 2.0.0 cannot resume fuel exhaustion during lazy callee translation
+    // (https://github.com/wasmi-labs/wasmi/pull/2032). Compile
+    // before execution so even small scheduling slices can make progress.
+    configuration.compilation_mode(CompilationMode::Eager);
 
     let engine = Engine::new(&configuration);
 

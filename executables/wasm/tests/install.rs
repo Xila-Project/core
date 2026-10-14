@@ -36,6 +36,10 @@ async fn install_selects_install_export_and_never_falls_back_to_main() {
     .unwrap();
     let path = "/binaries/install-fixture.wasm";
     let import = r#"(import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))"#;
+    let expensive_callee = format!(
+        "(func $work {}) (func (export \"_start\") call $work)",
+        "i32.const 42 drop ".repeat(256)
+    );
     // Exit codes expose which export actually executed through the whole CLI.
     for (index, (exports, arguments, expected)) in [
         (
@@ -76,6 +80,21 @@ async fn install_selects_install_export_and_never_falls_back_to_main() {
         (
             r#"(func (export "__install"))"#,
             vec!["--install".into(), path.into()],
+            0,
+        ),
+        // The entry fits within the fuel budget, but lazy translation of its
+        // callee would exhaust fuel after execution has already begun.
+        (
+            expensive_callee.as_str(),
+            vec!["--instruction-limit".into(), "1000".into(), path.into()],
+            0,
+        ),
+        // Even a one-fuel slice must reach and resume guest functions whose
+        // translation costs exceed the slice budget.
+        (
+            r#"(func $work i32.const 42 drop)
+             (func (export "_start") call $work)"#,
+            vec!["--instruction-limit".into(), "1".into(), path.into()],
             0,
         ),
     ]
