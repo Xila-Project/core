@@ -13,7 +13,7 @@
     "glob": "^13.0.6",
     "lv_font_conv": "github:lvgl/lv_font_conv",
     "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@tolgee/cli": "^2.16.1"
