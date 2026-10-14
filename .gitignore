@@ -14,3 +14,5 @@ node_modules
 
 # Local documentation; never commit it.
 /docs/
+
+/tools/profiling/__pycache__/

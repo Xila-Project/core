@@ -4,8 +4,11 @@ extern crate alloc;
 
 embedded_i18n::track_locales!();
 
-#[cfg(any(test, feature = "std"))]
+#[cfg(any(test, feature = "std", all(feature = "profiling", target_os = "linux")))]
 extern crate std;
+
+#[cfg(all(feature = "profiling", target_os = "linux"))]
+pub mod profiling;
 
 mod environment_variable;
 mod error;

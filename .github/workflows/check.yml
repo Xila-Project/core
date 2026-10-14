@@ -72,6 +72,7 @@ jobs:
               - '**/*.{rs,toml,json}'
             host:
               - *shared
+              - 'tools/profiling/**'
               - 'src/**'
               - 'drivers/**'
               - 'executables/**'
@@ -217,6 +218,13 @@ jobs:
 
       - name: Check | Clippy (Host)
         run: cargo make clippy-host
+
+      - name: Check | Profiling runner
+        shell: bash
+        run: python3 -m unittest discover -s tools/profiling -p 'test_*.py'
+
+      - name: Check | Profiling instrumentation
+        run: cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
 
       - name: Check | Clippy (Host - Wasmi)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu

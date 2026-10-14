@@ -11,6 +11,8 @@ static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 )]
 async fn main(task_manager: &'static xila::task::Manager) {
     drivers_std::memory::instantiate_global_allocator!();
+    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    drivers_std::profiling::start_from_environment().expect("Failed to start profiling snapshots");
 
     extern crate alloc;
 

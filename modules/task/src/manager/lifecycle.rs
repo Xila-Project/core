@@ -36,25 +36,6 @@ impl Manager {
 
         let (join_handle_parent, join_handle_child) = JoinHandle::new();
 
-        let task = async move || {
-            let manager = manager;
-            let internal_identifier = Manager::get_current_internal_identifier().await;
-
-            manager
-                .set_internal_identifier(identifier, internal_identifier)
-                .await
-                .expect("Failed to register task");
-
-            let result = function(identifier).await;
-
-            join_handle_child.signal(result);
-
-            manager
-                .unregister(identifier)
-                .await
-                .expect("Failed to unregister task");
-        };
-
         let mut inner = manager.0.write().await;
 
         // Select the best spawner for the new task
@@ -72,6 +53,38 @@ impl Manager {
             .get_mut(&identifier)
             .expect("Failed to get task metadata")
             .spawner_identifier = spawner;
+
+        #[cfg(all(feature = "profiling", target_os = "linux"))]
+        let profiling_name = inner.tasks.get(&identifier).unwrap().name.clone();
+
+        let task = async move || {
+            let manager = manager;
+            let internal_identifier = Manager::get_current_internal_identifier().await;
+
+            manager
+                .set_internal_identifier(identifier, internal_identifier)
+                .await
+                .expect("Failed to register task");
+
+            #[cfg(all(feature = "profiling", target_os = "linux"))]
+            let result = crate::profiling::instrument(
+                manager as *const Manager as usize,
+                identifier.into(),
+                &profiling_name,
+                spawner,
+                function(identifier),
+            )
+            .await;
+            #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+            let result = function(identifier).await;
+
+            join_handle_child.signal(result);
+
+            manager
+                .unregister(identifier)
+                .await
+                .expect("Failed to unregister task");
+        };
 
         let token = pool.spawn(task).expect("Failed to spawn task");
 

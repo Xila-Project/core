@@ -200,6 +200,11 @@ toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["build", "${@}"]
 
+[tasks.build-profiling]
+toolchain = "${XILA_RUST_TOOLCHAIN}"
+command = "cargo"
+args = ["build", "--package", "native_example", "--profile", "profiling", "${@}"]
+
 [tasks.coverage]
 install_crate = "cargo-llvm-cov"
 toolchain = "${XILA_RUST_TOOLCHAIN}"
