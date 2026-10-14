@@ -4,6 +4,8 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
@@ -83,8 +85,9 @@ jobs:
               - 'executables/wasm/src/lib.rs'
               - 'examples/wasm/**'
 
-  # Job-level skips satisfy required checks. Main/manual runs and filter failures
-  # run the full suite; !cancelled() permits runs after a skipped dependency.
+  # Job-level skips satisfy required checks. Main/manual/merge-group runs and
+  # filter failures run the full suite; !cancelled() permits runs after a
+  # skipped dependency.
   wasm-translation:
     name: WASM translation (${{ matrix.memory }})
     needs: [changes]
