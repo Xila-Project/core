@@ -16,6 +16,6 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@tolgee/cli": "^2.16.1"
+    "@tolgee/cli": "^2.21.0"
   }
 }
