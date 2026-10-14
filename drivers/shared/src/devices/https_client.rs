@@ -10,7 +10,7 @@ use file_system::{
     Result, Size,
 };
 use network::{DnsQueryKind, Duration as NetworkDuration, Port, TcpSocket};
-use rand_core::{CryptoRng, RngCore};
+use rand_core::{TryCryptoRng, TryRng};
 use shared::HttpRequestParser;
 use synchronization::{Arc, blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 
@@ -27,35 +27,61 @@ const IO_TIMEOUT_SECONDS: u64 = 15;
 
 struct RandomNumberGenerator<T: DirectCharacterDevice + 'static>(&'static T);
 
-impl<T: DirectCharacterDevice + 'static> CryptoRng for RandomNumberGenerator<T> {}
+impl<T: DirectCharacterDevice + 'static> TryCryptoRng for RandomNumberGenerator<T> {}
 
-impl<T: DirectCharacterDevice + 'static> RngCore for RandomNumberGenerator<T> {
-    fn next_u32(&mut self) -> u32 {
+impl<T: DirectCharacterDevice + 'static> TryRng for RandomNumberGenerator<T> {
+    type Error = Error;
+
+    fn try_next_u32(&mut self) -> Result<u32> {
         let mut bytes = [0u8; 4];
-        self.0
-            .read(&mut bytes, 0)
-            .expect("Random device read failed");
-        u32::from_le_bytes(bytes)
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64> {
+        let mut bytes = [0u8; 8];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<()> {
+        if dest.is_empty() {
+            return Ok(());
+        }
+        if self.0.read(dest, 0)? != dest.len() {
+            // Never report success with missing entropy from a short read.
+            return Err(Error::InputOutput);
+        }
+        Ok(())
+    }
+}
+
+// embedded-tls 0.19 still consumes rand_core 0.6. Keep its legacy traits at
+// this boundary while the device RNG implements the fallible 0.10 API.
+struct TlsRandomNumberGenerator<T: DirectCharacterDevice + 'static>(RandomNumberGenerator<T>);
+
+impl<T: DirectCharacterDevice + 'static> rand_core_06::CryptoRng for TlsRandomNumberGenerator<T> {}
+
+impl<T: DirectCharacterDevice + 'static> rand_core_06::RngCore for TlsRandomNumberGenerator<T> {
+    fn next_u32(&mut self) -> u32 {
+        self.0.try_next_u32().expect("Random device read failed")
     }
 
     fn next_u64(&mut self) -> u64 {
-        let mut bytes = [0u8; 8];
-        self.0
-            .read(&mut bytes, 0)
-            .expect("Random device read failed");
-        u64::from_le_bytes(bytes)
+        self.0.try_next_u64().expect("Random device read failed")
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.0.read(dest, 0).expect("Random device read failed");
+        self.0
+            .try_fill_bytes(dest)
+            .expect("Random device read failed");
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> core::result::Result<(), rand_core::Error> {
-        self.0.read(dest, 0).map_err(|e| {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> core::result::Result<(), rand_core_06::Error> {
+        self.0.try_fill_bytes(dest).map_err(|e| {
             log::error!("Random device read failed: {:?}", e);
-            rand_core::Error::from(e.get_discriminant())
-        })?;
-        Ok(())
+            rand_core_06::Error::from(e.get_discriminant())
+        })
     }
 }
 
@@ -317,7 +343,9 @@ async fn create_tls_connection<'a, T: DirectCharacterDevice + 'static>(
     let mut tls = TlsConnection::new(TcpSocketAdapter { socket }, read_record, write_record);
 
     let configuration = TlsConfig::new().with_server_name(host);
-    let provider = UnsecureProvider::new::<Aes128GcmSha256>(RandomNumberGenerator(random_device));
+    let provider = UnsecureProvider::new::<Aes128GcmSha256>(TlsRandomNumberGenerator(
+        RandomNumberGenerator(random_device),
+    ));
     let context = TlsContext::new(&configuration, provider);
 
     tls.open(context).await.map_err(map_tls_error)?;
@@ -598,6 +626,105 @@ fn read_state_transition(context: &mut HttpsClientContext, buffer: &mut [u8]) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use file_system::DirectBaseOperations;
+
+    struct TestRandomDevice {
+        limit: usize,
+        fail: bool,
+    }
+
+    impl DirectBaseOperations for TestRandomDevice {
+        fn read(&self, buffer: &mut [u8], _: Size) -> Result<usize> {
+            if self.fail {
+                return Err(Error::InputOutput);
+            }
+            let count = buffer.len().min(self.limit);
+            for (index, byte) in buffer[..count].iter_mut().enumerate() {
+                *byte = (index + 1) as u8;
+            }
+            Ok(count)
+        }
+
+        fn write(&self, _: &[u8], _: Size) -> Result<usize> {
+            Err(Error::UnsupportedOperation)
+        }
+
+        fn set_position(&self, _: Size, _: &file_system::Position) -> Result<Size> {
+            Err(Error::UnsupportedOperation)
+        }
+    }
+
+    impl MountOperations for TestRandomDevice {}
+    impl DirectCharacterDevice for TestRandomDevice {}
+
+    static COMPLETE_RANDOM: TestRandomDevice = TestRandomDevice {
+        limit: usize::MAX,
+        fail: false,
+    };
+    static SHORT_RANDOM: TestRandomDevice = TestRandomDevice {
+        limit: 2,
+        fail: false,
+    };
+    static FAILED_RANDOM: TestRandomDevice = TestRandomDevice {
+        limit: 0,
+        fail: true,
+    };
+
+    #[test]
+    fn random_generator_provides_fallible_rand_core_010_values() {
+        use rand_core::TryRng;
+        fn accepts_crypto_rng(_: impl rand_core::TryCryptoRng<Error = Error>) {}
+        accepts_crypto_rng(RandomNumberGenerator(&COMPLETE_RANDOM));
+        let mut rng = RandomNumberGenerator(&COMPLETE_RANDOM);
+        assert_eq!(rng.try_next_u32(), Ok(0x0403_0201));
+        assert_eq!(rng.try_next_u64(), Ok(0x0807_0605_0403_0201));
+        let mut bytes = [0; 3];
+        rng.try_fill_bytes(&mut bytes).unwrap();
+        assert_eq!(bytes, [1, 2, 3]);
+    }
+
+    #[test]
+    fn random_generator_propagates_device_errors_and_rejects_short_reads() {
+        use rand_core::TryRng;
+        for device in [&SHORT_RANDOM, &FAILED_RANDOM] {
+            let mut rng = RandomNumberGenerator(device);
+            assert_eq!(rng.try_next_u32(), Err(Error::InputOutput));
+            assert_eq!(rng.try_next_u64(), Err(Error::InputOutput));
+            assert_eq!(rng.try_fill_bytes(&mut [0; 3]), Err(Error::InputOutput));
+        }
+        // Empty requests do not need entropy and must not touch a failing device.
+        assert_eq!(
+            RandomNumberGenerator(&FAILED_RANDOM).try_fill_bytes(&mut []),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn tls_rng_adapter_preserves_values_and_legacy_error_codes() {
+        use rand_core_06::RngCore;
+        fn accepts_tls_rng(_: impl embedded_tls::CryptoRngCore) {}
+        accepts_tls_rng(TlsRandomNumberGenerator(RandomNumberGenerator(
+            &COMPLETE_RANDOM,
+        )));
+        let mut rng = TlsRandomNumberGenerator(RandomNumberGenerator(&COMPLETE_RANDOM));
+        assert_eq!(rng.next_u32(), 0x0403_0201);
+        assert_eq!(rng.next_u64(), 0x0807_0605_0403_0201);
+        let mut bytes = [0; 3];
+        rng.fill_bytes(&mut bytes);
+        assert_eq!(bytes, [1, 2, 3]);
+        let mut rng = TlsRandomNumberGenerator(RandomNumberGenerator(&FAILED_RANDOM));
+        assert_eq!(
+            rng.try_fill_bytes(&mut [0; 3]).unwrap_err().code(),
+            Some(Error::InputOutput.get_discriminant())
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Random device read failed")]
+    fn tls_rng_adapter_panics_when_infallible_entropy_requests_fail() {
+        use rand_core_06::RngCore;
+        TlsRandomNumberGenerator(RandomNumberGenerator(&FAILED_RANDOM)).next_u64();
+    }
 
     #[test]
     fn split_host_port_parses_default_port() {
