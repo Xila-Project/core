@@ -164,20 +164,7 @@ impl PasswordTab {
         unsafe {
             lvgl::lv_label_set_text(self.password_status_label, message_cstr.as_ptr());
 
-            // Set color based on whether it's an error or success
-            if is_error {
-                lvgl::lv_obj_set_style_text_color(
-                    self.password_status_label,
-                    lvgl::lv_color_hex(0xFF0000), // Red for errors
-                    lvgl::LV_STATE_DEFAULT,
-                );
-            } else {
-                lvgl::lv_obj_set_style_text_color(
-                    self.password_status_label,
-                    lvgl::lv_color_hex(0x00FF00), // Green for success
-                    lvgl::LV_STATE_DEFAULT,
-                );
-            }
+            lvgl::lv_theme_shadcn_set_error(self.password_status_label, is_error);
         }
     }
 

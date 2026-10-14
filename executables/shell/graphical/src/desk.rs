@@ -15,10 +15,7 @@ use alloc::{
 use xila::graphics::{self, Color, EventKind, Logo, OwnedWindow, Point, lvgl};
 use xila::log::{self, error, warning};
 use xila::virtual_file_system::Directory;
-use xila::{
-    executable,
-    graphics::theme::{self, get_border_color_primary},
-};
+use xila::{executable, graphics::theme};
 use xila::{executable::Standard, graphics::Event};
 use xila::{file_system::Kind, graphics::symbol};
 
@@ -116,17 +113,21 @@ impl Desk {
                     lvgl::lv_obj_flag_t_LV_OBJ_FLAG_OVERFLOW_VISIBLE,
                 );
 
-                // Set shadow color according to BG color
                 for i in 0..4 {
                     let part = lvgl::lv_obj_get_child(logo_inner_object, i);
 
                     lvgl::lv_obj_set_style_bg_opa(part, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
 
-                    lvgl::lv_obj_set_style_border_width(part, 2, lvgl::LV_STATE_DEFAULT);
-                    lvgl::lv_obj_set_style_border_color(
+                    // The logo has borderless local styles; let the shared outline
+                    // variant draw this desktop-specific outline instead.
+                    lvgl::lv_obj_remove_local_style_prop(
                         part,
-                        get_border_color_primary().into_lvgl_color(),
+                        lvgl::lv_style_prop_t_LV_STYLE_BORDER_WIDTH,
                         lvgl::LV_STATE_DEFAULT,
+                    );
+                    lvgl::lv_theme_shadcn_set_variant(
+                        part,
+                        lvgl::lv_theme_shadcn_variant_t_LV_THEME_SHADCN_VARIANT_OUTLINE,
                     );
                 }
             }
@@ -186,11 +187,7 @@ impl Desk {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_bg_color(
-                    dock,
-                    theme::get_background_color_primary_muted().into_lvgl_color(),
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                theme::set_surface(dock, theme::Surface::Muted);
 
                 lvgl::lv_obj_set_align(dock, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_size(dock, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);

@@ -30,10 +30,9 @@ impl Home {
                 }
 
                 lvgl::lv_obj_set_size(button, lvgl::lv_pct(40), 8);
-                lvgl::lv_obj_set_style_bg_color(
+                lvgl::lv_theme_shadcn_set_variant(
                     button,
-                    lvgl::lv_color_white(),
-                    lvgl::LV_STATE_DEFAULT,
+                    lvgl::lv_theme_shadcn_variant_t_LV_THEME_SHADCN_VARIANT_DEFAULT,
                 );
                 lvgl::lv_obj_set_style_bg_opa(button, lvgl::LV_OPA_50, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_align(button, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);

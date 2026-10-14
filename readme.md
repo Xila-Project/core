@@ -69,6 +69,18 @@ ESP-IDF, flashing and serial permissions need separate setup: follow the esp-rs
 [RISC-V](https://docs.esp-rs.org/book/installation/riscv.html) guides after leaving
 Devbox. Host/WASM checks do not prove ESP32, nRF, STM32 or other hardware correctness.
 
+## Graphics theme
+
+Graphics uses [lvgl_theme_shadcn](https://github.com/AlixANNERAUD/lvgl_theme_shadcn)
+with the Zinc dark palette and Xila's generated fonts. The theme compiles alongside
+LVGL using the same configuration and custom allocator. `Manager::update_theme`
+updates the shared palette, including existing widgets, under the LVGL lock.
+
+Prefer `graphics::theme::set_surface` and LVGL's Shadcn variant/error helpers over
+local theme colors. Keep layout, transparent overlays, application branding and
+specialized typography local where needed. Theme helpers require the graphics
+lock, just like other LVGL calls.
+
 ## Native profiling
 
 Profiling is intended for developers and optimization agents on Linux. It is
