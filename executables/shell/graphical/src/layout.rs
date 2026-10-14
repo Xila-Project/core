@@ -216,8 +216,13 @@ impl Layout {
     async fn update_clock(&mut self, current_time: Duration) {
         let graphics_manager = graphics::ffi_manager();
         graphics::lock!(graphics_manager, {
-            self.clock_string =
-                internationalization::format_unix_timestamp(current_time.as_secs() as i64, "%H:%M");
+            self.clock_string.clear();
+            // Writing to a String cannot return a formatting error.
+            let _ = internationalization::write_unix_timestamp(
+                &mut self.clock_string,
+                current_time.as_secs() as i64,
+                "%H:%M",
+            );
             self.clock_string.push('\0');
 
             unsafe {

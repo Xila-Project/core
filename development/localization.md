@@ -20,8 +20,11 @@ new directory entries.
 
 CI checks both `en` and `fr` with `EMBEDDED_I18N_STRICT=1`, which rejects messages
 missing from the primary locale instead of accepting an English fallback.
-The checks cover all host workspace targets (including test-only call sites)
+The checks cover host workspace targets (including test-only call sites)
 and the Calculator and Weather WASI applications (including guest-only UI).
+The host check excludes the font generator, which is built separately during
+font generation, so its `std` feature cannot mask target code depending on
+allocation-gated internationalization APIs.
 Run the same checks locally with the development environment configured:
 
 ```sh
