@@ -220,8 +220,10 @@ jobs:
         run: cargo make clippy-host
 
       - name: Check | Profiling runner
-        shell: bash
-        run: python3 -m unittest discover -s tools/profiling -p 'test_*.py'
+        run: |
+          cargo fmt --manifest-path tools/profiling/Cargo.toml -- --check
+          cargo clippy --manifest-path tools/profiling/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path tools/profiling/Cargo.toml
 
       - name: Check | Profiling instrumentation
         run: |

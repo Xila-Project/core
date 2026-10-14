@@ -72,8 +72,8 @@ Devbox. Host/WASM checks do not prove ESP32, nRF, STM32 or other hardware correc
 ## Native profiling
 
 Profiling is intended for developers and optimization agents on Linux. It is
-opt-in and adds no hooks/counters to default builds. The scripts require Python
-3.11 or later; install [Samply](https://github.com/mstange/samply), Linux `perf`,
+opt-in and adds no hooks/counters to default builds. The recorder and its checks
+use the existing Rust toolchain; install [Samply](https://github.com/mstange/samply), Linux `perf`,
 or [heaptrack](https://github.com/KDE/heaptrack) separately when needed. The
 runner never installs tools or changes kernel permissions. Linux CPU recording
 requires access to perf events; a permission error is reported in the run log.
@@ -83,7 +83,7 @@ Build before recording, inside the development shell:
 ```bash
 cargo make prepare-profiling
 cargo make build-profiling --features prebuilt-applications
-python3 tools/profiling/record.py measure \
+cargo run --manifest-path tools/profiling/Cargo.toml -- measure \
   --scenario terminal-idle --output target/profiles/before --runs 3 --duration 30 \
   --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --terminal --no-network
@@ -103,11 +103,11 @@ For allocation and task attribution, build with the optional features:
 
 ```bash
 cargo make build-profiling --features profiling,heaptrack
-python3 tools/profiling/record.py cpu \
+cargo run --manifest-path tools/profiling/Cargo.toml -- cpu \
   --scenario gui-navigation --output target/profiles/cpu --runs 1 --duration 60 \
   --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --gui --no-network --resolution 800x600
-python3 tools/profiling/record.py heap \
+cargo run --manifest-path tools/profiling/Cargo.toml -- heap \
   --scenario gui-navigation --output target/profiles/heap --runs 1 --duration 60 \
   --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --gui --no-network --resolution 800x600
@@ -162,10 +162,10 @@ Wasm/embedded target before claiming target-specific improvements.
 Local checks:
 
 ```bash
-python3 -m unittest discover -s tools/profiling -p 'test_*.py'
+cargo test --manifest-path tools/profiling/Cargo.toml
 cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
 cargo test -p native_example --bin native_example --features profiling,heaptrack
-python3 tools/profiling/smoke_heaptrack.py
+cargo run --manifest-path tools/profiling/Cargo.toml -- heap-smoke
 ```
 
 The heaptrack smoke test compiles a local C API stand-in and verifies real native
