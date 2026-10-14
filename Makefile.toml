@@ -108,6 +108,37 @@ dependencies = ["doc-host", "doc-guest"]
 [tasks.check]
 dependencies = ["check-host", "check-guest"]
 
+[tasks.check-localization-host]
+toolchain = "${XILA_RUST_TOOLCHAIN}"
+command = "cargo"
+env = { EMBEDDED_I18N_STRICT = "1" }
+args = [
+  "check",
+  "--workspace",
+  "--all-targets",
+  "--target",
+  "x86_64-unknown-linux-gnu",
+  "--features",
+  "xila/graphics,xila/abi_definitions,xila/graphics_rendering_xrgb8888",
+]
+
+[tasks.check-localization-guest]
+toolchain = "${XILA_RUST_TOOLCHAIN}"
+command = "cargo"
+env = { EMBEDDED_I18N_STRICT = "1" }
+args = [
+  "check",
+  "--target",
+  "wasm32-wasip1",
+  "--package",
+  "calculator",
+  "--package",
+  "weather",
+]
+
+[tasks.check-localization]
+dependencies = ["check-localization-host", "check-localization-guest"]
+
 [tasks.clippy-host]
 install_crate = "clippy"
 toolchain = "${XILA_RUST_TOOLCHAIN}"

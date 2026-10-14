@@ -2,6 +2,8 @@
 
 extern crate alloc;
 
+embedded_i18n::track_locales!();
+
 mod area;
 mod color;
 mod display;

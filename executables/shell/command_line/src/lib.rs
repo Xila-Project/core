@@ -1,6 +1,8 @@
 #![no_std]
 
 extern crate alloc;
+
+xila::internationalization::track_locales!();
 #[cfg(test)]
 extern crate std;
 

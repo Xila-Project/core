@@ -36,6 +36,7 @@ jobs:
       format: ${{ steps.filter.outputs.format }}
       host: ${{ steps.filter.outputs.host }}
       guest: ${{ steps.filter.outputs.guest }}
+      localization: ${{ steps.filter.outputs.localization }}
     steps:
       - uses: dorny/paths-filter@v4
         id: filter
@@ -84,6 +85,32 @@ jobs:
               - 'executables/wasm/src/guest/**'
               - 'executables/wasm/src/lib.rs'
               - 'examples/wasm/**'
+            localization:
+              - *shared
+              - 'src/**'
+              - 'executables/**'
+
+  localization:
+    name: Translation coverage (${{ matrix.locale }})
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.localization == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        locale: [en, fr]
+    env:
+      EMBEDDED_I18N_LOCALE: ${{ matrix.locale }}
+      EMBEDDED_I18N_STRICT: "1"
+    steps:
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check | Strict host and guest translations
+        run: cargo make check-localization
 
   # Job-level skips satisfy required checks. Main/manual/merge-group runs and
   # filter failures run the full suite; !cancelled() permits runs after a
@@ -169,13 +196,19 @@ jobs:
 
   host:
     name: Host checks
-    needs: [changes, format]
+    needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Check | Translation coverage gate
+        if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
+        run: |
+          echo "::error::Strict translation coverage did not pass."
+          exit 1
+
       - name: Setup | Checkout repository
         uses: actions/checkout@v7
 

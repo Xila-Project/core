@@ -2,6 +2,8 @@
 
 extern crate alloc;
 
+embedded_i18n::track_locales!();
+
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
