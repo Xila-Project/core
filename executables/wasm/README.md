@@ -3,6 +3,22 @@
 `wasm` is the Wasmi-based runtime and includes the guest graphics wrappers.
 It replaces the original WAMR implementation, preserving generated call IDs.
 
+Wasmi 2 runs with default features disabled for `no_std` hosts. Both the runtime
+and translation test harness explicitly enable validation, memory64 support,
+and automatic dispatch, which falls back to portable dispatch when required by
+the target or optimization level.
+
+`--instruction-limit` supplies the fuel budget for each cooperative execution
+slice. Wasmi 2 meters input Wasm operators instead of its internal bytecode, so
+the same budget may yield at different intervals than with Wasmi 1. A bulk
+operation can require more fuel than one normal slice; the runtime replenishes
+at least the amount required to resume it.
+Functions are translated eagerly before execution to avoid non-resumable fuel
+exhaustion during lazy callee translation in Wasmi 2.0.0 (tracked by
+[Wasmi PR #2032](https://github.com/wasmi-labs/wasmi/pull/2032)). This also
+translates unused functions, which can increase startup work and compiled-code
+memory.
+
 ## Test Calculator
 
 From the repository root on Linux:
