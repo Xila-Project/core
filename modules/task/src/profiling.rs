@@ -24,6 +24,7 @@ struct Counters {
     max_wall: AtomicU64,
     clock_errors: AtomicU64,
     completed: AtomicBool,
+    poll_active: AtomicBool,
     allocations: AtomicU64,
     allocated_bytes: AtomicU64,
     thread_id: u64,
@@ -42,9 +43,17 @@ pub struct TaskSample {
     pub max_poll_wall_nanoseconds: u64,
     pub clock_errors: u64,
     pub completed: bool,
+    pub poll_active: bool,
     pub allocation_requests: u64,
     pub allocation_request_bytes: u64,
     pub thread_id: u64,
+}
+
+struct ActivePoll<'a>(&'a AtomicBool);
+impl Drop for ActivePoll<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
 }
 
 struct CurrentGuard(Option<Arc<Counters>>);
@@ -106,6 +115,7 @@ pub async fn instrument<F: Future>(
             max_wall: AtomicU64::new(0),
             clock_errors: AtomicU64::new(0),
             completed: AtomicBool::new(false),
+            poll_active: AtomicBool::new(false),
             allocations: AtomicU64::new(0),
             allocated_bytes: AtomicU64::new(0),
             thread_id: unsafe { libc::syscall(libc::SYS_gettid) as u64 },
@@ -119,7 +129,10 @@ pub async fn instrument<F: Future>(
             CurrentGuard(CURRENT.with(|current| current.replace(Some(counters.clone()))));
         let cpu_start = thread_cpu_nanoseconds();
         let started = Instant::now();
+        counters.poll_active.store(true, Ordering::Relaxed);
+        let active = ActivePoll(&counters.poll_active);
         let result = future.as_mut().poll(context);
+        drop(active);
         let elapsed = started.elapsed().as_nanos() as u64;
         let cpu_end = thread_cpu_nanoseconds();
         counters.polls.fetch_add(1, Ordering::Relaxed);
@@ -158,6 +171,7 @@ pub fn snapshot() -> Vec<TaskSample> {
             max_poll_wall_nanoseconds: c.max_wall.load(Ordering::Relaxed),
             clock_errors: c.clock_errors.load(Ordering::Relaxed),
             completed: c.completed.load(Ordering::Relaxed),
+            poll_active: c.poll_active.load(Ordering::Relaxed),
             allocation_requests: c.allocations.load(Ordering::Relaxed),
             allocation_request_bytes: c.allocated_bytes.load(Ordering::Relaxed),
             thread_id: c.thread_id,
@@ -198,6 +212,28 @@ mod tests {
         assert!(sample.completed);
         assert_eq!(sample.spawner, 3);
         assert!(sample.poll_wall_nanoseconds < 50_000_000);
+    }
+
+    #[test]
+    fn a_running_poll_is_visible_before_it_returns() {
+        embassy_futures::block_on(instrument(95, 1, "active-poll-test", 0, async {
+            let samples = snapshot();
+            assert!(
+                samples
+                    .iter()
+                    .find(|s| s.name == "active-poll-test")
+                    .unwrap()
+                    .poll_active
+            );
+        }));
+        let samples = snapshot();
+        assert!(
+            !samples
+                .iter()
+                .find(|s| s.name == "active-poll-test")
+                .unwrap()
+                .poll_active
+        );
     }
 
     #[test]

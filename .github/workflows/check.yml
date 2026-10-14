@@ -224,7 +224,9 @@ jobs:
         run: python3 -m unittest discover -s tools/profiling -p 'test_*.py'
 
       - name: Check | Profiling instrumentation
-        run: cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
+        run: |
+          cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
+          cargo test -p native_example --bin native_example --features profiling,heaptrack
 
       - name: Check | Clippy (Host - Wasmi)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu

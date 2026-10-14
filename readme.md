@@ -81,17 +81,21 @@ requires access to perf events; a permission error is reported in the run log.
 Build before recording, inside the development shell:
 
 ```bash
-cargo make build-profiling
+cargo make prepare-profiling
+cargo make build-profiling --features prebuilt-applications
 python3 tools/profiling/record.py measure \
   --scenario terminal-idle --output target/profiles/before --runs 3 --duration 30 \
+  --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --terminal --no-network
 ```
 
 The `profiling` Cargo profile keeps release optimizations and full debug symbols.
 If using an explicit Cargo target or custom target directory, adjust the binary
-path. Prepare a disposable disk image and warm the application-build caches
-before comparisons: the native example currently builds Calculator and Weather
-at startup. Measurements include startup; they are not steady-state-only data.
+path. The `prebuilt-applications` feature and `--applications-dir` load prepared
+Calculator/Weather files instead of invoking Cargo during startup. A missing
+file fails explicitly. The recorder also recognizes and hashes application files
+selected by `XILA_PROFILE_APP_DIR`. Default native builds keep their existing startup builds.
+Measurements still include OS startup; they are not steady-state-only data.
 Use the same disk fixture and settings on each run. A mutable disk can change
 between runs; restore its baseline if the workload writes to it.
 
@@ -101,9 +105,11 @@ For allocation and task attribution, build with the optional features:
 cargo make build-profiling --features profiling,heaptrack
 python3 tools/profiling/record.py cpu \
   --scenario gui-navigation --output target/profiles/cpu --runs 1 --duration 60 \
+  --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --gui --no-network --resolution 800x600
 python3 tools/profiling/record.py heap \
   --scenario gui-navigation --output target/profiles/heap --runs 1 --duration 60 \
+  --applications-dir target/wasm32-wasip1/release-wasm \
   -- target/profiling/native_example --gui --no-network --resolution 800x600
 ```
 
@@ -116,7 +122,7 @@ can isolate a hot path without starting the whole graphical OS.
 Each new output directory contains `summary.json`, per-run stdout/stderr logs,
 and any profiles. Existing directories are refused to protect previous results.
 The summary retains exact argv, executable hash, Git revision/dirty status,
-selected build/locale settings, CPU model, duration, exit status and median
+selected build/locale settings, prebuilt application hashes, CPU model, duration, exit status and median
 CPU/RSS measurements. It does not copy the full environment or credentials.
 A duration limit stops the process group; forced kills and failed runs have no
 successful median. Inspect the logs to establish that the intended scenario
@@ -145,7 +151,7 @@ Profiling metadata and the reporter itself add overhead in feature-enabled runs.
   when the manager receives them. Heaptrack also captures ordinary libc calls.
 
 For before/after consumption comparisons, rebuild **without** `profiling` and
-`heaptrack`, repeat `measure` with the same scenario/inputs, and compare medians
+`heaptrack` (retain only `prebuilt-applications` for the OS workload), repeat `measure` with the same scenario/inputs, and compare medians
 and individual runs. Linux `wait4` CPU accounting includes waited-for children;
 peak RSS is a high-water mark, not a sum of simultaneous process-tree memory.
 Instrumented CPU/heap runs explain costs; their timings are not uninstrumented
@@ -158,6 +164,7 @@ Local checks:
 ```bash
 python3 -m unittest discover -s tools/profiling -p 'test_*.py'
 cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
+cargo test -p native_example --bin native_example --features profiling,heaptrack
 python3 tools/profiling/smoke_heaptrack.py
 ```
 

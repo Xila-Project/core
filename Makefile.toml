@@ -205,6 +205,21 @@ toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["build", "--package", "native_example", "--profile", "profiling", "${@}"]
 
+[tasks.prepare-profiling]
+toolchain = "${XILA_RUST_TOOLCHAIN}"
+command = "cargo"
+args = [
+  "build",
+  "--package",
+  "calculator",
+  "--package",
+  "weather",
+  "--target",
+  "wasm32-wasip1",
+  "--profile",
+  "release-wasm",
+]
+
 [tasks.coverage]
 install_crate = "cargo-llvm-cov"
 toolchain = "${XILA_RUST_TOOLCHAIN}"

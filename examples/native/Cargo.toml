@@ -26,5 +26,6 @@ getargs-derive = { workspace = true }
 
 [features]
 default = []
-profiling = ["drivers_std/profiling"]
-heaptrack = ["drivers_std/heaptrack"]
+prebuilt-applications = []
+profiling = ["drivers_std/profiling", "prebuilt-applications"]
+heaptrack = ["drivers_std/heaptrack", "prebuilt-applications"]

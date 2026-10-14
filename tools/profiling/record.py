@@ -57,7 +57,7 @@ def signal_group(process, sig):
         pass
 
 
-def record(command, directory, duration, stdin):
+def record(command, directory, duration, stdin, applications_dir=None):
     started = time.monotonic()
     limited = False
     forced = False
@@ -67,9 +67,11 @@ def record(command, directory, duration, stdin):
             (directory / 'stdout.log').open('wb') as stdout, \
             (directory / 'stderr.log').open('wb') as stderr:
         try:
+            environment = {**os.environ, 'XILA_PROFILE_OUTPUT': str(directory / 'runtime.json')}
+            if applications_dir:
+                environment['XILA_PROFILE_APP_DIR'] = str(applications_dir)
             process = subprocess.Popen(command, stdin=source, stdout=stdout, stderr=stderr,
-                                       start_new_session=True,
-                                       env={**os.environ, 'XILA_PROFILE_OUTPUT': str(directory / 'runtime.json')})
+                                       start_new_session=True, env=environment)
             deadline = started + duration
             stage = 0
             while True:
@@ -153,6 +155,8 @@ def main(argv=None):
     parser.add_argument('--duration', default=30, type=positive_seconds, help='maximum seconds per run')
     parser.add_argument('--runs', default=3, type=positive_count)
     parser.add_argument('--stdin', type=Path, help='input file replayed from the start each run')
+    parser.add_argument('--applications-dir', type=Path, default=os.environ.get('XILA_PROFILE_APP_DIR'),
+                        help='prebuilt Calculator/Weather directory (or XILA_PROFILE_APP_DIR)')
     parser.add_argument('--tool', choices=['samply', 'perf'], default='samply', help='CPU recorder')
     # Split at -- so options after mode are parsed, while workload flags stay literal.
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -170,6 +174,13 @@ def main(argv=None):
     try:
         # Validate paths/tools before creating an output directory.
         info = metadata(args.command, args.stdin)
+        if args.applications_dir:
+            args.applications_dir = args.applications_dir.resolve()
+            info['applications_directory'] = str(args.applications_dir)
+            info['application_sha256'] = {
+                name: digest(args.applications_dir / f'{name}.wasm')
+                for name in ('calculator', 'weather')
+            }
         if not info['executable']:
             raise ValueError(f'workload executable not found: {args.command[0]}')
         tool_command(args.mode, args.tool, output, args.command)
@@ -189,7 +200,7 @@ def main(argv=None):
             directory = output / f'run-{index}'
             directory.mkdir()
             command = tool_command(args.mode, args.tool, directory, args.command)
-            run = record(command, directory, args.duration, args.stdin)
+            run = record(command, directory, args.duration, args.stdin, args.applications_dir)
             run['recording_command'] = command
             run['artifacts'] = [str(path.relative_to(output)) for path in sorted(directory.iterdir())]
             if args.mode != 'measure':

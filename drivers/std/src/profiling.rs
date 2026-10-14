@@ -5,7 +5,7 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Instant,
 };
@@ -20,6 +20,8 @@ pub(crate) struct ExecutorCounters {
     wait_wall: AtomicU64,
     thread_id: AtomicU64,
     clock_errors: AtomicU64,
+    poll_active: AtomicBool,
+    wait_active: AtomicBool,
 }
 
 #[derive(Serialize)]
@@ -32,6 +34,15 @@ struct ExecutorSample {
     waits: u64,
     wait_wall_nanoseconds: u64,
     clock_errors: u64,
+    poll_active: bool,
+    wait_active: bool,
+}
+
+struct ActivityGuard<'a>(&'a AtomicBool);
+impl Drop for ActivityGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
 }
 
 impl ExecutorCounters {
@@ -44,6 +55,8 @@ impl ExecutorCounters {
             wait_wall: AtomicU64::new(0),
             thread_id: AtomicU64::new(0),
             clock_errors: AtomicU64::new(0),
+            poll_active: AtomicBool::new(false),
+            wait_active: AtomicBool::new(false),
         });
         EXECUTORS.lock().unwrap().push(value.clone());
         value
@@ -55,7 +68,10 @@ impl ExecutorCounters {
         );
         let start_cpu = task::profiling::thread_cpu_nanoseconds();
         let started = Instant::now();
+        self.poll_active.store(true, Ordering::Relaxed);
+        let active = ActivityGuard(&self.poll_active);
         let result = poll();
+        drop(active);
         let elapsed = started.elapsed().as_nanos() as u64;
         let end_cpu = task::profiling::thread_cpu_nanoseconds();
         self.polls.fetch_add(1, Ordering::Relaxed);
@@ -70,7 +86,10 @@ impl ExecutorCounters {
     }
     pub(crate) fn wait<R>(&self, wait: impl FnOnce() -> R) -> R {
         let started = Instant::now();
+        self.wait_active.store(true, Ordering::Relaxed);
+        let active = ActivityGuard(&self.wait_active);
         let result = wait();
+        drop(active);
         self.waits.fetch_add(1, Ordering::Relaxed);
         self.wait_wall
             .fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
@@ -86,6 +105,8 @@ impl ExecutorCounters {
             waits: self.waits.load(Ordering::Relaxed),
             wait_wall_nanoseconds: self.wait_wall.load(Ordering::Relaxed),
             clock_errors: self.clock_errors.load(Ordering::Relaxed),
+            poll_active: self.poll_active.load(Ordering::Relaxed),
+            wait_active: self.wait_active.load(Ordering::Relaxed),
         }
     }
 }
@@ -104,6 +125,7 @@ struct TaskSample {
     max_poll_wall_nanoseconds: u64,
     clock_errors: u64,
     completed: bool,
+    poll_active: bool,
     allocation_requests: u64,
     allocation_request_bytes: u64,
 }
@@ -141,6 +163,7 @@ pub fn write_report(path: &Path) -> std::io::Result<()> {
             max_poll_wall_nanoseconds: t.max_poll_wall_nanoseconds,
             clock_errors: t.clock_errors,
             completed: t.completed,
+            poll_active: t.poll_active,
             allocation_requests: t.allocation_requests,
             allocation_request_bytes: t.allocation_request_bytes,
         })
@@ -187,6 +210,15 @@ pub fn start_from_environment() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn active_executor_poll_and_wait_are_visible() {
+        let counters = ExecutorCounters::new();
+        counters.poll(|| assert!(counters.sample().poll_active));
+        counters.wait(|| assert!(counters.sample().wait_active));
+        assert!(!counters.sample().poll_active);
+        assert!(!counters.sample().wait_active);
+    }
+
     #[test]
     fn executor_wait_is_separate_from_poll_work() {
         let counters = ExecutorCounters::new();
