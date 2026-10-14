@@ -1,16 +1,15 @@
 use std::os::raw::c_void;
 
 use graphics::{
-    Logo,
+    Color, Logo,
     lvgl::{
-        _lv_obj_t, LV_STATE_DEFAULT, lv_align_t_LV_ALIGN_CENTER, lv_anim_delete, lv_anim_init,
-        lv_anim_path_ease_in_out, lv_anim_set_duration, lv_anim_set_exec_cb, lv_anim_set_path_cb,
-        lv_anim_set_repeat_count, lv_anim_set_repeat_delay, lv_anim_set_reverse_delay,
-        lv_anim_set_reverse_time, lv_anim_set_values, lv_anim_set_var, lv_anim_start, lv_anim_t,
-        lv_obj_get_child, lv_obj_get_child_count, lv_obj_get_size, lv_obj_set_align,
-        lv_obj_set_style_opa, lv_obj_set_style_shadow_color,
+        _lv_obj_t, LV_PART_MAIN, LV_STATE_DEFAULT, lv_align_t_LV_ALIGN_CENTER, lv_anim_delete,
+        lv_anim_init, lv_anim_path_ease_in_out, lv_anim_set_duration, lv_anim_set_exec_cb,
+        lv_anim_set_path_cb, lv_anim_set_repeat_count, lv_anim_set_repeat_delay,
+        lv_anim_set_reverse_delay, lv_anim_set_reverse_time, lv_anim_set_values, lv_anim_set_var,
+        lv_anim_start, lv_anim_t, lv_obj_get_child, lv_obj_get_child_count, lv_obj_get_size,
+        lv_obj_get_style_text_color, lv_obj_set_align, lv_obj_set_style_opa,
     },
-    theme,
 };
 
 mod error;
@@ -75,7 +74,9 @@ impl Bootsplash {
             let screen_size = lv_obj_get_size(current_screen);
             let factor = Logo::get_factor(screen_size.scale(0.3));
 
-            let logo = Logo::new(current_screen, factor, theme::get_primary_color())?;
+            let foreground =
+                Color::from_lvgl_color(lv_obj_get_style_text_color(current_screen, LV_PART_MAIN));
+            let logo = Logo::new(current_screen, factor, foreground)?;
 
             let logo_inner_object = logo.get_inner_object();
 
@@ -85,11 +86,6 @@ impl Bootsplash {
                 let part = lv_obj_get_child(logo_inner_object, i as i32);
 
                 lv_obj_set_style_opa(part, 0, LV_STATE_DEFAULT);
-                lv_obj_set_style_shadow_color(
-                    part,
-                    theme::get_primary_color().into_lvgl_color(),
-                    LV_STATE_DEFAULT,
-                );
             }
 
             let mut s = Self {

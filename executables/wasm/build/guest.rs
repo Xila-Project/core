@@ -234,10 +234,12 @@ fn generate_enumeration(
     lvgl_functions: &LvglContext,
 ) -> Result<(), String> {
     let enumeration = enumeration::generate_code(lvgl_functions.get_signatures().to_vec());
-    // Keep the guest contract independent of newly inserted native LVGL events.
-    let close_requested = graphics_bindgen::GUEST_EVENT_LAST + 3;
+    let close_requested = lvgl_rust_sys::lv_event_code_t_LV_EVENT_LAST + 3;
+    let constants = graphics_bindgen::guest_constants::generate(lvgl_rust_sys::_bindgen_raw_src())
+        .map_err(|error| error.to_string())?;
     let token_stream = quote! {
         #enumeration
+        #constants
         pub const EVENT_CLOSE_REQUESTED: u32 = #close_requested;
     };
 

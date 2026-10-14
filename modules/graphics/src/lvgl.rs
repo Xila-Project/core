@@ -2,22 +2,6 @@ use core::ffi::c_char;
 
 pub use lvgl_rust_sys::*;
 
-/// Compatibility name retained by Xila's existing guest ABI.
-///
-/// # Safety
-/// Follow LVGL's object-pointer and synchronization requirements.
-pub unsafe fn lv_obj_is_valid(object: *const lv_obj_t) -> bool {
-    unsafe { lv_obj_is_in_widget_tree(object) }
-}
-
-/// Compatibility name retained by Xila's existing guest ABI.
-///
-/// # Safety
-/// The tab view and name pointer must be valid; the caller must hold the LVGL lock.
-pub unsafe fn lv_tabview_rename_tab(object: *mut lv_obj_t, index: u32, name: *const c_char) {
-    unsafe { lv_tabview_set_tab_text(object, index, name) }
-}
-
 use crate::Point;
 
 pub const LV_SIZE_CONTENT: i32 = (LV_COORD_MAX | LV_COORD_TYPE_SPEC) as i32;
