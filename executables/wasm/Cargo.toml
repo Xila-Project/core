@@ -5,7 +5,7 @@ edition = "2024"
 build = "build/main.rs"
 
 [dependencies]
-wasmi = { version = "1.1.0", default-features = false, features = [
+wasmi = { version = "2.0.0", default-features = false, features = [
   "prefer-btree-collections",
   "extra-checks",
 ], optional = true }
