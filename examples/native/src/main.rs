@@ -1,5 +1,18 @@
+#[cfg(feature = "prebuilt-applications")]
+mod profiling;
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 mod cli;
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[inline(always)]
+fn application_binary(name: &str) -> Result<std::path::PathBuf, String> {
+    #[cfg(feature = "prebuilt-applications")]
+    if let Some(directory) = std::env::var_os("XILA_PROFILE_APP_DIR") {
+        return profiling::application_path(std::path::Path::new(&directory), name);
+    }
+    xila::executable::build_crate(name)
+}
 
 static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 
@@ -11,6 +24,8 @@ static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 )]
 async fn main(task_manager: &'static xila::task::Manager) {
     drivers_std::memory::instantiate_global_allocator!();
+    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    drivers_std::profiling::start_from_environment().expect("Failed to start profiling snapshots");
 
     extern crate alloc;
 
@@ -21,7 +36,6 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use xila::bootsplash::Bootsplash;
     use xila::executable;
     use xila::executable::Standard;
-    use xila::executable::build_crate;
     use xila::executable::mount_executables;
     use xila::file_system::AccessFlags;
     use xila::file_system::XILA_DISK_SIGNATURE;
@@ -322,7 +336,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    let calculator_binary_path = build_crate("calculator").unwrap();
+    let calculator_binary_path = application_binary("calculator").unwrap();
 
     load_to_virtual_file_system(
         task_manager,
@@ -333,7 +347,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    let weather_binary_path = build_crate("weather").unwrap();
+    let weather_binary_path = application_binary("weather").unwrap();
 
     load_to_virtual_file_system(
         task_manager,

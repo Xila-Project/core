@@ -19,10 +19,14 @@ embassy-time = { workspace = true, features = ["std"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 embassy-time = { workspace = true, features = ["wasm"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2", optional = true }
+
 [features]
 default = []
 std = []
 test_harness = ["std"]
+profiling = ["dep:libc"]
 
 [dev-dependencies]
 drivers_native = { workspace = true }

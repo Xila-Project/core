@@ -13,6 +13,8 @@ pub struct Executor {
     not_send: PhantomData<*mut ()>,
     signaler: &'static Signaler,
     stop: AtomicBool,
+    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    profiling: std::sync::Arc<crate::profiling::ExecutorCounters>,
 }
 
 impl Default for Executor {
@@ -30,6 +32,8 @@ impl Executor {
             not_send: PhantomData,
             signaler,
             stop: AtomicBool::new(false),
+            #[cfg(all(feature = "profiling", target_os = "linux"))]
+            profiling: crate::profiling::ExecutorCounters::new(),
         }
     }
 
@@ -69,6 +73,19 @@ impl Executor {
         init(self.inner.spawner(), self);
 
         while !self.stop.load(std::sync::atomic::Ordering::SeqCst) {
+            self.poll_and_wait();
+        }
+    }
+
+    #[inline(always)]
+    fn poll_and_wait(&'static self) {
+        #[cfg(all(feature = "profiling", target_os = "linux"))]
+        {
+            self.profiling.poll(|| unsafe { self.inner.poll() });
+            self.profiling.wait(|| self.signaler.wait());
+        }
+        #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+        {
             unsafe { self.inner.poll() };
             self.signaler.wait();
         }
@@ -78,8 +95,7 @@ impl Executor {
         init(self.inner.spawner());
 
         loop {
-            unsafe { self.inner.poll() };
-            self.signaler.wait()
+            self.poll_and_wait();
         }
     }
 }

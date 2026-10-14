@@ -72,7 +72,7 @@ impl ManagerTrait for MemoryManager {
         capabilities: CapabilityFlags,
         layout: Layout,
     ) -> Option<NonNull<u8>> {
-        unsafe {
+        let result = unsafe {
             self.regions.lock(|regions| {
                 let mut regions = regions.try_borrow_mut().ok()?;
 
@@ -107,10 +107,23 @@ impl ManagerTrait for MemoryManager {
 
                 None
             })
+        };
+        // Never call profiler code while holding the region lock/RefCell borrow.
+        #[cfg(all(feature = "heaptrack", target_os = "linux"))]
+        if let Some(pointer) = result {
+            crate::heaptrack::allocated(pointer.as_ptr(), layout.size());
         }
+        #[cfg(all(feature = "profiling", target_os = "linux"))]
+        if result.is_some() {
+            task::profiling::record_allocation(layout.size());
+        }
+        result
     }
 
     unsafe fn deallocate(&self, pointer: NonNull<u8>, layout: Layout) {
+        // Report before making the address reusable by another thread.
+        #[cfg(all(feature = "heaptrack", target_os = "linux"))]
+        crate::heaptrack::freed(pointer.as_ptr());
         unsafe {
             self.regions.lock(|regions| {
                 let mut regions = regions.borrow_mut();

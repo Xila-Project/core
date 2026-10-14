@@ -24,6 +24,12 @@ embassy-executor = { workspace = true, default-features = false, features = [
   "executor-thread",
 ] }
 smoltcp = { workspace = true, features = ["phy-tuntap_interface"] }
+miniserde = { workspace = true, optional = true }
+
+[features]
+default = []
+heaptrack = []
+profiling = ["task/profiling", "dep:miniserde"]
 
 [dev-dependencies]
 little_fs = { workspace = true }

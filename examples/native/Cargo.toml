@@ -23,3 +23,9 @@ drivers_shared = { workspace = true }
 drivers_native = { workspace = true }
 getargs = { version = "0.5" }
 getargs-derive = { workspace = true }
+
+[features]
+default = []
+prebuilt-applications = []
+profiling = ["drivers_std/profiling", "prebuilt-applications"]
+heaptrack = ["drivers_std/heaptrack", "prebuilt-applications"]
