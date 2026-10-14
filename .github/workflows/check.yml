@@ -200,7 +200,7 @@ jobs:
           cargo make coverage --lcov --output-path lcov.info
 
       - name: Upload | Coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
           slug: Xila-Project/Core
