@@ -10,6 +10,8 @@ mod shortcut;
 
 extern crate alloc;
 
+xila::internationalization::track_locales!();
+
 use crate::{desk::Desk, error::Error};
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt::Write;

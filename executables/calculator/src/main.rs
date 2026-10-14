@@ -1,3 +1,5 @@
+embedded_i18n::track_locales!();
+
 #[cfg(any(target_arch = "wasm32", test))]
 mod evaluator;
 #[cfg(any(target_arch = "wasm32", test))]

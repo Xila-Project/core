@@ -2,6 +2,8 @@
 
 extern crate alloc;
 
+xila::internationalization::track_locales!();
+
 mod error;
 mod settings;
 mod tabs;
