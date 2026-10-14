@@ -15,7 +15,9 @@ embassy-futures = { workspace = true }
 embedded-io-async = { workspace = true }
 embedded-tls = { workspace = true }
 embedded-io = { workspace = true }
-rand_core = "0.6"
+rand_core = { version = "0.10", default-features = false }
+# embedded-tls 0.19 still requires the rand_core 0.6 traits.
+rand_core_06 = { package = "rand_core", version = "0.6", default-features = false }
 
 getrandom = { version = "0.4.2" }
 sha2 = { version = "0.11" }
