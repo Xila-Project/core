@@ -6,6 +6,20 @@ use crate::Point;
 
 pub const LV_SIZE_CONTENT: i32 = (LV_COORD_MAX | LV_COORD_TYPE_SPEC) as i32;
 
+pub const LV_STATE_DEFAULT: u32 = 0;
+pub const LV_STATE_CHECKED: u32 = 1 << 2;
+pub const LV_STATE_PRESSED: u32 = 1 << 7;
+
+pub const LV_PART_MAIN: u32 = 0;
+pub const LV_PART_INDICATOR: u32 = 0x020000;
+pub const LV_PART_KNOB: u32 = 0x030000;
+pub const LV_PART_ITEMS: u32 = 0x050000;
+
+pub const LV_OPA_TRANSP: u8 = 0;
+pub const LV_OPA_0: u8 = 0;
+pub const LV_OPA_50: u8 = 127;
+pub const LV_OPA_COVER: u8 = 255;
+
 /// Set the padding of an object on all sides
 ///
 /// # Arguments
@@ -108,11 +122,11 @@ unsafe extern "C" fn radio_event_handler(event: *mut lv_event_t) {
             for i in 0..child_count {
                 let child = lvgl_rust_sys::lv_obj_get_child(parent, i as _);
                 if child != target {
-                    lvgl_rust_sys::lv_obj_remove_state(child, lvgl_rust_sys::LV_STATE_CHECKED as _);
+                    lvgl_rust_sys::lv_obj_remove_state(child, LV_STATE_CHECKED as _);
                 }
             }
 
-            lvgl_rust_sys::lv_obj_add_state(target, lvgl_rust_sys::LV_STATE_CHECKED as _);
+            lvgl_rust_sys::lv_obj_add_state(target, LV_STATE_CHECKED as _);
         }
     }
 }

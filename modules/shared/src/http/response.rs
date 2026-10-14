@@ -105,7 +105,7 @@ impl<'a> HttpResponseBuilder<'a> {
     }
 
     pub fn add_status_code(&mut self, status_code: u16) -> Option<()> {
-        let status_line = &["HTTP/1.1 ", &status_code.to_string(), " \r\n"].concat();
+        let status_line = &["HTTP/1.1 ", &status_code.to_string(), " "].concat();
         self.add_line(status_line.as_bytes())
     }
 

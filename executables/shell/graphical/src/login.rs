@@ -1,17 +1,16 @@
-pub(crate) use core::ffi::CStr;
-
 use alloc::string::ToString;
+pub(crate) use core::ffi::CStr;
 use xila::authentication;
-use xila::graphics::{self, EventKind, Window, lvgl};
+use xila::graphics::{self, EventKind, OwnedWindow, lvgl};
 use xila::internationalization::translate;
-use xila::task;
 use xila::users::UserIdentifier;
-use xila::virtual_file_system;
 
 use crate::error::{Error, Result};
 
 pub struct Login {
-    window: Window,
+    context: &'static xila::executable::ExecutableContext,
+    graphics_manager: &'static graphics::Manager,
+    window: OwnedWindow,
     user_name_text_area: *mut lvgl::lv_obj_t,
     password_text_area: *mut lvgl::lv_obj_t,
     button: *mut lvgl::lv_obj_t,
@@ -20,16 +19,17 @@ pub struct Login {
 }
 
 impl Login {
-    pub async fn new() -> Result<Self> {
+    pub async fn new(context: &'static xila::executable::ExecutableContext) -> Result<Self> {
+        let graphics_manager = graphics::ffi_manager();
         // - Lock the graphics
-        graphics::lock!({
+        graphics::lock!(graphics_manager, {
             // - Create a window
-            let window = graphics::get_instance().create_window().await?;
+            let mut window = graphics_manager.create_window().await?;
 
             unsafe {
-                lvgl::lv_obj_set_flex_flow(window.get_object(), lvgl::LV_FLEX_COLUMN);
+                lvgl::lv_obj_set_flex_flow(window.as_object_mutable(), lvgl::LV_FLEX_COLUMN);
                 lvgl::lv_obj_set_flex_align(
-                    window.get_object(),
+                    window.as_object_mutable(),
                     lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
                     lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
                     lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
@@ -38,7 +38,7 @@ impl Login {
 
             let user_name_text_area = unsafe {
                 // - Create a text area for the user name
-                let user_name_text_area = lvgl::lv_textarea_create(window.get_object());
+                let user_name_text_area = lvgl::lv_textarea_create(window.as_object_mutable());
 
                 lvgl::lv_textarea_set_placeholder_text(
                     user_name_text_area,
@@ -51,7 +51,7 @@ impl Login {
 
             let password_text_area = unsafe {
                 // - Create a text area for the password
-                let password_text_area = lvgl::lv_textarea_create(window.get_object());
+                let password_text_area = lvgl::lv_textarea_create(window.as_mut());
 
                 lvgl::lv_textarea_set_placeholder_text(
                     password_text_area,
@@ -65,7 +65,7 @@ impl Login {
 
             let error_label = unsafe {
                 // - Create a label for the error
-                let error_label = lvgl::lv_label_create(window.get_object());
+                let error_label = lvgl::lv_label_create(window.as_mut());
 
                 lvgl::lv_label_set_text(error_label, c"".as_ptr());
 
@@ -74,7 +74,7 @@ impl Login {
 
             let button = unsafe {
                 // - Create a button
-                let button = lvgl::lv_button_create(window.get_object());
+                let button = lvgl::lv_button_create(window.as_mut());
 
                 let label = lvgl::lv_label_create(button);
 
@@ -84,6 +84,8 @@ impl Login {
             };
 
             Ok(Login {
+                context,
+                graphics_manager,
                 window,
                 user_name_text_area,
                 password_text_area,
@@ -126,19 +128,20 @@ impl Login {
         };
 
         // - Check the user name and the password
-        let user_identifier = authentication::authenticate_user(
-            virtual_file_system::get_instance(),
-            user_name,
-            password,
-        )
-        .await
-        .map_err(Error::AuthenticationFailed)?;
+        let task_manager = &self.context.task_manager;
+        let task = task_manager.get_current_task_identifier().await;
+        let authentication_context = authentication::Context {
+            virtual_file_system: self.context.virtual_file_system,
+            task_manager,
+            users_manager: self.context.users_manager,
+            task,
+        };
+        let user_identifier =
+            authentication::authenticate_user(&authentication_context, user_name, password)
+                .await
+                .map_err(Error::AuthenticationFailed)?;
 
         // - Set the user
-        let task_manager = task::get_instance();
-
-        let task = task_manager.get_current_task_identifier().await;
-
         task_manager
             .set_user(task, user_identifier)
             .await
@@ -150,24 +153,27 @@ impl Login {
     }
 
     pub async fn event_handler(&mut self) {
-        graphics::lock! {{
-            while let Some(event) = self.window.pop_event() {
-            // If we are typing the user name or the password
-            if event.code == EventKind::ValueChanged
-                && (event.target == self.user_name_text_area
-                    || event.target == self.password_text_area)
+        graphics::lock!(self.graphics_manager, {
             {
-                self.clear_error();
-            }
-            // If the "Login" button is clicked
-            else if event.code == EventKind::Clicked && event.target == self.button {
-                let result = self.authenticate().await;
+                while let Some(event) = self.window.pop_event() {
+                    // If we are typing the user name or the password
+                    if event.code == EventKind::ValueChanged
+                        && (event.target == self.user_name_text_area
+                            || event.target == self.password_text_area)
+                    {
+                        self.clear_error();
+                    }
+                    // If the "Login" button is clicked
+                    else if event.code == EventKind::Clicked && event.target == self.button {
+                        let result = self.authenticate().await;
 
-                if let Err(error) = result {
-                    self.print_error(error);
+                        if let Err(error) = result {
+                            self.print_error(error);
+                        }
+                    }
                 }
             }
-        }}}
+        })
     }
 
     pub fn get_logged_user(&self) -> Option<UserIdentifier> {

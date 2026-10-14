@@ -1,122 +1,193 @@
-use core::fmt::Write;
-use executable_macros::GetArgs;
+use getargs_derive::GetArgs;
 use xila::{
+    file_system::Path,
     internationalization::translate,
     network::{self, DnsQueryKind, Duration, IcmpEndpoint},
 };
 
-use crate::{Error, Shell};
+use crate::Error;
+
+use super::{CommandContext, UserCommand};
+
+pub struct PingCommand;
+
+impl UserCommand for PingCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        options: &mut getargs::Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> crate::Result<(), crate::Error<'a>>
+    where
+        I: Iterator<Item = &'a str>,
+        C: CommandContext,
+    {
+        execute_ping(context, options).await
+    }
+}
 
 const ICMP_IDENTIFIER: u16 = 0x22b;
 
 #[derive(GetArgs)]
+#[command(name = "ping", about = "Send ICMP echo requests.")]
 struct PingArguments<'a> {
     target: &'a str,
-    #[arg(short = 'c', long = "count", default = 4)]
+    #[arg(short = 'c', long = "count", default_value_t = 4)]
     count: u16,
-    #[arg(short = 't', long = "timeout", default = 5)]
+    #[arg(short = 't', long = "timeout", default_value_t = 5)]
     timeout: u64,
-    #[arg(short = 's', long = "size", default = 56)]
+    #[arg(short = 's', long = "size", default_value_t = 56)]
     size: usize,
 }
 
-impl Shell {
-    pub async fn ping<'a, I>(
-        &mut self,
-        options: &mut getargs::Options<&'a str, I>,
-    ) -> crate::Result<()>
-    where
-        I: Iterator<Item = &'a str>,
-    {
-        let PingArguments {
-            target,
-            count,
-            timeout: timeout_seconds,
-            size: payload_size,
-        } = PingArguments::parse(options)?;
-
-        let network = network::get_instance();
-
-        let dns_socket = network
-            .new_dns_socket(None)
-            .await
-            .map_err(Error::FailedToCreateSocket)?;
-
-        let resolved_target = dns_socket
-            .resolve(target, DnsQueryKind::A | DnsQueryKind::Aaaa)
-            .await
-            .map(|s| s.first().cloned())
-            .map_err(Error::FailedToResolve)?;
-
-        dns_socket
-            .close()
-            .await
-            .map_err(Error::FailedToCreateSocket)?;
-
-        let resolved_target = match resolved_target {
-            Some(ip) => ip,
-            None => {
-                writeln!(
-                    self.standard.out(),
-                    translate!("Cannot resolve {}: Unknown host"),
-                    target
-                )?;
-                return Ok(());
-            }
-        };
-
-        writeln!(
-            self.standard.out(),
+async fn write_ping_line<C: CommandContext>(
+    context: &mut C,
+    target: &str,
+    resolved_target: &xila::network::IpAddress,
+) -> crate::Result<()> {
+    context.write_out_fmt(format_args!(
+        "{}\n",
+        format_args!(
             translate!("PING {} ({}): {} data bytes"),
-            target,
-            &resolved_target,
-            56
-        )?;
+            target, resolved_target, 56
+        )
+    ))
+}
 
-        let socket = network
-            .new_icmp_socket(256, 256, 1, 1, None)
+async fn ping_loop<C: CommandContext>(
+    context: &mut C,
+    network_manager: &network::Manager,
+    resolved_target: &xila::network::IpAddress,
+    count: u16,
+    timeout_seconds: u64,
+    payload_size: usize,
+) -> crate::Result<()> {
+    let socket = network_manager
+        .new_icmp_socket(256, 256, 1, 1, None)
+        .await
+        .map_err(Error::FailedToCreateSocket)?;
+
+    socket
+        .bind(IcmpEndpoint::Identifier(ICMP_IDENTIFIER))
+        .await
+        .map_err(Error::FailedToCreateSocket)?;
+
+    for i in 0..count {
+        match socket
+            .ping(
+                resolved_target,
+                i,
+                ICMP_IDENTIFIER,
+                Duration::from_seconds(timeout_seconds),
+                payload_size,
+            )
             .await
-            .map_err(Error::FailedToCreateSocket)?;
-
-        socket
-            .bind(IcmpEndpoint::Identifier(ICMP_IDENTIFIER))
-            .await
-            .map_err(Error::FailedToCreateSocket)?;
-
-        for i in 0..count {
-            match socket
-                .ping(
-                    &resolved_target,
-                    i,
-                    ICMP_IDENTIFIER,
-                    Duration::from_seconds(timeout_seconds),
-                    payload_size,
-                )
-                .await
-            {
-                Ok(duration) => {
-                    writeln!(
-                        self.standard.out(),
+        {
+            Ok(duration) => {
+                context.write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(
                         translate!("{} bytes from {}: icmp_seq={} time={:.2} ms"),
                         payload_size,
                         resolved_target,
                         i,
                         duration.as_milliseconds()
-                    )?;
-                }
-                Err(network::Error::TimedOut) => {
-                    writeln!(
-                        self.standard.out(),
-                        translate!("Request timeout for icmp_seq {}"),
-                        i
-                    )?;
-                }
-                Err(e) => {
-                    writeln!(self.standard.out(), translate!("Error: {}"), e)?;
-                }
+                    )
+                ))?;
+            }
+            Err(network::Error::TimedOut) => {
+                context.write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(translate!("Request timeout for icmp_seq {}"), i)
+                ))?;
+            }
+            Err(e) => {
+                context.write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(translate!("Error: {}"), e)
+                ))?;
             }
         }
+    }
 
-        Ok(())
+    Ok(())
+}
+
+async fn execute_ping<'a, I, C>(
+    context: &mut C,
+    options: &mut getargs::Options<&'a str, I>,
+) -> crate::Result<(), crate::Error<'a>>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    let PingArguments {
+        target,
+        count,
+        timeout: timeout_seconds,
+        size: payload_size,
+    } = PingArguments::parse(options)?;
+
+    let manager = context
+        .executable_context()
+        .network_manager
+        .as_ref()
+        .ok_or(crate::Error::InvalidOption)?;
+
+    let resolved_target = manager
+        .resolve(target, DnsQueryKind::A | DnsQueryKind::Aaaa, true, None)
+        .await
+        .ok()
+        .and_then(|ips| ips.first().cloned());
+
+    let resolved_target = match resolved_target {
+        Some(ip) => ip,
+        None => {
+            context.write_out_fmt(format_args!(
+                "{}\n",
+                format_args!(translate!("Cannot resolve {}: Unknown host"), target)
+            ))?;
+            return Ok(());
+        }
+    };
+
+    write_ping_line(context, target, &resolved_target).await?;
+    ping_loop(
+        context,
+        manager,
+        &resolved_target,
+        count,
+        timeout_seconds,
+        payload_size,
+    )
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PingArguments;
+    use alloc::string::ToString;
+
+    #[test]
+    fn preserves_defaults_and_option_names() {
+        let parsed = PingArguments::from_args(["localhost"].into_iter()).unwrap();
+        assert_eq!((parsed.count, parsed.timeout, parsed.size), (4, 5, 56));
+        let parsed = PingArguments::from_args(
+            ["-c", "2", "--timeout", "3", "--size=32", "localhost"].into_iter(),
+        )
+        .unwrap();
+        assert_eq!((parsed.count, parsed.timeout, parsed.size), (2, 3, 32));
+    }
+
+    #[test]
+    fn suggests_misspelled_timeout_option() {
+        let error = PingArguments::from_args(["localhost", "--timout", "3"].into_iter())
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("similar argument exists: '--timeout'")
+        );
     }
 }

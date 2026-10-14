@@ -9,3 +9,8 @@ Cargo.lock
 *.generated.c
 
 node_modules
+/.dev-environment/
+/.devbox/
+
+# Local documentation; never commit it.
+/docs/

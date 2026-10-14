@@ -1,4 +1,5 @@
 {
+  "Argument parsing error: {}": "Erreur d'analyse des arguments: {}",
   "Accessed": "Accédé",
   "Authentication failed: {}": "Échec de l'authentification: {}",
   "Cannot resolve {}: Unknown host": "Impossible de résoudre {}: Hôte inconnu",
@@ -17,6 +18,7 @@
   "Failed to open file: {}": "Échec de l'ouverture du fichier: {}",
   "Failed to read directory entry: {}": "Échec de la lecture de l'entrée du répertoire: {}",
   "Failed to read environment variable: {}": "Échec de la lecture de la variable d'environnement: {}",
+  "Failed to read file: {}": "Impossible de lire le fichier : {}",
   "Failed to remove directory: {}": "Échec de la suppression du répertoire: {}",
   "Failed to remove environment variable: {}": "Échec de la suppression de la variable d'environnement: {}",
   "Failed to resolve domain '{}' for {} records: {}": "Échec de la résolution du domaine '{}' pour les enregistrements {}: {}",

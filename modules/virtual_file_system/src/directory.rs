@@ -7,10 +7,11 @@ use task::block_on;
 
 use crate::{ItemStatic, Result, SynchronousDirectory, VirtualFileSystem, poll};
 
-pub struct Directory(SynchronousDirectory);
+pub struct Directory<'a>(SynchronousDirectory<'a>);
 
-impl Directory {
+impl<'a> Directory<'a> {
     pub(crate) fn new(
+        virtual_file_system: &'a VirtualFileSystem,
         directory: &'static dyn FileSystemOperations,
         flags: Flags,
         context: Context,
@@ -21,11 +22,16 @@ impl Directory {
             Some(flags.get_state().insert(StateFlags::NonBlocking)),
         );
 
-        Self(SynchronousDirectory::new(directory, flags, context))
+        Self(SynchronousDirectory::new(
+            virtual_file_system,
+            directory,
+            flags,
+            context,
+        ))
     }
 
     pub async fn create(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: TaskIdentifier,
         path: impl AsRef<Path>,
     ) -> Result<()> {
@@ -33,7 +39,7 @@ impl Directory {
     }
 
     pub async fn open(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: TaskIdentifier,
         path: impl AsRef<Path>,
     ) -> Result<Self> {
@@ -68,12 +74,12 @@ impl Directory {
         result
     }
 
-    pub fn into_synchronous_directory(self) -> SynchronousDirectory {
+    pub fn into_synchronous_directory(self) -> SynchronousDirectory<'a> {
         self.0
     }
 }
 
-impl Iterator for Directory {
+impl Iterator for Directory<'_> {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {

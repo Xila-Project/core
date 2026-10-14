@@ -16,14 +16,11 @@ impl Manager {
         RawIdentifier: Debug,
     {
         for key in map.keys() {
-            match range.next() {
-                Some(test_key) => {
-                    if *key != test_key {
-                        return Some(test_key.into());
-                    }
+            {
+                let test_key = range.next()?;
+                if *key != test_key {
+                    return Some(test_key.into());
                 }
-
-                None => return None, // No more identifiers to check
             }
         }
 

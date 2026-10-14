@@ -211,6 +211,13 @@ macro_rules! flags {
             $visibility const unsafe fn from_bits_unchecked(bits: $t) -> Self {
                 Self(bits)
             }
+
+            /// Count the number of flags set in the flag set
+            #[allow(dead_code)]
+            $visibility const fn count_ones(&self) -> u32 {
+                self.0.count_ones()
+            }
+
         }
 
         impl core::fmt::Debug for $identifier {

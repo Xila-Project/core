@@ -14,13 +14,19 @@ use users::{GroupIdentifier, UserIdentifier};
 /// This structure is used to represent a file in the virtual file system.
 /// This is a wrapper around the virtual file system file identifier.
 #[derive(Debug)]
-pub struct File(SynchronousFile);
+pub struct File<'a>(SynchronousFile<'a>);
 
-impl ErrorType for File {
+impl<'a> File<'a> {
+    pub fn as_synchronous_file_mut(&mut self) -> &mut SynchronousFile<'a> {
+        &mut self.0
+    }
+}
+
+impl ErrorType for File<'_> {
     type Error = Error;
 }
 
-impl embedded_io_async::Write for File {
+impl embedded_io_async::Write for File<'_> {
     async fn write(&mut self, buf: &[u8]) -> core::result::Result<usize, Self::Error> {
         File::write(self, buf).await
     }
@@ -30,7 +36,7 @@ impl embedded_io_async::Write for File {
     }
 }
 
-impl core::fmt::Write for File {
+impl core::fmt::Write for File<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         if let Err(e) = block_on(self.write(s.as_bytes())) {
             log::error!("Error writing string to file: {}", e);
@@ -40,13 +46,24 @@ impl core::fmt::Write for File {
     }
 }
 
-impl File {
-    pub(crate) fn new(item: ItemStatic, flags: Flags, context: Context) -> Self {
-        Self(SynchronousFile::new(item, 0, flags, context))
+impl<'a> File<'a> {
+    pub(crate) fn new(
+        virtual_file_system: &'a VirtualFileSystem,
+        item: ItemStatic,
+        flags: Flags,
+        context: Context,
+    ) -> Self {
+        Self(SynchronousFile::new(
+            virtual_file_system,
+            item,
+            0,
+            flags,
+            context,
+        ))
     }
 
     pub async fn open(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: task::TaskIdentifier,
         path: impl AsRef<Path>,
         flags: Flags,
@@ -57,7 +74,7 @@ impl File {
     }
 
     pub async fn create_unnamed_pipe(
-        file_system: &VirtualFileSystem,
+        file_system: &'a VirtualFileSystem,
         size: usize,
         status: StateFlags,
     ) -> Result<(Self, Self)> {
@@ -219,13 +236,13 @@ impl File {
         result
     }
 
-    pub fn into_synchronous_file(self) -> SynchronousFile {
+    pub fn into_synchronous_file(self) -> SynchronousFile<'a> {
         self.0
     }
 }
 
 pub struct FileControlIterator<'a, C> {
-    file: &'a mut File,
+    file: &'a mut File<'a>,
     get_command: C,
     index: usize,
     count: usize,
@@ -236,7 +253,7 @@ where
     C: ControlCommand<Input = usize>,
     C::Output: Default,
 {
-    pub async fn new<Cc>(file: &'a mut File, count_command: Cc, get_command: C) -> Result<Self>
+    pub async fn new<Cc>(file: &'a mut File<'a>, count_command: Cc, get_command: C) -> Result<Self>
     where
         Cc: ControlCommand<Input = (), Output = usize>,
     {

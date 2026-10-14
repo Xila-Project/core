@@ -69,7 +69,7 @@ fn build_request<'a>(scheme: &str, request: HttpRequestParser<'a>) -> Option<Req
 
     let url = format!("{}://{}{}", scheme, host?, path.unwrap_or("/"));
 
-    Some(Request::new_with_str_and_init(&url, &options).ok()?)
+    Request::new_with_str_and_init(&url, &options).ok()
 }
 
 fn build_headers_response(response: &web_sys::Response, buffer: &mut [u8]) -> Result<usize> {
@@ -78,7 +78,7 @@ fn build_headers_response(response: &web_sys::Response, buffer: &mut [u8]) -> Re
     // Status code
     let status = response.status();
     builder
-        .add_status_code(status as u16)
+        .add_status_code(status)
         .ok_or(Error::InternalError)?;
 
     // Headers

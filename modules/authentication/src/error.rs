@@ -4,7 +4,7 @@
 //! including user and group management, file I/O, and password validation.
 
 use core::fmt::Display;
-use internationalization::translate;
+use embedded_i18n::translate;
 
 /// Result type alias for authentication operations.
 ///

@@ -1,61 +1,93 @@
-use crate::{Error, Result, Shell};
-use alloc::{borrow::ToOwned, format};
-use core::fmt::Write;
-use executable_macros::GetArgs;
+use crate::{Error, Result};
+use alloc::{borrow::ToOwned, format, string::String};
 use getargs::Options;
+use getargs_derive::GetArgs;
 use xila::{
     file_system::Path,
     internationalization::translate,
     shared::{BYTES_SUFFIX, Unit},
-    users, virtual_file_system,
 };
 
+use super::{CommandContext, UserCommand};
+
+pub struct StatisticsCommand;
+
+impl UserCommand for StatisticsCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        options: &mut Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> Result<(), crate::Error<'a>>
+    where
+        I: Iterator<Item = &'a str>,
+        C: CommandContext,
+    {
+        execute_statistics(context, options).await
+    }
+}
+
 #[derive(GetArgs)]
+#[command(name = "stat", about = "Show file metadata.")]
 struct StatisticsArguments<'a> {
     path: &'a str,
 }
 
-impl Shell {
-    pub async fn statistics<'a, I>(&mut self, options: &mut Options<&'a str, I>) -> Result<()>
-    where
-        I: Iterator<Item = &'a str>,
+fn resolve_path<C: CommandContext>(
+    context: &C,
+    path: &str,
+) -> Result<xila::file_system::PathOwned> {
+    let path = Path::from_str(path);
+
+    if path.is_absolute() {
+        Ok(path.to_owned())
+    } else {
+        context
+            .current_directory_owned()
+            .join(path)
+            .ok_or(Error::FailedToJoinPath)
+    }
+}
+
+async fn resolve_user_name<C: CommandContext>(
+    context: &C,
+    user: xila::users::UserIdentifier,
+) -> String {
+    match context
+        .executable_context()
+        .users_manager
+        .get_user_name(user)
+        .await
     {
-        let StatisticsArguments { path } = StatisticsArguments::parse(options)?;
-        let path = Path::from_str(path);
+        Ok(name) => name,
+        Err(_) => format!("{}", user.as_u16()),
+    }
+}
 
-        let path = if path.is_absolute() {
-            path.to_owned()
-        } else {
-            self.current_directory
-                .clone()
-                .join(path)
-                .ok_or(Error::FailedToJoinPath)?
-        };
+async fn resolve_group_name<C: CommandContext>(
+    context: &C,
+    group: xila::users::GroupIdentifier,
+) -> String {
+    match context
+        .executable_context()
+        .users_manager
+        .get_group_name(group)
+        .await
+    {
+        Ok(name) => name,
+        Err(_) => format!("{}", group.as_u16()),
+    }
+}
 
-        let statistics = virtual_file_system::get_instance()
-            .get_statistics(&path)
-            .await
-            .map_err(Error::FailedToGetMetadata)?;
+fn format_statistics(
+    statistics: &xila::file_system::Statistics,
+    user: &str,
+    group: &str,
+) -> String {
+    let size = Unit::new(statistics.size as f32, BYTES_SUFFIX.name);
 
-        let user = match users::get_instance().get_user_name(statistics.user).await {
-            Ok(user) => user,
-            Err(_) => {
-                format!("{}", statistics.user.as_u16())
-            }
-        };
-
-        let group = match users::get_instance().get_group_name(statistics.group).await {
-            Ok(group) => group,
-            Err(_) => {
-                format!("{}", statistics.group.as_u16())
-            }
-        };
-
-        let size = Unit::new(statistics.size as f32, BYTES_SUFFIX.name);
-
-        let _ = writeln!(
-            self.standard.out(),
-            r#"{}: {} - {} : {}
+    format!(
+        r#"{}: {} - {} : {}
 {}: {} - {}: {}
 {}: {} - {}: {} - {}: {}
 {}: {}
@@ -64,30 +96,54 @@ impl Shell {
 {}: {}
 
 "#,
-            translate!("Kind"),
-            statistics.kind,
-            translate!("Inode"),
-            statistics.inode,
-            translate!("Links"),
-            statistics.links,
-            translate!("Size"),
-            size,
-            translate!("User"),
-            user,
-            translate!("Group"),
-            group,
-            translate!("Permissions"),
-            statistics.permissions,
-            translate!("Accessed"),
-            statistics.access,
-            translate!("Modified"),
-            statistics.modification,
-            translate!("Created"),
-            statistics.creation,
-            translate!("Status"),
-            statistics.status,
-        );
+        translate!("Kind"),
+        statistics.kind,
+        translate!("Inode"),
+        statistics.inode,
+        translate!("Links"),
+        statistics.links,
+        translate!("Size"),
+        size,
+        translate!("User"),
+        user,
+        translate!("Group"),
+        group,
+        translate!("Permissions"),
+        statistics.permissions,
+        translate!("Accessed"),
+        statistics.access,
+        translate!("Modified"),
+        statistics.modification,
+        translate!("Created"),
+        statistics.creation,
+        translate!("Status"),
+        statistics.status,
+    )
+}
 
-        Ok(())
-    }
+async fn execute_statistics<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    let StatisticsArguments { path } = StatisticsArguments::parse(options)?;
+    let path = resolve_path(context, path)?;
+
+    let statistics = context
+        .executable_context()
+        .virtual_file_system
+        .get_statistics(&path)
+        .await
+        .map_err(Error::FailedToGetMetadata)?;
+
+    let user = resolve_user_name(context, statistics.user).await;
+    let group = resolve_group_name(context, statistics.group).await;
+    let output = format_statistics(&statistics, &user, &group);
+
+    context.write_out_fmt(format_args!("{}", output))?;
+
+    Ok(())
 }

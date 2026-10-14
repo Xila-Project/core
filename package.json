@@ -12,10 +12,10 @@
   "devDependencies": {
     "glob": "^13.0.6",
     "lv_font_conv": "github:lvgl/lv_font_conv",
-    "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@tolgee/cli": "^2.16.1"
+    "@tolgee/cli": "^2.21.0"
   }
 }

@@ -6,17 +6,15 @@ async fn main() {
 
     extern crate alloc;
 
-    use xila::{
-        executable::{self, mount_executables},
-        task, virtual_file_system,
-    };
+    use xila::executable::{self, mount_executables};
 
     let standard = testing::initialize(false, true).await;
-
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task = task::get_instance().get_current_task_identifier().await;
+    let context = standard.context;
+    let virtual_file_system = &context.virtual_file_system;
+    let task = context.task_manager.get_current_task_identifier().await;
 
     mount_executables!(
+        context,
         virtual_file_system,
         task,
         &[(
@@ -27,11 +25,17 @@ async fn main() {
     .await
     .unwrap();
 
-    let result = executable::execute("/binaries/command_line_shell", vec![], standard, None)
-        .await
-        .unwrap()
-        .join()
-        .await;
+    let result = executable::execute(
+        context,
+        "/binaries/command_line_shell",
+        vec![],
+        standard,
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
 
     assert!(result == 0);
 }

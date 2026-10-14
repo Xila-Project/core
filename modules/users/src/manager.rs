@@ -3,23 +3,9 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use synchronization::{
-    blocking_mutex::raw::CriticalSectionRawMutex, once_lock::OnceLock, rwlock::RwLock,
-};
+use synchronization::{blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock};
 
 use super::*;
-
-static MANAGER_INSTANCE: OnceLock<Manager> = OnceLock::new();
-
-pub fn initialize() -> &'static Manager {
-    MANAGER_INSTANCE.get_or_init(Manager::new)
-}
-
-pub fn get_instance() -> &'static Manager {
-    MANAGER_INSTANCE
-        .try_get()
-        .expect("User manager instance not initialized")
-}
 
 struct InternalUser {
     pub name: String,
@@ -38,8 +24,14 @@ struct InternalManager {
 
 pub struct Manager(RwLock<CriticalSectionRawMutex, InternalManager>);
 
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Manager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut groups = BTreeMap::new();
         groups.insert(
             GroupIdentifier::ROOT,
@@ -121,16 +113,14 @@ impl Manager {
             return Err(Error::DuplicateUserIdentifier); // Shouldn't happen
         }
 
-        // - Add user to the primary group
-        if !inner
+        // Saved groups are loaded before users, so primary membership may
+        // already exist. Duplicate user identifiers/names were checked above.
+        inner
             .groups
             .get_mut(&primary_group)
             .ok_or(Error::InvalidGroupIdentifier)?
             .users
-            .insert(identifier)
-        {
-            return Err(Error::DuplicateUserIdentifier); // Shouldn't happen
-        }
+            .insert(identifier);
 
         Ok(())
     }
@@ -323,6 +313,21 @@ mod tests {
             .await
             .unwrap();
         assert!(manager.exists_user(identifier).await.unwrap());
+    }
+
+    #[test]
+    async fn create_user_with_restored_primary_group_membership() {
+        let manager = Manager::new();
+        let user = UserIdentifier::new(42);
+        let group = GroupIdentifier::new(1000);
+        manager.add_group(group, "saved", &[user]).await.unwrap();
+        assert_eq!(manager.add_user(user, "bob", group).await, Ok(()));
+        assert_eq!(manager.get_user_name(user).await.unwrap(), "bob");
+        assert_eq!(manager.get_group_users(group).await.unwrap(), [user]);
+        assert_eq!(
+            manager.add_user(user, "bob", group).await,
+            Err(Error::DuplicateUserIdentifier)
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ file_system = { workspace = true }
 log = { workspace = true }
 shared = { workspace = true }
 synchronization = { workspace = true }
-internationalization = { workspace = true }
+embedded-i18n = { workspace = true }
 
 [dev-dependencies]
 drivers_native = { workspace = true }

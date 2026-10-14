@@ -6,20 +6,22 @@ pub(crate) use alloc::{
     vec::Vec,
 };
 use core::ptr::null_mut;
-use xila::internationalization::translate;
 use xila::log;
 use xila::task;
-use xila::virtual_file_system::{Directory, get_instance};
+use xila::virtual_file_system::Directory;
 use xila::{
     file_system::{Kind, Path, PathOwned},
     graphics::{
-        self, EventKind, Window, lvgl,
+        self, EventKind, lvgl,
         palette::{self, Hue},
     },
 };
+use xila::{graphics::OwnedWindow, internationalization::translate};
 
 pub struct FileManager {
-    window: Window,
+    context: &'static xila::executable::ExecutableContext,
+    graphics_manager: &'static graphics::Manager,
+    window: OwnedWindow,
     toolbar: *mut lvgl::lv_obj_t,
     up_button: *mut lvgl::lv_obj_t,
     home_button: *mut lvgl::lv_obj_t,
@@ -40,13 +42,16 @@ pub struct FileItem {
 }
 
 impl FileManager {
-    pub async fn new() -> Result<Self> {
-        let manager = graphics::lock!({
-            let mut window = graphics::get_instance().create_window().await?;
+    pub async fn new(context: &'static xila::executable::ExecutableContext) -> Result<Self> {
+        let graphics_manager = graphics::ffi_manager();
+        let manager = graphics::lock!(graphics_manager, {
+            let mut window = graphics_manager.create_window().await?;
 
             window.set_icon("Fm", palette::get(Hue::Cyan, palette::Tone::MAIN));
 
             let mut manager = Self {
+                context,
+                graphics_manager,
                 window,
                 toolbar: null_mut(),
                 up_button: null_mut(),
@@ -63,15 +68,15 @@ impl FileManager {
             // Set up window layout for flex
             unsafe {
                 lvgl::lv_obj_set_layout(
-                    manager.window.get_object(),
+                    manager.window.as_object_mutable(),
                     lvgl::lv_layout_t_LV_LAYOUT_FLEX,
                 );
                 lvgl::lv_obj_set_flex_flow(
-                    manager.window.get_object(),
+                    manager.window.as_object_mutable(),
                     lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN,
                 );
                 lvgl::lv_obj_set_style_pad_all(
-                    manager.window.get_object(),
+                    manager.window.as_object_mutable(),
                     0,
                     lvgl::LV_STATE_DEFAULT,
                 );
@@ -88,7 +93,7 @@ impl FileManager {
     }
 
     pub async fn handle_events(&mut self) -> bool {
-        graphics::lock!({
+        graphics::lock!(self.graphics_manager, {
             while let Some(event) = self.window.pop_event() {
                 if let Err(e) = self.handle_event(event).await {
                     log::error!(translate!("Error handling file manager event: {:?}"), e);
@@ -96,15 +101,20 @@ impl FileManager {
             }
         });
 
+        task::suspend(|ctx| {
+            self.window.register_waker(ctx.waker());
+        })
+        .await;
+
         self.running
     }
 
     pub async fn handle_event(&mut self, event: graphics::Event) -> Result<()> {
         match event.code {
-            EventKind::Delete => {
-                if event.target == self.window.get_object() {
-                    self.running = false;
-                }
+            EventKind::Delete | EventKind::CloseRequested
+                if event.target == self.window.as_object_mutable() =>
+            {
+                self.running = false;
             }
             EventKind::Clicked => {
                 let target = event.target;
@@ -131,7 +141,7 @@ impl FileManager {
 
     async fn create_toolbar(&mut self) -> Result<()> {
         unsafe {
-            self.toolbar = lvgl::lv_obj_create(self.window.get_object());
+            self.toolbar = lvgl::lv_obj_create(self.window.as_object_mutable());
             if self.toolbar.is_null() {
                 return Err(Error::FailedToCreateObject);
             }
@@ -157,7 +167,10 @@ impl FileManager {
                 return Err(Error::FailedToCreateObject);
             }
             let up_label = lvgl::lv_label_create(self.up_button);
-            lvgl::lv_label_set_text(up_label, lvgl::LV_SYMBOL_UP as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                up_label,
+                lvgl::LV_SYMBOL_UP as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(up_label);
 
             // Remove event handler - events bubble up to window
@@ -169,7 +182,10 @@ impl FileManager {
             }
 
             let home_label = lvgl::lv_label_create(self.home_button);
-            lvgl::lv_label_set_text(home_label, lvgl::LV_SYMBOL_HOME as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                home_label,
+                lvgl::LV_SYMBOL_HOME as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(home_label);
 
             // Remove event handler - events bubble up to window
@@ -184,7 +200,7 @@ impl FileManager {
 
             lvgl::lv_label_set_text(
                 refresh_label,
-                lvgl::LV_SYMBOL_REFRESH as *const _ as *const i8,
+                lvgl::LV_SYMBOL_REFRESH as *const _ as *const core::ffi::c_char,
             );
             lvgl::lv_obj_center(refresh_label);
 
@@ -210,7 +226,10 @@ impl FileManager {
             }
 
             let go_label = lvgl::lv_label_create(self.go_button);
-            lvgl::lv_label_set_text(go_label, lvgl::LV_SYMBOL_RIGHT as *const _ as *const i8);
+            lvgl::lv_label_set_text(
+                go_label,
+                lvgl::LV_SYMBOL_RIGHT as *const _ as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_center(go_label);
 
             self.update_path_label();
@@ -221,7 +240,7 @@ impl FileManager {
 
     async fn create_file_list(&mut self) -> Result<()> {
         unsafe {
-            self.file_list = lvgl::lv_list_create(self.window.get_object());
+            self.file_list = lvgl::lv_list_create(self.window.as_object_mutable());
             if self.file_list.is_null() {
                 return Err(Error::FailedToCreateObject);
             }
@@ -241,10 +260,14 @@ impl FileManager {
         // Clear existing files
         self.clear_file_list();
 
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
 
         // Open directory
-        let virtual_file_system = get_instance();
+        let virtual_file_system = &self.context.virtual_file_system;
 
         let mut directory = Directory::open(virtual_file_system, task, &self.current_path).await?;
 
@@ -385,7 +408,8 @@ impl FileManager {
         unsafe {
             if !self.path_text_area.is_null() {
                 // Get the text from the text area
-                let text_ptr: *const i8 = lvgl::lv_textarea_get_text(self.path_text_area);
+                let text_ptr: *const core::ffi::c_char =
+                    lvgl::lv_textarea_get_text(self.path_text_area);
                 if !text_ptr.is_null() {
                     // Convert C string to Rust string
                     let text_cstr = core::ffi::CStr::from_ptr(text_ptr);

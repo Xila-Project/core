@@ -1,22 +1,26 @@
 use crate::error::{Error, Result};
 use alloc::{collections::vec_deque::VecDeque, string::String};
 use core::ffi::CStr;
+use xila::graphics::OwnedWindow;
 use xila::graphics::fonts::get_font_monospace_medium;
 use xila::graphics::{
-    self, Color, EventKind, Key, Window,
+    self, Color, EventKind, Key,
     lvgl::{self, lv_obj_t},
 };
 use xila::synchronization::{blocking_mutex::raw::CriticalSectionRawMutex, rwlock::RwLock};
 
 pub(crate) struct Inner {
-    window: Window,
+    window: OwnedWindow,
     buffer: String,
     display: *mut lvgl::lv_obj_t,
     input: *mut lvgl::lv_obj_t,
     validated_input: VecDeque<u8>,
 }
 
-pub struct Terminal(pub(crate) RwLock<CriticalSectionRawMutex, Inner>);
+pub struct Terminal {
+    inner: RwLock<CriticalSectionRawMutex, Inner>,
+    graphics_manager: &'static graphics::Manager,
+}
 
 unsafe impl Send for Terminal {}
 
@@ -26,21 +30,20 @@ impl Terminal {
     const CLEAR: &'static str = "\x1B[2J";
     const HOME: &'static str = "\x1B[H";
 
-    pub async fn new() -> Result<Self> {
-        let inner = graphics::lock!({
-            let mut window = graphics::get_instance().create_window().await?;
-
+    pub async fn new(graphics_manager: &'static graphics::Manager) -> Result<Self> {
+        let inner = graphics::lock!(graphics_manager, {
+            let mut window = graphics_manager.create_window().await?;
             unsafe {
                 window.set_icon(">_", Color::BLACK);
 
                 lvgl::lv_obj_set_flex_flow(
-                    window.get_object(),
+                    window.as_object_mutable(),
                     lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN,
                 );
             }
 
             let container = unsafe {
-                let container = lvgl::lv_obj_create(window.get_object());
+                let container = lvgl::lv_obj_create(window.as_object_mutable());
 
                 lvgl::lv_obj_set_width(container, lvgl::lv_pct(100));
                 lvgl::lv_obj_set_flex_grow(container, 1);
@@ -63,7 +66,7 @@ impl Terminal {
                 }
 
                 lvgl::lv_obj_set_width(label, lvgl::lv_pct(100));
-                lvgl::lv_label_set_text_static(label, buffer.as_ptr() as *const i8);
+                lvgl::lv_label_set_text_static(label, buffer.as_ptr() as *const core::ffi::c_char);
                 lvgl::lv_obj_set_style_text_font(
                     label,
                     get_font_monospace_medium(),
@@ -74,7 +77,7 @@ impl Terminal {
             };
 
             let input = unsafe {
-                let input = lvgl::lv_textarea_create(window.get_object());
+                let input = lvgl::lv_textarea_create(window.as_object_mutable());
 
                 if input.is_null() {
                     return Err(crate::error::Error::FailedToCreateObject);
@@ -96,12 +99,16 @@ impl Terminal {
             }
         });
 
-        Ok(Self(RwLock::new(inner)))
+        Ok(Self {
+            inner: RwLock::new(inner),
+            graphics_manager,
+        })
     }
 
     pub fn print(&self, text: &str) -> Result<()> {
-        let mut inner = self.0.try_write().map_err(|_| Error::RessourceBusy)?;
-        let _lock = graphics::get_instance()
+        let mut inner = self.inner.try_write().map_err(|_| Error::RessourceBusy)?;
+        let _lock = self
+            .graphics_manager
             .try_lock()
             .ok_or(Error::RessourceBusy)?;
 
@@ -136,7 +143,10 @@ impl Terminal {
         inner.buffer.push('\0');
 
         unsafe {
-            lvgl::lv_label_set_text_static(inner.display, inner.buffer.as_ptr() as *const i8);
+            lvgl::lv_label_set_text_static(
+                inner.display,
+                inner.buffer.as_ptr() as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_scroll_to_view(inner.display, true);
         }
 
@@ -150,7 +160,10 @@ impl Terminal {
         inner.buffer.push_str("\n\0");
 
         unsafe {
-            lvgl::lv_label_set_text_static(inner.display, inner.buffer.as_ptr() as *const i8);
+            lvgl::lv_label_set_text_static(
+                inner.display,
+                inner.buffer.as_ptr() as *const core::ffi::c_char,
+            );
             lvgl::lv_obj_scroll_to_view(inner.display, true);
         }
 
@@ -158,7 +171,7 @@ impl Terminal {
     }
 
     pub fn read_input(&self, buffer: &mut [u8]) -> Result<usize> {
-        let mut inner = self.0.try_write().map_err(|_| Error::RessourceBusy)?;
+        let mut inner = self.inner.try_write().map_err(|_| Error::RessourceBusy)?;
 
         let mut read = 0;
 
@@ -186,12 +199,16 @@ impl Terminal {
     pub async fn handle_events(&self) -> Result<bool> {
         let mut running = true;
 
-        graphics::lock!({
-            let mut inner = self.0.write().await;
+        graphics::lock!(self.graphics_manager, {
+            let mut inner = self.inner.write().await;
 
             while let Some(event) = inner.window.pop_event() {
                 match event.code {
-                    EventKind::Delete => running = false,
+                    EventKind::Delete | EventKind::CloseRequested
+                        if event.target == inner.window.as_object_mutable() =>
+                    {
+                        running = false;
+                    }
                     EventKind::Key => {
                         if let Some(Key::Enter) = event.key {
                             let text = Self::get_input(inner.input);

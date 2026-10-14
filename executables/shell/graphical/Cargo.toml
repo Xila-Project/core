@@ -4,12 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-xila = { path = "../../../", features = ["host"] }
+xila = { path = "../../../", features = ["graphics"] }
 miniserde = { workspace = true }
 getargs = { version = "0.5" }
-executable_macros = { path = "../../../modules/executable/macros" }
+getargs-derive = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dev-dependencies]
+task = { workspace = true, features = ["test_harness"] }
 drivers_native = { workspace = true }
 drivers_core = { workspace = true }
 drivers_shared = { workspace = true }

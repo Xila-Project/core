@@ -128,9 +128,7 @@ macro_rules! instantiate_static_executor {
 
 pub use instantiate_static_executor;
 
-pub async fn new_thread_executor() -> SpawnerIdentifier {
-    let task_manager = task::get_instance();
-
+pub async fn new_thread_executor(task_manager: &'static task::Manager) -> SpawnerIdentifier {
     // Create a new OnceLock for each call to allow multiple thread executors
     let signal: &'static Signal<CriticalSectionRawMutex, SpawnerIdentifier> =
         Box::leak(Box::new(Signal::new()));

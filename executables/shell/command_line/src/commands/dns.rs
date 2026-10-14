@@ -1,116 +1,175 @@
-use crate::{Error, Result, Shell};
-use core::fmt::Write;
-use executable_macros::GetArgs;
+use crate::Result;
 use getargs::Options;
+use getargs_derive::GetArgs;
 use xila::{
+    file_system::Path,
     internationalization::translate,
-    network::{self, DnsQueryKind, DnsSocket},
+    network::{self, DnsQueryKind},
 };
 
+use super::{CommandContext, UserCommand};
+
+pub struct DnsResolveCommand;
+
+impl UserCommand for DnsResolveCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        options: &mut Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> Result<(), crate::Error<'a>>
+    where
+        I: Iterator<Item = &'a str>,
+        C: CommandContext,
+    {
+        execute_dns_resolve(context, options).await
+    }
+}
+
 #[derive(GetArgs)]
+#[command(name = "dns_resolve", about = "Resolve a DNS name.")]
 struct DnsResolveArguments<'a> {
     domain: &'a str,
-    #[arg(flag, short = 'a', long = "a")]
+    #[arg(short = 'a', long = "a")]
     a_enabled: bool,
-    #[arg(flag, short = 'A', long = "aaaa")]
+    #[arg(short = 'A', long = "aaaa")]
     aaaa_enabled: bool,
-    #[arg(flag, short = 'c', long = "cname")]
+    #[arg(short = 'c', long = "cname")]
     cname_enabled: bool,
-    #[arg(flag, short = 'n', long = "ns")]
+    #[arg(short = 'n', long = "ns")]
     ns_enabled: bool,
-    #[arg(flag, short = 's', long = "soa")]
+    #[arg(short = 's', long = "soa")]
     soa_enabled: bool,
 }
 
-impl Shell {
-    fn format_kind(kind: DnsQueryKind) -> &'static str {
-        match kind {
-            DnsQueryKind::A => "A",
-            DnsQueryKind::Aaaa => "AAAA",
-            DnsQueryKind::Cname => "CNAME",
-            DnsQueryKind::Ns => "NS",
-            DnsQueryKind::Soa => "SOA",
-            _ => "UNKNOWN",
-        }
+fn format_kind(kind: DnsQueryKind) -> &'static str {
+    match kind {
+        DnsQueryKind::A => "A",
+        DnsQueryKind::Aaaa => "AAAA",
+        DnsQueryKind::Cname => "CNAME",
+        DnsQueryKind::Ns => "NS",
+        DnsQueryKind::Soa => "SOA",
+        _ => "UNKNOWN",
     }
+}
 
-    async fn resolve(
-        &mut self,
-        socket: &DnsSocket,
-        domain: &str,
-        kind: DnsQueryKind,
-    ) -> Result<()> {
-        match socket.resolve(domain, kind).await {
-            Ok(ip) => {
-                writeln!(
-                    self.standard.out(),
+async fn resolve_record<C: CommandContext>(
+    context: &mut C,
+    network_manager: &network::Manager,
+    domain: &str,
+    kind: DnsQueryKind,
+) -> Result<()> {
+    match network_manager.resolve(domain, kind, true, None).await {
+        Ok(ip) => {
+            context.write_out_fmt(format_args!(
+                "{}\n",
+                format_args!(
                     translate!("{} record(s) for domain '{}':"),
-                    Self::format_kind(kind),
+                    format_kind(kind),
                     domain
-                )?;
-                for address in &ip {
-                    writeln!(self.standard.out(), " - {}", address)?;
-                }
+                )
+            ))?;
+            for address in &ip {
+                context.write_out_fmt(format_args!(" - {}\n", address))?;
             }
-            Err(network::Error::Failed) => {
-                writeln!(
-                    self.standard.out(),
+        }
+        Err(network::Error::Failed) => {
+            context.write_out_fmt(format_args!(
+                "{}\n",
+                format_args!(
                     translate!("No {} records found for domain '{}'"),
-                    Self::format_kind(kind),
+                    format_kind(kind),
                     domain
-                )?;
-            }
-            Err(e) => {
-                write!(
-                    self.standard.out(),
+                )
+            ))?;
+        }
+        Err(e) => {
+            context.write_out_fmt(format_args!(
+                "{}",
+                format_args!(
                     translate!("Failed to resolve domain '{}' for {} records: {}"),
                     domain,
-                    Self::format_kind(kind),
+                    format_kind(kind),
                     e
-                )?;
-            }
+                )
+            ))?;
         }
-        Ok(())
     }
 
-    pub async fn dns_resolve<'a, I>(&mut self, options: &mut Options<&'a str, I>) -> Result<()>
-    where
-        I: Iterator<Item = &'a str>,
-    {
-        let DnsResolveArguments {
-            domain,
-            a_enabled,
-            aaaa_enabled,
-            cname_enabled,
-            ns_enabled,
-            soa_enabled,
-        } = DnsResolveArguments::parse(options)?;
+    Ok(())
+}
 
-        let default = !a_enabled && !aaaa_enabled && !cname_enabled && !ns_enabled && !soa_enabled;
+async fn execute_dns_resolve<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    let DnsResolveArguments {
+        domain,
+        a_enabled,
+        aaaa_enabled,
+        cname_enabled,
+        ns_enabled,
+        soa_enabled,
+    } = DnsResolveArguments::parse(options)?;
 
-        let socket = network::get_instance()
-            .new_dns_socket(None)
-            .await
-            .map_err(Error::FailedToCreateSocket)?;
+    let default = !a_enabled && !aaaa_enabled && !cname_enabled && !ns_enabled && !soa_enabled;
 
-        if a_enabled || default {
-            self.resolve(&socket, domain, DnsQueryKind::A).await?;
-        }
-        if aaaa_enabled || default {
-            self.resolve(&socket, domain, DnsQueryKind::Aaaa).await?;
-        }
-        if cname_enabled {
-            self.resolve(&socket, domain, DnsQueryKind::Cname).await?;
-        }
-        if ns_enabled {
-            self.resolve(&socket, domain, DnsQueryKind::Ns).await?;
-        }
-        if soa_enabled {
-            self.resolve(&socket, domain, DnsQueryKind::Soa).await?;
-        }
+    let network_manager = context
+        .executable_context()
+        .network_manager
+        .as_ref()
+        .ok_or(crate::Error::InvalidOption)?;
 
-        socket.close().await.map_err(Error::FailedToCreateSocket)?;
+    if a_enabled || default {
+        resolve_record(context, network_manager, domain, DnsQueryKind::A).await?;
+    }
+    if aaaa_enabled || default {
+        resolve_record(context, network_manager, domain, DnsQueryKind::Aaaa).await?;
+    }
+    if cname_enabled {
+        resolve_record(context, network_manager, domain, DnsQueryKind::Cname).await?;
+    }
+    if ns_enabled {
+        resolve_record(context, network_manager, domain, DnsQueryKind::Ns).await?;
+    }
+    if soa_enabled {
+        resolve_record(context, network_manager, domain, DnsQueryKind::Soa).await?;
+    }
 
-        Ok(())
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_kind;
+    use xila::network::DnsQueryKind;
+
+    #[test]
+    fn format_kind_maps_a() {
+        assert_eq!(format_kind(DnsQueryKind::A), "A");
+    }
+
+    #[test]
+    fn format_kind_maps_aaaa() {
+        assert_eq!(format_kind(DnsQueryKind::Aaaa), "AAAA");
+    }
+
+    #[test]
+    fn format_kind_maps_cname() {
+        assert_eq!(format_kind(DnsQueryKind::Cname), "CNAME");
+    }
+
+    #[test]
+    fn format_kind_maps_ns() {
+        assert_eq!(format_kind(DnsQueryKind::Ns), "NS");
+    }
+
+    #[test]
+    fn format_kind_maps_soa() {
+        assert_eq!(format_kind(DnsQueryKind::Soa), "SOA");
     }
 }

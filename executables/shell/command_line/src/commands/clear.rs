@@ -1,21 +1,43 @@
-use crate::{Result, Shell};
-use core::fmt::Write;
-use executable_macros::GetArgs;
+use crate::Result;
 use getargs::Options;
+use getargs_derive::GetArgs;
+use xila::file_system::Path;
 
-#[derive(GetArgs)]
-struct ClearArguments {}
+use super::{CommandContext, UserCommand};
 
-impl Shell {
-    pub async fn clear<'a, I>(&mut self, options: &mut Options<&'a str, I>) -> Result<()>
+pub struct ClearCommand;
+
+impl UserCommand for ClearCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        options: &mut Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
+        C: CommandContext,
     {
-        let _ = ClearArguments::parse(options)?;
-
-        write!(self.standard.out(), "\x1B[2J")?;
-        write!(self.standard.out(), "\x1B[H")?;
-
-        Ok(())
+        execute_clear(context, options)
     }
+}
+
+#[derive(GetArgs)]
+#[command(name = "clear", about = "Clear the terminal.")]
+struct ClearArguments {}
+
+fn execute_clear<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    let _ = ClearArguments::parse(options)?;
+
+    context.write_out_fmt(format_args!("\x1B[2J"))?;
+    context.write_out_fmt(format_args!("\x1B[H"))?;
+
+    Ok(())
 }

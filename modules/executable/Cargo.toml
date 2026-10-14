@@ -10,7 +10,11 @@ task = { workspace = true }
 users = { workspace = true }
 shared = { workspace = true }
 log = { workspace = true }
-internationalization = { workspace = true }
+embedded-i18n = { workspace = true }
+graphics = { workspace = true, optional = true }
+network = { workspace = true }
+time = { workspace = true }
+synchronization = { workspace = true }
 
 [dev-dependencies]
 drivers_native = { workspace = true }
@@ -21,3 +25,4 @@ drivers_std = { workspace = true }
 [features]
 default = []
 building = []
+graphics = ["dep:graphics"]

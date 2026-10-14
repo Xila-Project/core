@@ -10,17 +10,17 @@ async fn main() {
     use wasm::WasmExecutable;
     use xila::executable;
     use xila::executable::{build_crate, mount_executables};
-    use xila::task;
-    use xila::virtual_file_system;
 
     let standard = testing::initialize(true, false).await;
+    let context = standard.context;
+    let virtual_file_system = &context.virtual_file_system;
+    let task_instance = &context.task_manager;
 
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task_instance = task::get_instance();
     let task = task_instance.get_current_task_identifier().await;
 
     let binary_path = build_crate(&"calculator").unwrap();
     load_to_virtual_file_system(
+        task_instance,
         virtual_file_system,
         binary_path,
         "/binaries/calculator.wasm",
@@ -28,40 +28,49 @@ async fn main() {
     .await
     .unwrap();
 
-    fn new_thread_executor_wrapper()
-    -> core::pin::Pin<Box<dyn Future<Output = task::SpawnerIdentifier> + Send>> {
-        use drivers_std::executor::new_thread_executor;
-
-        Box::pin(new_thread_executor())
-    }
-
     mount_executables!(
+        context,
         virtual_file_system,
         task,
-        &[(
-            "/binaries/wasm",
-            WasmExecutable::new(Some(new_thread_executor_wrapper))
-        )]
+        &[("/binaries/wasm", WasmExecutable)]
     )
     .await
     .unwrap();
 
-    let result = executable::execute(
+    let handle = executable::execute(
+        context,
         "/binaries/wasm",
         vec!["/binaries/calculator.wasm".to_string()],
         standard,
         None,
     )
     .await
-    .unwrap()
-    .join()
-    .await;
+    .unwrap();
 
-    //    let result = executable::execute("/binaries/command_line_shell", vec![], standard, None)
-    //        .await
-    //        .unwrap()
-    //        .join()
-    //        .await;
+    // This standalone display has no graphical shell's close button. Allow a
+    // normal close request from the console, without blocking the async executor.
+    let close = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let request = close.clone();
+    println!("Calculator is running with Wasmi. Press Enter here to close it.");
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).unwrap();
+        request.store(true, std::sync::atomic::Ordering::Release);
+    });
+    let manager = context.graphics_manager.unwrap();
+    loop {
+        if close.load(std::sync::atomic::Ordering::Acquire)
+            && manager.get_window_count().await.unwrap() > 0
+        {
+            let identifier = manager.get_window_identifier(0).await.unwrap();
+            manager.send_window_close_request(identifier).await.unwrap();
+            break;
+        }
+        xila::task::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    let result = handle.join().await;
 
     assert!(result == 0);
+    assert_eq!(manager.get_window_count().await.unwrap(), 0);
 }

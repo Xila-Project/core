@@ -16,11 +16,10 @@ lto = true
 
 [dependencies]
 # - Always included
-internationalization = { workspace = true }
+embedded-i18n = { workspace = true }
 
 
 # - Host
-abi_context = { workspace = true, optional = true }
 abi_declarations = { workspace = true, optional = true }
 abi_definitions = { workspace = true, optional = true }
 little_fs = { workspace = true, optional = true }
@@ -42,12 +41,10 @@ network = { workspace = true, optional = true }
 
 [features]
 default = [
-  "dep:abi_context",
   "dep:abi_declarations",
   "dep:abi_definitions",
   "dep:little_fs",
   "dep:virtual_file_system",
-  "dep:graphics",
   "dep:task",
   "dep:time",
   "dep:users",
@@ -59,20 +56,19 @@ default = [
   "dep:log",
   "dep:shared",
   "dep:synchronization",
-  "dep:bootsplash",
   "abi_definitions",
   "dep:network",
 ]
 
 executable_building = ["executable/building"]
-host = []
 abi_definitions = ["dep:abi_definitions"]
-graphics_rendering_rgb565 = ["graphics/rendering_rgb565"]
-graphics_rendering_xrgb8888 = ["graphics/rendering_xrgb8888"]
+bootsplash = ["dep:bootsplash"]
+graphics = ["dep:graphics", "executable/graphics"]
+graphics_rendering_rgb565 = ["graphics", "graphics/rendering_rgb565"]
+graphics_rendering_xrgb8888 = ["graphics", "graphics/rendering_xrgb8888"]
 
 
 [workspace.dependencies]
-abi_context = { path = "modules/abi/context" }
 abi_declarations = { path = "modules/abi/declarations" }
 abi_definitions = { path = "modules/abi/definitions" }
 little_fs = { path = "modules/little_fs" }
@@ -92,7 +88,7 @@ target = { path = "modules/target" }
 network = { path = "modules/network" }
 peripherals = { path = "modules/peripherals" }
 bootsplash = { path = "modules/bootsplash" }
-internationalization = { path = "modules/internationalization" }
+embedded-i18n = { git = "https://github.com/AlixANNERAUD/embedded-i18n.git", rev = "ebee35ac41c56b6073d1c169fa37db694230653c" }
 testing = { path = "modules/testing" }
 device = { path = "modules/device" }
 
@@ -112,12 +108,13 @@ wasm = { path = "executables/wasm" }
 terminal = { path = "executables/terminal" }
 settings = { path = "executables/settings" }
 calculator = { path = "executables/calculator" }
+weather = { path = "executables/weather" }
 
 # - External crates
 miniserde = { version = "0.1" }
-bindgen = { version = "0.72" }
+bindgen = { version = "0.73" }
 cbindgen = { version = "0.29" }
-syn = { version = "2.0" }
+syn = { version = "3.0" }
 quote = { version = "1.0" }
 proc-macro2 = { version = "1.0" }
 lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false }
@@ -131,10 +128,14 @@ linked_list_allocator = { version = "0.10", default-features = false, features =
   "const_mut_refs",
 ] }
 smol_str = { version = "0.3" }
-darling = { version = "0.23" }
+darling = { version = "0.24" }
 regex = { version = "1" }
 embedded-io-async = { version = "0.7", features = ["alloc"] }
 embedded-io = { version = "0.7", features = ["alloc"] }
+embedded-tls = { version = "0.19", default-features = false, features = [
+  "alloc",
+] }
+getargs-derive = { git = "https://github.com/AlixANNERAUD/getargs-derive.git", rev = "65b20961504ad5ba387ea13f0e9501036941ab17" } # v0.1.0
 
 [workspace]
 members = [
@@ -147,14 +148,12 @@ members = [
   "modules/time",
   "modules/abi/definitions",
   "modules/abi/declarations",
-  "modules/abi/context",
   "modules/virtual_file_system",
   "modules/little_fs",
   "modules/target",
   "executables/file_manager",
   "executables/shell/command_line",
   "modules/executable",
-  "modules/executable/macros",
   "executables/wasm",
   "executables/wasm/tests/wasm_test",
   "executables/shell/graphical",
@@ -175,11 +174,12 @@ members = [
   "drivers/shared",
   "drivers/std",
   "drivers/wasm",
-  "modules/internationalization",
-  "modules/internationalization/macros",
+
   "modules/graphics/fonts_generator",
   "modules/testing",
   "modules/device",
+  "executables/weather",
+  "modules/graphics/bindings_generator",
 ]
 
 [patch.crates-io]

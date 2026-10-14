@@ -1,5 +1,5 @@
 use core::fmt::Display;
-use internationalization::translate;
+use embedded_i18n::translate;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {

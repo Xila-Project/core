@@ -10,7 +10,7 @@ use xila::{
         GET_DNS_SERVER, GET_DNS_SERVER_COUNT, GET_HARDWARE_ADDRESS, GET_IP_ADDRESS,
         GET_IP_ADDRESS_COUNT, GET_ROUTE, GET_ROUTE_COUNT, MacAddress,
     },
-    virtual_file_system::{self, File, FileControlIterator},
+    virtual_file_system::File,
 };
 
 #[derive(Default)]
@@ -40,7 +40,7 @@ pub struct InterfacePanel {
 impl InterfacePanel {
     async fn create_general_tab(
         parent: *mut lvgl::lv_obj_t,
-        file: &mut File,
+        file: &mut File<'_>,
     ) -> Result<GeneralTab> {
         unsafe {
             let list = lvgl::lv_list_create(parent);
@@ -69,11 +69,16 @@ impl InterfacePanel {
             }
 
             {
-                let mut ip_addresses = Self::get_ip_addresses(file).await?;
+                let ip_count = file
+                    .as_synchronous_file_mut()
+                    .control(GET_IP_ADDRESS_COUNT, &())?;
 
                 lvgl::lv_list_add_text(list, translate!(c"Address").as_ptr());
 
-                while let Some(ip) = ip_addresses.next().await? {
+                for index in 0..ip_count {
+                    let ip = file
+                        .as_synchronous_file_mut()
+                        .control(GET_IP_ADDRESS, &index)?;
                     format_buffer.clear();
                     write!(format_buffer, "{}\0", ip).ok();
 
@@ -82,11 +87,14 @@ impl InterfacePanel {
             }
 
             {
-                let mut routes = Self::get_routes(file).await?;
+                let route_count = file
+                    .as_synchronous_file_mut()
+                    .control(GET_ROUTE_COUNT, &())?;
 
                 lvgl::lv_list_add_text(list, translate!(c"Routes").as_ptr());
 
-                while let Some(route) = routes.next().await? {
+                for index in 0..route_count {
+                    let route = file.as_synchronous_file_mut().control(GET_ROUTE, &index)?;
                     format_buffer.clear();
                     write!(format_buffer, "{} via {}\0", route.cidr, route.via_router).ok();
                     lvgl::lv_list_add_button(list, null_mut(), format_buffer.as_ptr() as _);
@@ -94,11 +102,16 @@ impl InterfacePanel {
             }
 
             {
-                let mut dns_servers = Self::get_dns_servers(file).await?;
+                let dns_count = file
+                    .as_synchronous_file_mut()
+                    .control(GET_DNS_SERVER_COUNT, &())?;
 
                 lvgl::lv_list_add_text(list, translate!(c"DNS Servers").as_ptr());
 
-                while let Some(dns) = dns_servers.next().await? {
+                for index in 0..dns_count {
+                    let dns = file
+                        .as_synchronous_file_mut()
+                        .control(GET_DNS_SERVER, &index)?;
                     format_buffer.clear();
                     write!(format_buffer, "{}\0", dns).ok();
                     lvgl::lv_list_add_button(list, null_mut(), format_buffer.as_ptr() as _);
@@ -240,23 +253,15 @@ impl InterfacePanel {
         }
     }
 
-    async fn get_dns_servers(file: &mut File) -> Result<FileControlIterator<'_, GET_DNS_SERVER>> {
-        Ok(FileControlIterator::new(file, GET_DNS_SERVER_COUNT, GET_DNS_SERVER).await?)
-    }
-
-    async fn get_routes(file: &mut File) -> Result<FileControlIterator<'_, GET_ROUTE>> {
-        Ok(FileControlIterator::new(file, GET_ROUTE_COUNT, GET_ROUTE).await?)
-    }
-
-    async fn get_ip_addresses(file: &mut File) -> Result<FileControlIterator<'_, GET_IP_ADDRESS>> {
-        Ok(FileControlIterator::new(file, GET_IP_ADDRESS_COUNT, GET_IP_ADDRESS).await?)
-    }
-
-    async fn get_mac_address(file: &mut File) -> Result<MacAddress> {
+    async fn get_mac_address(file: &mut File<'_>) -> Result<MacAddress> {
         Ok(file.control(GET_HARDWARE_ADDRESS, &()).await?)
     }
 
-    pub async fn new(interface: String, parent_tabview: *mut lvgl::lv_obj_t) -> Result<Self> {
+    pub async fn new(
+        context: &'static xila::executable::ExecutableContext,
+        interface: String,
+        parent_tabview: *mut lvgl::lv_obj_t,
+    ) -> Result<Self> {
         // Create a container for the entire configuration panel
         let main_container = unsafe { lvgl::lv_obj_create(parent_tabview) };
         if main_container.is_null() {
@@ -339,7 +344,7 @@ impl InterfacePanel {
         };
 
         // Create general tab content
-        let virtual_file_system = virtual_file_system::get_instance();
+        let virtual_file_system = &context.virtual_file_system;
 
         let mut file = open_interface(virtual_file_system, &interface).await?;
 

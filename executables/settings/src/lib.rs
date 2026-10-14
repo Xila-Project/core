@@ -13,9 +13,7 @@ pub use settings::*;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::num::NonZeroUsize;
-use core::time::Duration;
 use xila::executable::{self, ExecutableTrait, Standard};
-use xila::task;
 use xila::task::TaskIdentifier;
 use xila::virtual_file_system::{File, VirtualFileSystem};
 
@@ -59,20 +57,21 @@ impl SettingsExecutable {
 }
 
 impl ExecutableTrait for SettingsExecutable {
-    fn main(standard: Standard, arguments: Vec<String>) -> executable::MainFuture {
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
 
-pub async fn main(_: Standard, _: Vec<String>) -> core::result::Result<(), NonZeroUsize> {
-    let mut settings = Settings::new()
+pub async fn main(
+    standard: Standard<'static>,
+    _: Vec<String>,
+) -> core::result::Result<(), NonZeroUsize> {
+    let mut settings = Settings::new(standard.context)
         .await
         .map_err(|_| NonZeroUsize::new(1).unwrap())?;
 
     // Run the main loop
-    while settings.handle_events().await {
-        task::sleep(Duration::from_millis(50)).await;
-    }
+    while settings.handle_events().await {}
 
     Ok(())
 }

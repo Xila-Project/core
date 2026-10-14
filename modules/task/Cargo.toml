@@ -8,9 +8,9 @@ task_macros = { path = "./task_macros" }
 users = { workspace = true }
 embassy-executor = { workspace = true, default-features = false }
 embassy-futures = { workspace = true }
-smol_str = { version = "0.3" }
+smol_str = { workspace = true }
 synchronization = { workspace = true }
-internationalization = { workspace = true }
+embedded-i18n = { workspace = true }
 
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
@@ -22,6 +22,7 @@ embassy-time = { workspace = true, features = ["wasm"] }
 [features]
 default = []
 std = []
+test_harness = ["std"]
 
 [dev-dependencies]
 drivers_native = { workspace = true }

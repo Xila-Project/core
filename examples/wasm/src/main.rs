@@ -1,8 +1,18 @@
 #![no_std]
 
 #[cfg(target_arch = "wasm32")]
-#[xila::task::run(task_path = xila::task, executor = drivers_wasm::executor::instantiate_static_executor!())]
-async fn main() {
+mod storage;
+
+#[cfg(target_arch = "wasm32")]
+static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
+
+#[cfg(target_arch = "wasm32")]
+#[xila::task::run(
+    task_path = xila::task,
+    executor = drivers_wasm::executor::instantiate_static_executor!(),
+    manager = &TASK_MANAGER
+)]
+async fn main(task_manager: &'static xila::task::Manager) {
     drivers_wasm::memory::instantiate_global_allocator!();
 
     extern crate alloc;
@@ -13,13 +23,13 @@ async fn main() {
     use drivers_wasm::devices::graphics::GraphicsDevices;
     use xila::bootsplash::Bootsplash;
     use xila::executable::{self, Standard, mount_executables};
-    use xila::file_system::mbr::{Mbr, PartitionKind};
-    use xila::file_system::{self, XILA_DISK_SIGNATURE};
+    use xila::file_system::mbr::Mbr;
+    use xila::file_system::{MountOperations, Path};
     use xila::log;
     use xila::task;
     use xila::time::{self, Duration};
-    use xila::virtual_file_system::mount_static;
-    use xila::{authentication, graphics, little_fs, users, virtual_file_system};
+    use xila::virtual_file_system::{File, mount_static};
+    use xila::{authentication, graphics, users, virtual_file_system};
 
     console_error_panic_hook::set_once();
 
@@ -27,10 +37,11 @@ async fn main() {
     log::initialize(&drivers_wasm::log::Logger).unwrap();
 
     // Initialize the task manager
-    let task_manager = task::initialize();
     let task = task_manager.get_current_task_identifier().await;
-    let users_manager = users::initialize();
-    let time_manager = time::initialize(&drivers_wasm::devices::TimeDevice).unwrap();
+    let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(
+        time::Manager::new(&drivers_wasm::devices::TimeDevice).unwrap(),
+    ));
 
     // - Initialize the graphics manager
     // - - Initialize the graphics driver
@@ -45,6 +56,7 @@ async fn main() {
 
     // - - Initialize the graphics manager
     let graphics_manager = graphics::initialize(
+        time_manager,
         Box::leak(Box::new(screen_device)),
         Box::leak(Box::new(mouse_device)),
         graphics::InputKind::Pointer,
@@ -53,6 +65,8 @@ async fn main() {
         true,
     )
     .await;
+    let graphics_manager: &'static graphics::Manager = Box::leak(Box::new(graphics_manager));
+    graphics::set_ffi_manager(graphics_manager);
 
     graphics_manager
         .add_input_device(
@@ -72,35 +86,38 @@ async fn main() {
         .unwrap();
 
     // - Initialize the file system
-    // Create a memory device
-    let drive = file_system::MemoryDevice::<512>::new_static(16 * 1024 * 1024);
-    //let drive = create_device!(drivers_wasm::devices::DriveDevice::new(Path::new("xila_drive.img")));
+    // Open the origin's persistent disk before synchronous MBR/LittleFS setup.
+    let drive: &'static drivers_wasm::devices::DriveDevice = Box::leak(Box::new(
+        drivers_wasm::devices::DriveDevice::new(Path::new("xila_drive.img"), 16 * 1024 * 1024)
+            .await
+            .expect("Failed to open OPFS disk (use HTTPS/localhost and close other Xila tabs)"),
+    ));
 
-    // Create a partition type
-    let partition = Mbr::find_or_create_partition_with_signature(
-        drive,
-        XILA_DISK_SIGNATURE,
-        PartitionKind::Xila,
-    )
-    .unwrap();
-    let partition = Box::leak(Box::new(partition));
+    // Format only an empty disk; mount errors on saved images are fatal.
+    let file_system = storage::mount(drive)
+        .expect("Failed to mount OPFS disk; existing data was not reformatted");
 
     // Print MBR information
-    let mbr = Mbr::read_from_device(&*drive).unwrap();
+    let mbr = Mbr::read_from_device(drive).unwrap();
     log::information!("MBR Information: {mbr}");
 
-    // Mount the file system
-    let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
-
     // Initialize the virtual file system
-    let virtual_file_system =
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
         virtual_file_system::initialize(task_manager, users_manager, time_manager, file_system)
-            .unwrap();
+            .unwrap(),
+    ));
+    xila::abi_definitions::initialize(xila::abi_definitions::RuntimeContext {
+        virtual_file_system,
+        time_manager,
+    });
 
     // - - Mount the devices
 
     // - - Create the default system hierarchy
     let _ = virtual_file_system::create_default_hierarchy(virtual_file_system, task).await;
+    let _ = virtual_file_system
+        .create_directory(task, &"/devices/cpu")
+        .await;
 
     // - - Mount the devices
     virtual_file_system::clean_devices(virtual_file_system, task)
@@ -132,11 +149,21 @@ async fn main() {
                 drivers_wasm::devices::TimeDevice
             ),
             (
+                &"/devices/cpu/informations",
+                CharacterDevice,
+                drivers_wasm::devices::CpuInformationsDevice
+            ),
+            (
                 &"/devices/random",
                 CharacterDevice,
                 drivers_shared::devices::RandomDevice
             ),
             (&"/devices/null", CharacterDevice, drivers_core::NullDevice),
+            (
+                &"/devices/http_client",
+                CharacterDevice,
+                drivers_wasm::devices::HttpClientDevice
+            ),
             (
                 &"/devices/https_client",
                 CharacterDevice,
@@ -154,10 +181,22 @@ async fn main() {
 
     // Mount static executables
 
+    let executable_context: &'static executable::ExecutableContext =
+        Box::leak(Box::new(executable::ExecutableContext {
+            task_manager,
+            users_manager,
+            virtual_file_system,
+            graphics_manager: Some(graphics_manager),
+            network_manager: None,
+            time_manager,
+        }));
+
     mount_executables!(
+        executable_context,
         virtual_file_system,
         task,
         &[
+            (&"/binaries/wasm", wasm::WasmExecutable),
             (
                 &"/binaries/graphical_shell",
                 graphical_shell::ShellExecutable
@@ -197,27 +236,69 @@ async fn main() {
         &"/devices/standard_error",
         task,
         virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
 
-    // - - Create the default user
-    let group_identifier = users::GroupIdentifier::new(1000);
-
-    let _ =
-        authentication::create_group(virtual_file_system, "administrator", Some(group_identifier))
-            .await
-            .unwrap();
-
-    let _ = authentication::create_user(
+    // Bundle Calculator and install its application-drawer shortcut.
+    File::write_to_path(
         virtual_file_system,
-        "administrator",
-        "",
-        group_identifier,
+        task,
+        "/binaries/calculator",
+        include_bytes!("../../../target/wasm32-wasip1/release/calculator.wasm"),
+    )
+    .await
+    .unwrap();
+
+    let install_status = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec!["--install".to_string(), "/binaries/calculator".to_string()],
+        standard.duplicate().await.unwrap(),
         None,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .join()
+    .await;
+    assert_eq!(install_status, 0, "Failed to install bundled Calculator");
+
+    // - - Load saved accounts, or create defaults only on a fresh disk.
+    let authentication_context = authentication::Context {
+        virtual_file_system,
+        task_manager,
+        users_manager,
+        task,
+    };
+    storage::initialize_users(&authentication_context, drive.is_new())
+        .await
+        .expect("Failed to initialize users and groups");
+
+    drive
+        .sync()
+        .await
+        .expect("Failed to save OPFS disk at boot");
+    log::information!("OPFS disk saved at boot");
+
+    // Main-thread OPFS commits are asynchronous. Keep one autosave running and
+    // explicitly join it before the final shutdown save.
+    use core::sync::atomic::{AtomicBool, Ordering};
+    let autosave_running: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(true)));
+    let (autosave, _) = task_manager
+        .spawn(task, "OPFS autosave", None, move |_| async move {
+            loop {
+                task::Manager::sleep(Duration::from_secs(1)).await;
+                if !autosave_running.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Err(error) = drive.sync().await {
+                    log::error!("Failed to save OPFS disk: {error}");
+                }
+            }
+        })
+        .await
+        .unwrap();
 
     // - - Set the environment variables
     task_manager
@@ -245,13 +326,26 @@ async fn main() {
     };
 
     // - - Execute the shell
-    let _ = executable::execute("/binaries/graphical_shell", arguments, standard, None)
-        .await
-        .unwrap()
-        .join()
-        .await;
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/graphical_shell",
+        arguments,
+        standard,
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
 
+    autosave_running.store(false, Ordering::Relaxed);
+    autosave.join().await;
     virtual_file_system.uninitialize().await;
+    drive
+        .sync()
+        .await
+        .expect("Failed to save OPFS disk at shutdown");
+    drive.unmount().expect("Failed to release OPFS disk");
 }
 
 #[cfg(not(target_arch = "wasm32"))]

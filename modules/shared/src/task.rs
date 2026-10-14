@@ -2,9 +2,9 @@
 macro_rules! poll_ready {
     ($expr:expr) => {
         match $expr {
-            Poll::Ready(val) => val,
-            Poll::Pending => {
-                return Poll::Pending;
+            core::task::Poll::Ready(val) => val,
+            core::task::Poll::Pending => {
+                return core::task::Poll::Pending;
             }
         }
     };

@@ -1,6 +1,6 @@
 use std::{env, fs, ops::Range, path::Path, process::Command};
 
-use internationalization::{format_ranges, merge_contiguous_ranges};
+use embedded_i18n::{format_ranges, merge_contiguous_ranges};
 
 pub const FONTS: &[(u8, &str, &str, bool)] = &[
     (10, "Montserrat-Regular.ttf", "montserrat", true),
@@ -98,13 +98,12 @@ pub fn generate_font<'a>(
 }
 
 fn main() {
-    let locale = internationalization::get_locale_build();
-    let fallback_locale = internationalization::get_fallback_locale_build();
+    let locale = embedded_i18n::get_locale_build();
+    let fallback_locale = embedded_i18n::get_fallback_locale_build();
 
-    let locale_range =
-        internationalization::get_locale_ranges(&locale).expect("Unsupported locale");
-    let fallback_range = internationalization::get_locale_ranges(&fallback_locale)
-        .expect("Unsupported fallback locale");
+    let locale_range = embedded_i18n::get_locale_ranges(&locale).expect("Unsupported locale");
+    let fallback_range =
+        embedded_i18n::get_locale_ranges(&fallback_locale).expect("Unsupported fallback locale");
 
     let ranges = locale_range
         .iter()

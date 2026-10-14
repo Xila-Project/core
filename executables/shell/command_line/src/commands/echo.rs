@@ -1,29 +1,55 @@
+use crate::Result;
 use crate::error::Error;
-use crate::{Result, Shell};
-use core::fmt::Write;
 use getargs::Options;
-use xila::task;
+use xila::file_system::Path;
 
-impl Shell {
-    pub async fn echo<'a, I>(&mut self, arguments: &mut Options<&'a str, I>) -> Result<()>
+use super::{CommandContext, UserCommand};
+
+pub struct EchoCommand;
+
+impl UserCommand for EchoCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        arguments: &mut Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
+        C: CommandContext,
     {
-        while let Some(argument) = arguments.next_positional() {
-            if let Some(name) = argument.strip_prefix('$') {
-                let environment_variable = task::get_instance()
-                    .get_environment_variable(self.task, name)
-                    .await
-                    .map_err(Error::FailedToReadEnvironmentVariable)?;
-
-                write!(self.standard.out(), "{} ", environment_variable.get_value())?;
-            } else {
-                let argument = argument.trim_matches('\"');
-                write!(self.standard.out(), "{} ", argument)?;
-            }
-        }
-        writeln!(self.standard.out())?;
-
-        Ok(())
+        execute_echo(context, arguments).await
     }
+}
+
+async fn write_echo_argument<C: CommandContext>(context: &mut C, argument: &str) -> Result<()> {
+    if let Some(name) = argument.strip_prefix('$') {
+        let environment_variable = context
+            .executable_context()
+            .task_manager
+            .get_environment_variable(context.task_id(), name)
+            .await
+            .map_err(Error::FailedToReadEnvironmentVariable)?;
+
+        context.write_out_fmt(format_args!("{} ", environment_variable.get_value()))?;
+    } else {
+        let argument = argument.trim_matches('"');
+        context.write_out_fmt(format_args!("{} ", argument))?;
+    }
+
+    Ok(())
+}
+
+async fn execute_echo<'a, I, C>(context: &mut C, arguments: &mut Options<&'a str, I>) -> Result<()>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    while let Some(argument) = arguments.next_positional() {
+        write_echo_argument(context, argument).await?;
+    }
+
+    context.write_out_fmt(format_args!("\n"))?;
+
+    Ok(())
 }

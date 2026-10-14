@@ -16,7 +16,7 @@ mod interface;
 fn main() {
     let mut calculator_gui = interface::Interface::new().unwrap();
     unsafe {
-        calculator_gui.run();
+        calculator_gui.run().unwrap();
     }
 }
 
@@ -24,8 +24,6 @@ fn main() {
 fn main() {
     println!(
         "{}",
-        internationalization::translate!(
-            "This executable is intended to be run in a WASM environment."
-        )
+        embedded_i18n::translate!("This executable is intended to be run in a WASM environment.")
     );
 }

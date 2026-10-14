@@ -17,8 +17,11 @@ impl Drop for Home {
 }
 
 impl Home {
-    pub async fn new(desk: *mut lvgl::lv_obj_t) -> Result<Self> {
-        let button = graphics::lock!({
+    pub async fn new(
+        graphics_manager: &'static graphics::Manager,
+        desk: *mut lvgl::lv_obj_t,
+    ) -> Result<Self> {
+        let button = graphics::lock!(graphics_manager, {
             unsafe {
                 let button = lvgl::lv_obj_create(lvgl::lv_layer_top());
 
@@ -32,11 +35,7 @@ impl Home {
                     lvgl::lv_color_white(),
                     lvgl::LV_STATE_DEFAULT,
                 );
-                lvgl::lv_obj_set_style_bg_opa(
-                    button,
-                    lvgl::LV_OPA_50 as u8,
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                lvgl::lv_obj_set_style_bg_opa(button, lvgl::LV_OPA_50, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_align(button, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_y(button, -5);
 

@@ -6,52 +6,56 @@ use alloc::{
 use file_system::DirectCharacterDevice;
 use synchronization::blocking_mutex::raw::CriticalSectionRawMutex;
 use synchronization::mutex::{Mutex, MutexGuard};
-use synchronization::{once_lock::OnceLock, rwlock::RwLock};
+use synchronization::rwlock::RwLock;
 use task::block_on;
 
-use core::{future::Future, mem::forget};
+use core::future::Future;
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 use core::time::Duration;
 
 use super::lvgl;
 
-use crate::Display;
 use crate::Input;
 use crate::InputKind;
 use crate::window::Window;
 use crate::{Color, theme};
+use crate::{Display, OwnedWindow};
 use crate::{Error, Result};
 
-static MANAGER_INSTANCE: OnceLock<Manager> = OnceLock::new();
+static TICK_TIME_MANAGER: AtomicPtr<time::Manager<'static>> = AtomicPtr::new(core::ptr::null_mut());
+static FFI_GRAPHICS_MANAGER: AtomicPtr<Manager> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Register the manager used by C/wasm callbacks that cannot carry Rust references.
+pub fn set_ffi_manager(manager: &'static Manager) {
+    FFI_GRAPHICS_MANAGER.store(manager as *const _ as *mut _, Ordering::Release);
+}
+
+/// Resolve the graphics capability at an FFI callback boundary.
+pub fn ffi_manager() -> &'static Manager {
+    let manager = FFI_GRAPHICS_MANAGER.load(Ordering::Acquire);
+    assert!(!manager.is_null(), "FFI graphics manager not initialized");
+    unsafe { &*manager }
+}
 
 pub async fn initialize(
+    time_manager: &'static time::Manager<'static>,
     screen_device: &'static dyn DirectCharacterDevice,
     input_device: &'static dyn DirectCharacterDevice,
     input_device_type: InputKind,
     buffer_size: usize,
     double_buffered: bool,
-) -> &'static Manager {
-    let manager = Manager::new(
-        time::get_instance(),
+) -> Manager {
+    TICK_TIME_MANAGER.store(time_manager as *const _ as *mut _, Ordering::Release);
+    Manager::new(
+        time_manager,
         screen_device,
         input_device,
         input_device_type,
         buffer_size,
         double_buffered,
     )
-    .expect("Failed to create manager instance");
-
-    MANAGER_INSTANCE.get_or_init(|| manager)
-}
-
-pub fn get_instance() -> &'static Manager {
-    MANAGER_INSTANCE
-        .try_get()
-        .expect("Graphics manager not initialized")
-}
-
-pub fn try_get_instance() -> Option<&'static Manager> {
-    MANAGER_INSTANCE.try_get()
+    .expect("Failed to create manager instance")
 }
 
 struct Inner {
@@ -65,6 +69,12 @@ pub struct Manager {
     global_lock: Mutex<CriticalSectionRawMutex, ()>,
 }
 
+impl Manager {
+    pub fn lock_function_sync<T>(&self, function: impl FnOnce() -> Result<T>) -> Result<T> {
+        task::block_on(self.lock_function(function))
+    }
+}
+
 impl Drop for Manager {
     fn drop(&mut self) {
         unsafe {
@@ -74,7 +84,9 @@ impl Drop for Manager {
 }
 
 extern "C" fn binding_tick_callback_function() -> u32 {
-    time::get_instance()
+    let manager = TICK_TIME_MANAGER.load(Ordering::Acquire);
+    assert!(!manager.is_null(), "Graphics time manager not initialized");
+    unsafe { &*manager }
         .get_current_time()
         .unwrap_or_default()
         .as_millis() as u32
@@ -163,12 +175,12 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn create_window(&self) -> Result<Window> {
+    pub async fn create_window(&self) -> Result<OwnedWindow> {
         let parent_object = self.inner.write().await.window_parent;
 
         let window = unsafe { Window::new(parent_object)? };
 
-        Ok(window)
+        Ok(OwnedWindow::new(window))
     }
 
     pub async fn add_input_device(
@@ -209,14 +221,12 @@ impl Manager {
         let window = unsafe {
             let child = lvgl::lv_obj_get_child(window_parent, index as i32);
 
-            Window::from_raw(child)
+            Window::from_raw(child).ok_or(Error::InvalidWindowIdentifier)?
         };
 
-        let icon = window.get_icon();
+        let icon = unsafe { window.as_ref().get_icon() };
 
         let icon = (icon.0.to_string(), icon.1);
-
-        forget(window);
 
         Ok(icon)
     }
@@ -249,6 +259,32 @@ impl Manager {
         } else {
             Err(Error::InvalidWindowIdentifier)
         }
+    }
+
+    pub async fn send_window_close_request(&self, identifier: usize) -> Result<()> {
+        let window_count = self.get_window_count().await?;
+
+        let window_parent = self.inner.read().await.window_parent;
+
+        let found = (0..window_count).any(|index| unsafe {
+            let child = lvgl::lv_obj_get_child(window_parent, index as i32);
+
+            child == identifier as *mut lvgl::lv_obj_t
+        });
+
+        if !found {
+            return Err(Error::InvalidWindowIdentifier);
+        }
+
+        unsafe {
+            lvgl::lv_obj_send_event(
+                identifier as *mut lvgl::lv_obj_t,
+                crate::EventKind::CloseRequested.into_lvgl_code(),
+                core::ptr::null_mut(),
+            );
+        }
+
+        Ok(())
     }
 
     pub async fn lock_function<T>(&self, function: impl FnOnce() -> Result<T>) -> Result<T> {

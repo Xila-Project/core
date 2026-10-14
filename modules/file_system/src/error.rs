@@ -4,7 +4,7 @@
 //! along with conversion traits and display implementations for comprehensive error reporting.
 
 use core::{fmt::Display, num::NonZeroU32};
-use internationalization::translate;
+use embedded_i18n::translate;
 
 /// Standard result type for file system operations.
 ///

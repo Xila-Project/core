@@ -151,7 +151,7 @@ pub unsafe extern "C" fn xila_memory_deallocate(pointer: *mut c_void) {
     let base_pointer = allocated.get_base_pointer();
 
     unsafe {
-        memory::get_instance().deallocate(base_pointer, layout);
+        memory::global_manager().deallocate(base_pointer, layout);
     }
 }
 
@@ -214,7 +214,7 @@ pub unsafe extern "C" fn xila_memory_reallocate(pointer: *mut c_void, size: usiz
         let old_layout = allocated.get_layout().unwrap();
         let new_layout = Allocated::get_layout_for_allocation(size, old_layout.align());
 
-        let pointer = memory::get_instance().reallocate(
+        let pointer = memory::global_manager().reallocate(
             allocated.get_base_pointer(),
             old_layout,
             new_layout.size(),
@@ -306,7 +306,7 @@ pub unsafe extern "C" fn xila_memory_allocate(
         }
     };
 
-    let pointer = unsafe { memory::get_instance().allocate(capabilities, layout) };
+    let pointer = unsafe { memory::global_manager().allocate(capabilities, layout) };
 
     let allocated = match Allocated::from_layout(pointer, &layout) {
         Some(alloc) => alloc,
@@ -359,7 +359,7 @@ pub unsafe extern "C" fn xila_memory_allocate_core(size: usize) -> *mut c_void {
 /// ```
 #[unsafe(no_mangle)]
 pub extern "C" fn xila_memory_get_page_size() -> usize {
-    memory::get_instance().get_page_size()
+    memory::global_manager().get_page_size()
 }
 
 /// Flushes the data cache.
@@ -383,7 +383,7 @@ pub extern "C" fn xila_memory_get_page_size() -> usize {
 /// ```
 #[unsafe(no_mangle)]
 pub extern "C" fn xila_memory_flush_data_cache() {
-    memory::get_instance().flush_data_cache();
+    memory::global_manager().flush_data_cache();
 }
 
 /// Flushes the instruction cache for a specific memory region.
@@ -417,7 +417,7 @@ pub extern "C" fn xila_memory_flush_data_cache() {
 #[unsafe(no_mangle)]
 pub extern "C" fn xila_memory_flush_instruction_cache(_address: *mut c_void, _size: usize) {
     unsafe {
-        memory::get_instance().flush_instruction_cache(_address as *const u8, _size);
+        memory::global_manager().flush_instruction_cache(_address as *const u8, _size);
     }
 }
 

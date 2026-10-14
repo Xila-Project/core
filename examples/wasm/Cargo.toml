@@ -7,10 +7,15 @@ edition = "2024"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.84"
-xila = { path = "../../", features = ["host", "graphics_rendering_xrgb8888"] }
+xila = { path = "../../", features = [
+  "bootsplash",
+  "graphics",
+  "graphics_rendering_xrgb8888",
+] }
 file_manager = { workspace = true }
 command_line_shell = { workspace = true }
 graphical_shell = { workspace = true }
+wasm = { workspace = true, features = ["host", "graphics"] }
 terminal = { workspace = true }
 settings = { workspace = true }
 console_error_panic_hook = "0.1"

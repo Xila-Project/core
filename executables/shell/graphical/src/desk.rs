@@ -12,26 +12,31 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use xila::file_system::Kind;
-use xila::graphics::{self, Color, EventKind, Logo, Point, Window, lvgl};
-use xila::log::{self, error};
-use xila::task;
-use xila::virtual_file_system::{self, Directory};
+use xila::graphics::{self, Color, EventKind, Logo, OwnedWindow, Point, lvgl};
+use xila::log::{self, error, warning};
+use xila::virtual_file_system::Directory;
 use xila::{
     executable,
     graphics::theme::{self, get_border_color_primary},
 };
 use xila::{executable::Standard, graphics::Event};
+use xila::{file_system::Kind, graphics::symbol};
 
 pub const WINDOWS_PARENT_CHILD_CHANGED: graphics::EventKind = graphics::EventKind::Custom2;
 
 pub struct Desk {
-    window: Window,
+    context: &'static xila::executable::ExecutableContext,
+    graphics_manager: &'static graphics::Manager,
+    window: OwnedWindow,
     tile_view: *mut lvgl::lv_obj_t,
     drawer_tile: *mut lvgl::lv_obj_t,
     desk_tile: *mut lvgl::lv_obj_t,
     dock: *mut lvgl::lv_obj_t,
     main_button: *mut lvgl::lv_obj_t,
+    dock_menu: Option<*mut lvgl::lv_obj_t>,
+    dock_menu_target_window: Option<usize>,
+    dock_menu_maximize_button: Option<*mut lvgl::lv_obj_t>,
+    dock_menu_close_button: Option<*mut lvgl::lv_obj_t>,
     shortcuts: BTreeMap<*mut lvgl::lv_obj_t, String>,
 }
 
@@ -68,37 +73,40 @@ impl Desk {
 
     pub const HOME_EVENT: EventKind = EventKind::Custom1;
 
-    pub fn get_window_object(&self) -> *mut lvgl::lv_obj_t {
-        self.window.get_object()
+    pub fn get_window_object(&mut self) -> *mut lvgl::lv_obj_t {
+        self.window.as_object_mutable()
     }
 
     pub fn is_hidden(&self) -> bool {
         unsafe { lvgl::lv_obj_has_flag(self.dock, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_HIDDEN) }
     }
 
-    pub async fn new(windows_parent: *mut lvgl::lv_obj_t) -> Result<Self> {
-        let desk = graphics::lock!({
-            let graphics = graphics::get_instance();
+    pub async fn new(
+        context: &'static xila::executable::ExecutableContext,
+        windows_parent: *mut lvgl::lv_obj_t,
+    ) -> Result<Self> {
+        let graphics = graphics::ffi_manager();
+        let desk = graphics::lock!(graphics, {
             // - Create a window
             let mut window = graphics.create_window().await?;
 
             window.set_icon("De", Color::BLACK);
 
             unsafe {
-                lvgl::lv_obj_set_style_pad_all(window.get_object(), 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_pad_all(window.as_mut(), 0, lvgl::LV_STATE_DEFAULT);
 
                 lvgl::lv_obj_add_event_cb(
                     windows_parent,
                     Some(event_handler),
                     EventKind::All as u32,
-                    window.get_object() as *mut core::ffi::c_void,
+                    window.as_object_mutable() as *mut _ as *mut _,
                 );
             }
 
             // - Create the logo
             unsafe {
                 // Create the logo in the background of the window
-                let logo = Logo::new(window.get_object(), 4, Color::BLACK)?;
+                let logo = Logo::new(window.as_mut(), 4, Color::BLACK)?;
                 let logo_inner_object = logo.get_inner_object();
                 forget(logo); // Prevent the logo from being dropped
 
@@ -112,11 +120,7 @@ impl Desk {
                 for i in 0..4 {
                     let part = lvgl::lv_obj_get_child(logo_inner_object, i);
 
-                    lvgl::lv_obj_set_style_bg_opa(
-                        part,
-                        lvgl::LV_OPA_0 as u8,
-                        lvgl::LV_STATE_DEFAULT,
-                    );
+                    lvgl::lv_obj_set_style_bg_opa(part, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
 
                     lvgl::lv_obj_set_style_border_width(part, 2, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_set_style_border_color(
@@ -129,17 +133,13 @@ impl Desk {
 
             // - Create a tile view
             let tile_view = unsafe {
-                let tile_view = lvgl::lv_tileview_create(window.get_object());
+                let tile_view = lvgl::lv_tileview_create(window.as_mut());
 
                 if tile_view.is_null() {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_bg_opa(
-                    tile_view,
-                    lvgl::LV_OPA_0 as u8,
-                    lvgl::LV_STATE_DEFAULT,
-                );
+                lvgl::lv_obj_set_style_bg_opa(tile_view, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_scrollbar_mode(
                     tile_view,
                     lvgl::lv_scrollbar_mode_t_LV_SCROLLBAR_MODE_OFF,
@@ -213,12 +213,18 @@ impl Desk {
             let shortcuts = BTreeMap::new();
 
             let desk: Desk = Self {
+                context,
+                graphics_manager: graphics::ffi_manager(),
                 window,
                 tile_view,
                 desk_tile,
                 drawer_tile,
                 dock,
                 main_button,
+                dock_menu: None,
+                dock_menu_target_window: None,
+                dock_menu_maximize_button: None,
+                dock_menu_close_button: None,
                 shortcuts,
             };
 
@@ -240,7 +246,7 @@ impl Desk {
             let container = lvgl::lv_obj_create(drawer);
 
             lvgl::lv_obj_set_size(container, 12 * 8, 11 * 8);
-            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0 as u8, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_flex_flow(container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
             lvgl::lv_obj_set_style_pad_all(container, 0, lvgl::LV_STATE_DEFAULT);
@@ -269,9 +275,13 @@ impl Desk {
 
     async unsafe fn create_drawer_interface(&mut self, drawer: *mut lvgl::lv_obj_t) -> Result<()> {
         unsafe {
-            let task = task::get_instance().get_current_task_identifier().await;
+            let task = self
+                .context
+                .task_manager
+                .get_current_task_identifier()
+                .await;
 
-            let virtual_file_system = virtual_file_system::get_instance();
+            let virtual_file_system = &self.context.virtual_file_system;
 
             let _ = virtual_file_system
                 .create_directory(task, &SHORTCUT_PATH)
@@ -292,7 +302,7 @@ impl Desk {
                     continue;
                 }
 
-                match Shortcut::read(&shortcut_entry.name, &mut buffer).await {
+                match Shortcut::read(self.context, &shortcut_entry.name, &mut buffer).await {
                     Ok(shortcut) => {
                         self.create_drawer_shortcut(
                             &shortcut_entry.name,
@@ -313,111 +323,234 @@ impl Desk {
         }
     }
 
-    async fn execute_shortcut(&self, shortcut_name: &str) -> Result<()> {
-        let task = task::get_instance().get_current_task_identifier().await;
+    async fn execute_shortcut(&mut self, shortcut_name: &str) -> Result<()> {
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
 
         let mut buffer = vec![];
 
-        let shortcut = Shortcut::read(shortcut_name, &mut buffer).await?;
+        let shortcut = Shortcut::read(self.context, shortcut_name, &mut buffer).await?;
 
         let standard = Standard::open(
             &"/devices/null",
             &"/devices/null",
             &"/devices/null",
             task,
-            virtual_file_system::get_instance(),
+            self.context.virtual_file_system,
+            self.context,
         )
         .await
         .map_err(Error::FailedToOpenStandardFile)?;
 
-        executable::execute(&*shortcut.command, shortcut.arguments, standard, None)
+        executable::execute(
+            self.context,
+            &*shortcut.command,
+            shortcut.arguments,
+            standard,
+            None,
+        )
+        .await
+        .map_err(Error::FailedToExecuteShortcut)?;
+
+        Ok(())
+    }
+
+    unsafe fn open_dock_menu(
+        &mut self,
+        _dock_icon: *mut lvgl::lv_obj_t,
+        window_identifier: usize,
+    ) -> Result<()> {
+        unsafe {
+            self.close_dock_menu();
+
+            let menu = lvgl::lv_list_create(self.window.as_object_mutable());
+
+            if menu.is_null() {
+                return Err(Error::FailedToCreateObject);
+            }
+
+            lvgl::lv_obj_set_size(menu, 160, lvgl::LV_SIZE_CONTENT);
+
+            lvgl::lv_obj_align_to(
+                menu,
+                _dock_icon,
+                lvgl::lv_align_t_LV_ALIGN_OUT_TOP_MID,
+                0,
+                -128,
+            );
+            lvgl::lv_obj_set_scrollbar_mode(menu, lvgl::lv_scrollbar_mode_t_LV_SCROLLBAR_MODE_OFF);
+            lvgl::lv_obj_set_style_pad_all(menu, 6, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_pad_row(menu, 4, lvgl::LV_STATE_DEFAULT);
+
+            let maximize_button =
+                lvgl::lv_list_add_button(menu, symbol::UP.as_ptr() as _, c"Maximize".as_ptr());
+
+            if maximize_button.is_null() {
+                lvgl::lv_obj_delete_async(menu);
+                return Err(Error::FailedToCreateObject);
+            }
+
+            lvgl::lv_obj_set_width(maximize_button, lvgl::lv_pct(100));
+
+            let close_button =
+                lvgl::lv_list_add_button(menu, symbol::CLOSE.as_ptr() as _, c"Close".as_ptr());
+
+            if close_button.is_null() {
+                lvgl::lv_obj_delete_async(menu);
+                return Err(Error::FailedToCreateObject);
+            }
+
+            lvgl::lv_obj_set_width(close_button, lvgl::lv_pct(100));
+
+            self.dock_menu_maximize_button = Some(maximize_button);
+            self.dock_menu = Some(menu);
+            self.dock_menu_close_button = Some(close_button);
+            self.dock_menu_target_window = Some(window_identifier);
+
+            Ok(())
+        }
+    }
+
+    unsafe fn close_dock_menu(&mut self) {
+        unsafe {
+            if let Some(menu) = self.dock_menu.take() {
+                lvgl::lv_obj_delete_async(menu);
+            }
+
+            self.dock_menu_target_window = None;
+            self.dock_menu_maximize_button = None;
+            self.dock_menu_close_button = None;
+        }
+    }
+
+    async fn close_app_for_window(&mut self, window_identifier: usize) {
+        if let Err(error) = self
+            .graphics_manager
+            .send_window_close_request(window_identifier)
             .await
-            .map_err(Error::FailedToExecuteShortcut)?;
+        {
+            warning!(
+                "Failed to send close request to window {}: {:?}",
+                window_identifier,
+                error
+            );
+        }
+    }
+
+    unsafe fn clear_main_button_pressed_state(&self) {
+        unsafe {
+            const STATE: u16 = lvgl::LV_STATE_PRESSED as u16;
+
+            lvgl::lv_obj_remove_state(self.main_button, STATE);
+
+            for i in 0..4 {
+                let part = lvgl::lv_obj_get_child(self.main_button, i);
+
+                lvgl::lv_obj_remove_state(part, STATE);
+            }
+        }
+    }
+
+    unsafe fn is_object_inside(parent: *mut lvgl::lv_obj_t, object: *mut lvgl::lv_obj_t) -> bool {
+        unsafe {
+            let mut current = object;
+
+            while !current.is_null() {
+                if current == parent {
+                    return true;
+                }
+
+                current = lvgl::lv_obj_get_parent(current);
+            }
+
+            false
+        }
+    }
+
+    async fn get_visible_windows(&self) -> Result<Vec<(usize, String, Color)>> {
+        let graphics_manager = self.graphics_manager;
+        let window_count = graphics_manager.get_window_count().await?;
+
+        let mut windows = Vec::new();
+
+        for index in 0..window_count {
+            let Ok(window_identifier) = graphics_manager.get_window_identifier(index).await else {
+                continue;
+            };
+
+            if window_identifier == self.window.get_identifier() {
+                continue;
+            }
+
+            match graphics_manager.get_window_icon(index).await {
+                Ok((icon_string, icon_color)) => {
+                    windows.push((window_identifier, icon_string, icon_color));
+                }
+                Err(error) => {
+                    warning!(
+                        "Failed to fetch icon for window {} during dock rebuild: {:?}",
+                        window_identifier,
+                        error
+                    );
+                }
+            }
+        }
+
+        Ok(windows)
+    }
+
+    unsafe fn clear_dock_icons(&self) {
+        unsafe {
+            let mut child_index = lvgl::lv_obj_get_child_count(self.dock) as i32;
+
+            while child_index > 0 {
+                child_index -= 1;
+
+                let child = lvgl::lv_obj_get_child(self.dock, child_index);
+
+                if child.is_null() || child == self.main_button {
+                    continue;
+                }
+
+                lvgl::lv_obj_delete(child);
+            }
+        }
+    }
+
+    unsafe fn rebuild_dock_icons(&self, windows: &[(usize, String, Color)]) -> Result<()> {
+        unsafe {
+            for (window_identifier, icon_string, icon_color) in windows {
+                let icon = create_icon(self.dock, *icon_color, icon_string, Self::DOCK_ICON_SIZE)?;
+
+                lvgl::lv_obj_set_user_data(icon, *window_identifier as *mut c_void);
+            }
+        }
 
         Ok(())
     }
 
     // This function is intentionally private and is only used within this module.
-    async fn refresh_dock(&self) -> Result<()> {
-        let dock_child_count = unsafe { lvgl::lv_obj_get_child_count(self.dock) };
+    async fn refresh_dock(&mut self) -> Result<()> {
+        let visible_windows = self.get_visible_windows().await?;
 
-        let graphics_manager = graphics::get_instance();
-
-        let window_count = graphics_manager.get_window_count().await?;
-
-        // Remove the icons of windows that do not exist anymore
-        for i in 0..dock_child_count {
-            let icon = unsafe { lvgl::lv_obj_get_child(self.dock, i as i32) };
-
-            if icon.is_null() {
-                continue;
-            }
-
-            if icon == self.main_button {
-                continue;
-            }
-
-            let dock_window_identifier = unsafe { lvgl::lv_obj_get_user_data(icon) as usize };
-
-            let mut found = Option::None;
-
-            for j in 1..window_count {
-                if let Ok(window_identifier) = graphics_manager.get_window_identifier(j).await
-                    && window_identifier == dock_window_identifier
-                {
-                    found = Some(window_identifier);
-                    break;
-                }
-            }
-
-            if found.is_none() {
-                unsafe {
-                    lvgl::lv_obj_delete(icon);
-                }
-            }
+        unsafe {
+            self.clear_dock_icons();
+            self.rebuild_dock_icons(&visible_windows)?;
         }
 
-        // Add the new icons
-        for i in 0..window_count {
-            let window_identifier =
-                if let Ok(window_identifier) = graphics_manager.get_window_identifier(i).await {
-                    window_identifier
-                } else {
-                    continue;
-                };
-
-            // Check if the window is not desk
-            if window_identifier == self.window.get_identifier() {
-                continue;
-            }
-
-            // Find the index of the window in the dock
-            let found = (1..dock_child_count).find(|&dock_idx| {
-                let dock_window_identifier = unsafe {
-                    let icon = lvgl::lv_obj_get_child(self.dock, dock_idx as i32);
-
-                    if icon.is_null() {
-                        return false;
-                    }
-
-                    lvgl::lv_obj_get_user_data(icon) as usize
-                };
-
-                dock_window_identifier == window_identifier
-            });
-
-            // If the window is not in the dock, add it
-            if found.is_none() {
-                // Fetch the window identifier once and reuse it
-                let window_identifier = graphics_manager.get_window_identifier(i).await?;
-                let (icon_string, icon_color) = graphics_manager.get_window_icon(i).await?;
-
-                unsafe {
-                    let icon =
-                        create_icon(self.dock, icon_color, &icon_string, Self::DOCK_ICON_SIZE)?;
-
-                    lvgl::lv_obj_set_user_data(icon, window_identifier as *mut c_void);
-                }
+        if self
+            .dock_menu_target_window
+            .is_some_and(|window_identifier| {
+                !visible_windows
+                    .iter()
+                    .any(|(visible_identifier, _, _)| *visible_identifier == window_identifier)
+            })
+        {
+            unsafe {
+                self.close_dock_menu();
             }
         }
 
@@ -425,7 +558,7 @@ impl Desk {
     }
 
     pub async fn handle_events(&mut self) -> bool {
-        graphics::lock!({
+        graphics::lock!(self.graphics_manager, {
             while let Some(event) = self.window.pop_event() {
                 if let Err(error) = self.handle_event(event).await {
                     log::error!("Failed to handle desk event: {error:?}");
@@ -441,21 +574,84 @@ impl Desk {
             Self::HOME_EVENT => unsafe {
                 lvgl::lv_tileview_set_tile_by_index(self.tile_view, 0, 0, true);
             },
-            EventKind::ValueChanged => {
-                if event.target == self.tile_view {
+            EventKind::ValueChanged if event.target == self.tile_view => unsafe {
+                if lvgl::lv_tileview_get_tile_active(self.tile_view) == self.desk_tile {
+                    lvgl::lv_obj_clean(self.drawer_tile);
+                } else if lvgl::lv_obj_get_child_count(self.drawer_tile) == 0 {
+                    let _ = self.create_drawer_interface(self.drawer_tile).await;
+                }
+            },
+            EventKind::Clicked => {
+                if self
+                    .dock_menu_maximize_button
+                    .is_some_and(|maximize_button| {
+                        event.target == maximize_button
+                            || unsafe { lvgl::lv_obj_get_parent(event.target) == maximize_button }
+                    })
+                {
+                    if let Some(window_identifier) = self.dock_menu_target_window
+                        && let Err(error) = self
+                            .graphics_manager
+                            .maximize_window(window_identifier)
+                            .await
+                    {
+                        warning!(
+                            "Failed to maximize window {} from dock menu: {:?}",
+                            window_identifier,
+                            error
+                        );
+                    }
+
                     unsafe {
-                        if lvgl::lv_tileview_get_tile_active(self.tile_view) == self.desk_tile {
-                            lvgl::lv_obj_clean(self.drawer_tile);
-                        } else if lvgl::lv_obj_get_child_count(self.drawer_tile) == 0 {
-                            let _ = self.create_drawer_interface(self.drawer_tile).await;
-                        }
+                        self.close_dock_menu();
+                    }
+
+                    return Ok(());
+                }
+
+                if self.dock_menu_close_button.is_some_and(|close_button| {
+                    event.target == close_button
+                        || unsafe { lvgl::lv_obj_get_parent(event.target) == close_button }
+                }) {
+                    if let Some(window_identifier) = self.dock_menu_target_window {
+                        self.close_app_for_window(window_identifier).await;
+                    }
+
+                    unsafe {
+                        self.close_dock_menu();
+                    }
+
+                    return Ok(());
+                }
+
+                if self.dock_menu.is_some()
+                    && unsafe { lvgl::lv_obj_get_parent(event.target) == self.dock }
+                    && event.target != self.main_button
+                {
+                    let clicked_window_identifier =
+                        unsafe { lvgl::lv_obj_get_user_data(event.target) as usize };
+
+                    if self
+                        .dock_menu_target_window
+                        .is_some_and(|window_identifier| {
+                            window_identifier == clicked_window_identifier
+                        })
+                    {
+                        return Ok(());
                     }
                 }
-            }
-            EventKind::Clicked => {
+
+                if let Some(menu) = self.dock_menu
+                    && !unsafe { Self::is_object_inside(menu, event.target) }
+                {
+                    unsafe {
+                        self.close_dock_menu();
+                    }
+                }
+
                 // If the target is a shortcut, execute the shortcut
-                if let Some(shortcut_name) = self.shortcuts.get(&event.target) {
-                    self.execute_shortcut(shortcut_name).await?;
+                if let Some(shortcut_name) = self.shortcuts.get(&event.target).cloned() {
+                    self.execute_shortcut(&shortcut_name).await?;
                 }
                 // If the target is a dock icon, move the window to the foreground
                 else if unsafe { lvgl::lv_obj_get_parent(event.target) == self.dock } {
@@ -464,49 +660,63 @@ impl Desk {
                         return Ok(());
                     }
 
+                    unsafe {
+                        self.close_dock_menu();
+                    }
+
                     let window_identifier =
                         unsafe { lvgl::lv_obj_get_user_data(event.target) as usize };
 
-                    graphics::get_instance()
+                    if let Err(error) = self
+                        .graphics_manager
                         .maximize_window(window_identifier)
                         .await
-                        .unwrap();
-                }
-            }
-            EventKind::Pressed => {
-                if event.target == self.main_button
-                    || unsafe { lvgl::lv_obj_get_parent(event.target) == self.main_button }
-                {
-                    unsafe {
-                        lvgl::lv_obj_add_state(self.main_button, lvgl::LV_STATE_PRESSED as u16);
-                        for i in 0..4 {
-                            let part = lvgl::lv_obj_get_child(self.main_button, i);
-
-                            lvgl::lv_obj_add_state(part, lvgl::LV_STATE_PRESSED as u16);
-                        }
+                    {
+                        warning!(
+                            "Failed to maximize window {} from dock click: {:?}",
+                            window_identifier,
+                            error
+                        );
                     }
                 }
             }
-            EventKind::Released => {
-                if event.target == self.main_button
-                    || unsafe { lvgl::lv_obj_get_parent(event.target) == self.main_button }
-                {
-                    const STATE: u16 = lvgl::LV_STATE_PRESSED as u16;
+            EventKind::LongPressed
+                if unsafe { lvgl::lv_obj_get_parent(event.target) == self.dock }
+                    && event.target != self.main_button =>
+            {
+                let window_identifier =
+                    unsafe { lvgl::lv_obj_get_user_data(event.target) as usize };
 
-                    unsafe {
-                        lvgl::lv_obj_add_state(self.main_button, STATE);
-                        for i in 0..4 {
-                            let part = lvgl::lv_obj_get_child(self.main_button, i);
-
-                            lvgl::lv_obj_remove_state(part, STATE);
-                        }
-                    }
-
-                    unsafe {
-                        lvgl::lv_tileview_set_tile_by_index(self.tile_view, 0, 1, true);
-                    }
+                unsafe {
+                    self.open_dock_menu(event.target, window_identifier)?;
                 }
             }
+            EventKind::Pressed
+                if (event.target == self.main_button
+                    || unsafe { lvgl::lv_obj_get_parent(event.target) == self.main_button }) =>
+            unsafe {
+                lvgl::lv_obj_add_state(self.main_button, lvgl::LV_STATE_PRESSED as u16);
+                for i in 0..4 {
+                    let part = lvgl::lv_obj_get_child(self.main_button, i);
+
+                    lvgl::lv_obj_add_state(part, lvgl::LV_STATE_PRESSED as u16);
+                }
+            },
+            EventKind::Released
+                if (event.target == self.main_button
+                    || unsafe { lvgl::lv_obj_get_parent(event.target) == self.main_button }) =>
+            {
+                unsafe {
+                    self.clear_main_button_pressed_state();
+                }
+
+                unsafe {
+                    lvgl::lv_tileview_set_tile_by_index(self.tile_view, 0, 1, true);
+                }
+            }
+            EventKind::PressLost => unsafe {
+                self.clear_main_button_pressed_state();
+            },
             WINDOWS_PARENT_CHILD_CHANGED => {
                 // Ignore consecutive windows parent child changed events
                 if let Some(Event {
@@ -518,11 +728,53 @@ impl Desk {
                     return Ok(());
                 }
 
-                self.refresh_dock().await.unwrap();
+                if let Err(error) = self.refresh_dock().await {
+                    warning!(
+                        "Failed to refresh dock after window tree update: {:?}",
+                        error
+                    );
+                }
             }
             _ => {}
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{string::String, vec, vec::Vec};
+
+    use xila::graphics::Color;
+
+    fn visible_window_identifiers(windows: &[(usize, String, Color)]) -> Vec<usize> {
+        windows
+            .iter()
+            .map(|(window_identifier, _, _)| *window_identifier)
+            .collect()
+    }
+
+    #[test]
+    fn preserves_original_order_of_non_desk_windows() {
+        let windows = vec![
+            (42, String::from("A"), Color::BLACK),
+            (77, String::from("B"), Color::WHITE),
+            (3, String::from("C"), Color::new(12, 34, 56)),
+        ];
+
+        assert_eq!(visible_window_identifiers(&windows), vec![42, 77, 3]);
+    }
+
+    #[test]
+    fn allows_detecting_disappeared_menu_target() {
+        let windows = vec![
+            (2, String::from("A"), Color::BLACK),
+            (3, String::from("B"), Color::WHITE),
+        ];
+
+        let visible = visible_window_identifiers(&windows);
+
+        assert!(!visible.contains(&99));
     }
 }

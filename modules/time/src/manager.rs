@@ -1,22 +1,6 @@
 use crate::{Error, Result};
 use core::time::Duration;
 use file_system::DirectCharacterDevice;
-use synchronization::once_lock::OnceLock;
-
-pub static MANAGER: OnceLock<Manager> = OnceLock::new();
-
-pub fn get_instance() -> &'static Manager<'static> {
-    MANAGER.try_get().expect("Time manager is not initialized")
-}
-
-pub fn initialize(
-    driver: &'static (dyn DirectCharacterDevice + Send + Sync),
-) -> Result<&'static Manager<'static>> {
-    MANAGER.get_or_init(|| Manager::new(driver).expect("Failed to initialize time manager"));
-
-    Ok(get_instance())
-}
-
 pub struct Manager<'a> {
     device: &'a (dyn DirectCharacterDevice + Send + Sync),
     start_time: Duration,
@@ -55,4 +39,10 @@ impl<'a> Manager<'a> {
 
         Ok(current_time)
     }
+}
+
+pub fn initialize(
+    driver: &'static (dyn DirectCharacterDevice + Send + Sync),
+) -> Result<Manager<'static>> {
+    Manager::new(driver)
 }

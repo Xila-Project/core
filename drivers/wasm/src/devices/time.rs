@@ -69,7 +69,7 @@ impl DirectBaseOperations for TimeDevice {
 
         buffer[..duration_bytes.len()].copy_from_slice(duration_bytes);
 
-        Ok(duration_bytes.len().into())
+        Ok(duration_bytes.len())
     }
 
     fn write(&self, _: &[u8], _: Size) -> Result<usize> {

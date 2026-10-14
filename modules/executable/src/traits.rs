@@ -10,19 +10,31 @@ use shared::AnyByLayout;
 define_command!(GET_MAIN_FUNCTION, Read, b'E', 1, (), MainFunction);
 
 pub trait ExecutableTrait: 'static + Send + Sync {
-    fn main(standard: Standard, arguments: Vec<String>) -> MainFuture;
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> MainFuture;
+}
+
+pub struct ExecutableContext {
+    pub task_manager: &'static task::Manager,
+    pub users_manager: &'static users::Manager,
+    pub virtual_file_system: &'static virtual_file_system::VirtualFileSystem,
+    #[cfg(feature = "graphics")]
+    pub graphics_manager: Option<&'static graphics::Manager>,
+    pub network_manager: Option<&'static network::Manager>,
+    pub time_manager: &'static time::Manager<'static>,
 }
 
 pub type MainFuture =
     Pin<Box<dyn Future<Output = core::result::Result<(), NonZeroUsize>> + 'static>>;
 
-pub type MainFunction = Option<Box<dyn Fn(Standard, Vec<String>) -> MainFuture + 'static>>;
+pub type MainFunction = Option<
+    Box<dyn Fn(&'static ExecutableContext, Standard<'static>, Vec<String>) -> MainFuture + 'static>,
+>;
 
-pub struct ExecutableWrapper<T: ExecutableTrait>(T);
+pub struct ExecutableWrapper<T: ExecutableTrait>(T, &'static ExecutableContext);
 
 impl<T: ExecutableTrait> ExecutableWrapper<T> {
-    pub fn new(executable: T) -> Self {
-        Self(executable)
+    pub fn new(executable: T, context: &'static ExecutableContext) -> Self {
+        Self(executable, context)
     }
 }
 
@@ -56,7 +68,13 @@ impl<T: ExecutableTrait> DirectBaseOperations for ExecutableWrapper<T> {
         match command {
             GET_MAIN_FUNCTION::IDENTIFIER => {
                 let output = GET_MAIN_FUNCTION::cast_output(output)?;
-                *output = Some(Box::new(T::main));
+                let executable_context = self.1;
+                *output = Some(Box::new(move |context, standard, arguments| {
+                    let mut standard = standard;
+                    standard.context = context;
+                    debug_assert!(core::ptr::eq(context, executable_context));
+                    T::main(standard, arguments)
+                }));
                 Ok(())
             }
             _ => Err(file_system::Error::UnsupportedOperation),
@@ -69,7 +87,7 @@ impl<T: ExecutableTrait> DirectCharacterDevice for ExecutableWrapper<T> {}
 #[macro_export]
 macro_rules! mount_executables {
 
-    ( $virtual_file_system:expr, $task:expr, &[ $( ($path:expr, $executable:expr) ),* $(,)? ] ) => {
+    ( $context:expr, $virtual_file_system:expr, $task:expr, &[ $( ($path:expr, $executable:expr) ),* $(,)? ] ) => {
 
     async || -> $crate::exported_virtual_file_system::Result<()>
     {
@@ -77,7 +95,7 @@ macro_rules! mount_executables {
         use $crate::exported_virtual_file_system::ItemStatic;
 
         $(
-            let __executable = $crate::ExecutableWrapper::new($executable);
+            let __executable = $crate::ExecutableWrapper::new($executable, $context);
 
             let _ = $virtual_file_system.remove($task, $path).await;
             $virtual_file_system.mount_character_device($task, $path, __executable).await?;

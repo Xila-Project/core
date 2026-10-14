@@ -3,18 +3,24 @@ default_to_workspace = false
 init_task = "generate-fonts"
 skip_core_tasks = true
 
+[env]
+# The optional development shell pins Rust; existing workflows retain stable.
+XILA_RUST_TOOLCHAIN = { value = "stable", condition = { env_not_set = [
+  "XILA_RUST_TOOLCHAIN",
+] } }
+
 [tasks.install-tools]
 command = "npm"
 args = ["install"]
 
 [tasks.generate-fonts]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["run", "--package", "fonts_generator"]
 
 [tasks.format-rust]
 install_crate = "rustfmt"
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["fmt", "--all", "${@}"]
 
@@ -47,18 +53,18 @@ command = "npm"
 args = ["exec", "tolgee", "push", "${@}"]
 
 [tasks.check-host]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "check",
   "--target",
   "x86_64-unknown-linux-gnu",
   "--features",
-  "host,abi_definitions,graphics_rendering_xrgb8888",
+  "graphics,abi_definitions,graphics_rendering_xrgb8888",
 ]
 
 [tasks.check-guest]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "check",
@@ -66,28 +72,30 @@ args = [
   "wasm32-unknown-unknown",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
 ]
 
 [tasks.doc-host]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "doc",
   "--features",
-  "host,abi_definitions,graphics_rendering_xrgb8888",
+  "graphics,abi_definitions,graphics_rendering_xrgb8888",
   "--target",
   "x86_64-unknown-linux-gnu",
 ]
 
 [tasks.doc-guest]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "doc",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",
@@ -102,14 +110,14 @@ dependencies = ["check-host", "check-guest"]
 
 [tasks.clippy-host]
 install_crate = "clippy"
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "clippy",
   "--target",
   "x86_64-unknown-linux-gnu",
   "--features",
-  "host,abi_definitions,graphics_rendering_xrgb8888",
+  "graphics,abi_definitions,graphics_rendering_xrgb8888",
   "--all-targets",
   "--",
   "-D",
@@ -118,12 +126,13 @@ args = [
 
 [tasks.clippy-guest]
 install_crate = "clippy"
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = [
   "clippy",
   "--package",
   "wasm",
+  "--no-default-features",
   "--features",
   "default_guest",
   "--target",
@@ -139,30 +148,30 @@ dependencies = ["clippy-host", "clippy-guest"]
 
 [tasks.lint]
 install_crate = "clippy"
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
 
 [tasks.test]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["test", "--workspace"]
 
 [tasks.run]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["run", "${@}"]
 
 [tasks.build]
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
 args = ["build", "${@}"]
 
 [tasks.coverage]
 install_crate = "cargo-llvm-cov"
-toolchain = "stable"
+toolchain = "${XILA_RUST_TOOLCHAIN}"
 command = "cargo"
-args = ["llvm-cov", "--workspace", "${@}"]
+args = ["llvm-cov", "--workspace", "--coverage-host-only", "${@}"]
 
 [tasks.before-commit]
 dependencies = ["format", "check", "doc", "clippy"]

@@ -30,6 +30,18 @@ impl TaskIdentifier {
     }
 }
 
+impl From<usize> for TaskIdentifier {
+    fn from(value: usize) -> Self {
+        Self(value as TaskIdentifierInner)
+    }
+}
+
+impl From<TaskIdentifier> for usize {
+    fn from(value: TaskIdentifier) -> Self {
+        value.0 as usize
+    }
+}
+
 impl From<TaskIdentifierInner> for TaskIdentifier {
     fn from(value: TaskIdentifierInner) -> Self {
         Self(value)

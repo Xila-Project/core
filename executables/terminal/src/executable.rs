@@ -31,7 +31,7 @@ impl TerminalExecutable {
 
 impl ExecutableTrait for TerminalExecutable {
     fn main(
-        standard: xila::executable::Standard,
+        standard: xila::executable::Standard<'static>,
         arguments: alloc::vec::Vec<alloc::string::String>,
     ) -> xila::executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })

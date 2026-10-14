@@ -10,16 +10,16 @@ async fn main() {
 
     use command_line_shell::ShellExecutable;
     use terminal::TerminalExecutable;
+    use xila::executable;
     use xila::executable::mount_executables;
-    use xila::{executable, task, virtual_file_system};
 
     let standard = testing::initialize(true, false).await;
-
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task_instance = task::get_instance();
-    let task = task_instance.get_current_task_identifier().await;
+    let context = standard.context;
+    let task = context.task_manager.get_current_task_identifier().await;
+    let virtual_file_system = &context.virtual_file_system;
 
     mount_executables!(
+        context,
         virtual_file_system,
         task,
         &[
@@ -35,7 +35,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let result = executable::execute("/binaries/terminal", vec![], standard, None)
+    let result = executable::execute(context, "/binaries/terminal", vec![], standard, None)
         .await
         .unwrap()
         .join()

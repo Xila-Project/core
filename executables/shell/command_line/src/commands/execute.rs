@@ -7,7 +7,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use xila::{executable::execute, file_system::Path, task};
+use xila::{executable::execute, file_system::Path};
 
 impl Shell {
     pub async fn execute<'a, I>(&mut self, input: I, paths: &[&Path]) -> Result<()>
@@ -15,7 +15,8 @@ impl Shell {
         I: IntoIterator<Item = &'a str>,
     {
         // - Set the current directory for the following commands.
-        task::get_instance()
+        self.context
+            .task_manager
             .set_environment_variable(
                 self.task,
                 "Current_directory",
@@ -41,7 +42,7 @@ impl Shell {
                 self.run(&path, arguments).await?;
             }
         } else {
-            let path = resolve(path.as_str(), paths).await?;
+            let path = resolve(self.context, path.as_str(), paths).await?;
 
             self.run(&path, arguments).await?;
         }
@@ -57,7 +58,7 @@ impl Shell {
 
         let arguments: Vec<String> = arguments.into_iter().map(|s| s.to_string()).collect();
 
-        let _ = execute(path, arguments, standard, None)
+        let _ = execute(self.context, path, arguments, standard, None)
             .await
             .map_err(|_| Error::FailedToExecuteCommand)?
             .join()

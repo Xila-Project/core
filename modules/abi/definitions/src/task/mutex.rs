@@ -3,12 +3,13 @@ use core::{
     ptr::drop_in_place,
 };
 use synchronization::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
+use task::TaskIdentifier;
 
-use abi_context as context;
+use crate::XilaTaskIdentifier;
 
 #[derive(Debug, Clone, Copy, Default)]
 struct MutexState {
-    task: Option<usize>,
+    task: Option<TaskIdentifier>,
     lock_count: u32, // For recursive mutexes
 }
 
@@ -59,15 +60,11 @@ impl RawMutex {
         }
     }
 
-    pub fn lock(&self) -> bool {
-        let current_task = context::get_instance()
-            .get_current_task_identifier()
-            .into_inner() as usize;
-
+    pub fn lock(&self, task: TaskIdentifier) -> bool {
         unsafe {
             self.mutex.lock_mut(|state| {
                 if let Some(owner) = state.task {
-                    if owner == current_task && self.recursive {
+                    if owner == task && self.recursive {
                         // Recursive lock
                         state.lock_count += 1;
                         return true;
@@ -77,23 +74,19 @@ impl RawMutex {
                 }
 
                 // Lock is available
-                state.task = Some(current_task);
+                state.task = Some(task);
                 state.lock_count = 1;
                 true
             })
         }
     }
 
-    pub fn unlock(&self) -> bool {
-        let current_task = context::get_instance()
-            .get_current_task_identifier()
-            .into_inner() as usize;
-
+    pub fn unlock(&self, task: TaskIdentifier) -> bool {
         unsafe {
             self.mutex.lock_mut(|state| {
                 // Check if current task owns the mutex
                 if let Some(owner) = state.task
-                    && owner == current_task
+                    && owner == task
                 {
                     if self.recursive && state.lock_count > 1 {
                         // Decrement lock count for recursive mutex
@@ -173,14 +166,14 @@ pub unsafe extern "C" fn xila_initialize_recursive_mutex(mutex: *mut RawMutex) -
 /// - `mutex` points to a valid, initialized `Raw_mutex_type`
 /// - The mutex remains valid for the duration of the call
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn xila_lock_mutex(mutex: *mut RawMutex) -> bool {
+pub unsafe extern "C" fn xila_lock_mutex(mutex: *mut RawMutex, task: XilaTaskIdentifier) -> bool {
     unsafe {
         let mutex = match RawMutex::from_mutable_pointer(mutex) {
             Some(mutex) => mutex,
             None => return false,
         };
 
-        mutex.lock()
+        mutex.lock(task.into())
     }
 }
 
@@ -193,14 +186,14 @@ pub unsafe extern "C" fn xila_lock_mutex(mutex: *mut RawMutex) -> bool {
 /// - The mutex remains valid for the duration of the call
 /// - The current task owns the mutex
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn xila_unlock_mutex(mutex: *mut RawMutex) -> bool {
+pub unsafe extern "C" fn xila_unlock_mutex(mutex: *mut RawMutex, task: XilaTaskIdentifier) -> bool {
     unsafe {
         let mutex = match RawMutex::from_mutable_pointer(mutex) {
             Some(mutex) => mutex,
             None => return false,
         };
 
-        mutex.unlock()
+        mutex.unlock(task.into())
     }
 }
 

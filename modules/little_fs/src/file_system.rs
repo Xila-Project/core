@@ -436,12 +436,6 @@ mod tests {
             let _ = log::initialize(&drivers_std::log::Logger);
         }
 
-        let _ = users::initialize();
-
-        task::initialize();
-
-        let _ = time::initialize(&drivers_std::devices::TimeDevice).unwrap();
-
         let device = Box::leak(Box::new(MemoryDevice::<512>::new(2048 * 512)));
 
         FileSystem::format(device, CACHE_SIZE).unwrap();

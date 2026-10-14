@@ -1,13 +1,21 @@
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-#[xila::task::run(task_path = xila::task, executor = drivers_std::executor::instantiate_static_executor!())]
-async fn main() {
+mod cli;
+
+static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[xila::task::run(
+    task_path = xila::task,
+    executor = drivers_std::executor::instantiate_static_executor!(),
+    manager = &TASK_MANAGER
+)]
+async fn main(task_manager: &'static xila::task::Manager) {
     drivers_std::memory::instantiate_global_allocator!();
 
     extern crate alloc;
 
     use alloc::vec;
     use core::time::Duration;
-    use drivers_std::executor::new_thread_executor;
     use drivers_std::loader::load_to_virtual_file_system;
     use xila::authentication;
     use xila::bootsplash::Bootsplash;
@@ -30,64 +38,89 @@ async fn main() {
     use xila::virtual_file_system::File;
     use xila::virtual_file_system::mount_static;
 
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let config = match cli::parse(arguments.iter().map(String::as_str)) {
+        Ok(config) => config,
+        Err(error) if error.is_help() || error.is_version() => {
+            println!("{error}");
+            // Returning from this task does not stop the native executor.
+            std::process::exit(0);
+        }
+        Err(error) => {
+            eprintln!("Invalid command-line arguments: {error}\nTry --help for usage.");
+            std::process::exit(2);
+        }
+    };
+
     // - Initialize the system
     log::initialize(&drivers_std::log::Logger).unwrap();
 
     // Initialize the task manager
 
-    let task_manager = task::initialize();
-    let users_manager = users::initialize();
-    let time_manager = time::initialize(&drivers_std::devices::TimeDevice).unwrap();
+    let users_manager: &'static users::Manager = Box::leak(Box::new(users::Manager::new()));
+    let time_manager: &'static time::Manager<'static> = Box::leak(Box::new(
+        time::Manager::new(&drivers_std::devices::TimeDevice).unwrap(),
+    ));
 
     let task = task_manager.get_current_task_identifier().await;
-    // - Initialize the graphics manager
-    // - - Initialize the graphics driver
-    const RESOLUTION: graphics::Point = graphics::Point::new(800, 600);
-    let (screen_device, pointer_device, keyboard_device, mut runner) =
-        drivers_native::window_screen::new(RESOLUTION)
-            .await
-            .unwrap();
-    let (screen_device, pointer_device, keyboard_device) = (
-        Box::leak(Box::new(screen_device)),
-        Box::leak(Box::new(pointer_device)),
-        Box::leak(Box::new(keyboard_device)),
-    );
+    // - Initialize graphics only when using the graphical interface.
+    let (graphics_manager, bootsplash): (Option<&'static graphics::Manager>, Option<Bootsplash>) =
+        if config.interface == cli::InterfaceMode::Graphical {
+            let resolution = graphics::Point::new(config.resolution.0, config.resolution.1);
+            let (screen_device, pointer_device, keyboard_device, mut runner) =
+                drivers_native::window_screen::new(resolution)
+                    .await
+                    .unwrap();
+            let (screen_device, pointer_device, keyboard_device) = (
+                Box::leak(Box::new(screen_device)),
+                Box::leak(Box::new(pointer_device)),
+                Box::leak(Box::new(keyboard_device)),
+            );
 
-    // - - Initialize the graphics manager
-    let graphics_manager = graphics::initialize(
-        screen_device,
-        pointer_device,
-        graphics::InputKind::Pointer,
-        graphics::get_minimal_buffer_size(&RESOLUTION),
-        true,
-    )
-    .await;
+            let graphics_manager = graphics::initialize(
+                time_manager,
+                screen_device,
+                pointer_device,
+                graphics::InputKind::Pointer,
+                graphics::get_minimal_buffer_size(&resolution),
+                true,
+            )
+            .await;
+            let graphics_manager: &'static graphics::Manager =
+                Box::leak(Box::new(graphics_manager));
+            graphics::set_ffi_manager(graphics_manager);
 
-    graphics_manager
-        .add_input_device(keyboard_device, graphics::InputKind::Keypad)
-        .await
-        .unwrap();
+            graphics_manager
+                .add_input_device(keyboard_device, graphics::InputKind::Keypad)
+                .await
+                .unwrap();
 
-    task_manager
-        .spawn(task, "Graphics", None, |_| {
-            graphics_manager.r#loop(task::Manager::sleep)
-        })
-        .await
-        .unwrap();
+            task_manager
+                .spawn(task, "Graphics", None, |_| {
+                    graphics_manager.r#loop(task::Manager::sleep)
+                })
+                .await
+                .unwrap();
 
-    task_manager
-        .spawn(task, "Event Loop", None, async move |_| {
-            runner.run().await;
-        })
-        .await
-        .unwrap();
+            task_manager
+                .spawn(task, "Event Loop", None, async move |_| {
+                    runner.run().await;
+                })
+                .await
+                .unwrap();
 
-    let bootsplash = Bootsplash::new(graphics_manager).await.unwrap();
+            let bootsplash = Bootsplash::new(graphics_manager).await.unwrap();
+            (Some(graphics_manager), Some(bootsplash))
+        } else {
+            (None, None)
+        };
 
     // - Initialize the file system
     // Create a memory device
-    let drive =
-        drivers_std::drive_file::FileDriveDevice::new_static(&"./drive.img", 16 * 1024 * 1024);
+    let drive = drivers_std::drive_file::FileDriveDevice::new_static(
+        &config.disk_path.as_str(),
+        config.disk_size,
+    );
     //let drive = file_system::MemoryDevice::<512>::new_static(16 * 1024 * 1024);
 
     // Create a partition type
@@ -109,9 +142,14 @@ async fn main() {
     let file_system = little_fs::FileSystem::get_or_format(partition, 256).unwrap();
 
     // Initialize the virtual file system
-    let virtual_file_system =
+    let virtual_file_system: &'static virtual_file_system::VirtualFileSystem = Box::leak(Box::new(
         virtual_file_system::initialize(task_manager, users_manager, time_manager, file_system)
-            .unwrap();
+            .unwrap(),
+    ));
+    xila::abi_definitions::initialize(xila::abi_definitions::RuntimeContext {
+        virtual_file_system,
+        time_manager,
+    });
 
     log::information!("Virtual file system initialized.");
 
@@ -119,8 +157,27 @@ async fn main() {
 
     // - - Create the default system hierarchy
     let _ = virtual_file_system::create_default_hierarchy(virtual_file_system, task).await;
+    let _ = virtual_file_system
+        .create_directory(task, &"/devices/cpu")
+        .await;
 
     log::information!("Default hierarchy created.");
+
+    let network_manager: &'static network::Manager = Box::leak(Box::new(network::initialize(
+        task_manager,
+        virtual_file_system,
+        time_manager,
+        &drivers_shared::devices::RandomDevice,
+    )));
+    let http_client = Box::leak(Box::new(drivers_shared::devices::HttpClientDevice::new(
+        network_manager,
+        task_manager,
+    )));
+    let https_client = Box::leak(Box::new(drivers_shared::devices::HttpsClientDevice::new(
+        &drivers_shared::devices::RandomDevice,
+        network_manager,
+        task_manager,
+    )));
 
     mount_static!(
         virtual_file_system,
@@ -147,11 +204,18 @@ async fn main() {
                 drivers_std::devices::TimeDevice
             ),
             (
+                &"/devices/cpu/informations",
+                CharacterDevice,
+                drivers_std::devices::CpuInformationsDevice
+            ),
+            (
                 &"/devices/random",
                 CharacterDevice,
                 drivers_shared::devices::RandomDevice
             ),
             (&"/devices/null", CharacterDevice, drivers_core::NullDevice),
+            (&"/devices/http_client", CharacterDevice, *http_client),
+            (&"/devices/https_client", CharacterDevice, *https_client),
             (
                 &"/devices/hasher",
                 CharacterDevice,
@@ -162,53 +226,54 @@ async fn main() {
     .await
     .unwrap();
 
-    let (interface_device, controller_device) = drivers_std::tuntap::new("xila0", false, true)
-        .expect("Failed to create network interface.");
+    if config.networking {
+        let (interface_device, controller_device) =
+            drivers_std::tuntap::new(&config.interface_name, false, true)
+                .expect("Failed to create network interface.");
 
-    let network_manager = network::initialize(
-        task_manager,
-        virtual_file_system,
-        &drivers_shared::devices::RandomDevice,
-    );
+        network_manager
+            .mount_interface(task, "tunnel0", interface_device, controller_device, None)
+            .await
+            .expect("Failed to mount network interface.");
 
-    network_manager
-        .mount_interface(task, "tunnel0", interface_device, controller_device, None)
+        let mut file = File::open(
+            virtual_file_system,
+            task,
+            "/devices/network/tunnel0",
+            AccessFlags::READ_WRITE.into(),
+        )
         .await
-        .expect("Failed to mount network interface.");
+        .expect("Failed to open network interface file.");
 
-    let mut file = File::open(
-        virtual_file_system,
-        task,
-        "/devices/network/tunnel0",
-        AccessFlags::READ_WRITE.into(),
-    )
-    .await
-    .expect("Failed to open network interface file.");
+        for ip_cidr in drivers_std::tuntap::IP_ADDRESSES {
+            file.control(ADD_IP_ADDRESS, ip_cidr).await.ok();
+        }
 
-    for ip_cidr in drivers_std::tuntap::IP_ADDRESSES {
-        file.control(ADD_IP_ADDRESS, ip_cidr).await.ok();
+        for route in drivers_std::tuntap::ROUTES {
+            file.control(ADD_ROUTE, route).await.ok();
+        }
+
+        for dns_server in drivers_std::tuntap::DEFAULT_DNS_SERVERS {
+            file.control(ADD_DNS_SERVER, dns_server).await.ok();
+        }
+
+        file.close(virtual_file_system).await.unwrap();
     }
-
-    for route in drivers_std::tuntap::ROUTES {
-        file.control(ADD_ROUTE, route).await.ok();
-    }
-
-    for dns_server in drivers_std::tuntap::DEFAULT_DNS_SERVERS {
-        file.control(ADD_DNS_SERVER, dns_server).await.ok();
-    }
-
-    file.close(virtual_file_system).await.unwrap();
 
     // Mount static executables
 
-    let virtual_file_system = virtual_file_system::get_instance();
-
-    fn new_thread_executor_wrapper()
-    -> core::pin::Pin<Box<dyn Future<Output = task::SpawnerIdentifier> + Send>> {
-        Box::pin(new_thread_executor())
-    }
+    let executable_context: &'static executable::ExecutableContext =
+        Box::leak(Box::new(executable::ExecutableContext {
+            task_manager,
+            users_manager,
+            virtual_file_system,
+            graphics_manager,
+            network_manager: config.networking.then_some(network_manager),
+            time_manager,
+        }));
 
     mount_executables!(
+        executable_context,
         virtual_file_system,
         task,
         &[
@@ -228,7 +293,7 @@ async fn main() {
             ),
             (
                 &"/binaries/terminal",
-                terminal::TerminalExecutable::new(virtual_file_system::get_instance(), task)
+                terminal::TerminalExecutable::new(virtual_file_system, task)
                     .await
                     .unwrap()
             ),
@@ -238,10 +303,7 @@ async fn main() {
                     .await
                     .unwrap()
             ),
-            (
-                &"/binaries/wasm",
-                wasm::WasmExecutable::new(Some(new_thread_executor_wrapper))
-            )
+            (&"/binaries/wasm", wasm::WasmExecutable),
         ]
     )
     .await
@@ -254,7 +316,8 @@ async fn main() {
         &"/devices/standard_out",
         &"/devices/standard_error",
         task,
-        virtual_file_system::get_instance(),
+        virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
@@ -262,6 +325,7 @@ async fn main() {
     let calculator_binary_path = build_crate("calculator").unwrap();
 
     load_to_virtual_file_system(
+        task_manager,
         virtual_file_system,
         &calculator_binary_path,
         "/binaries/calculator",
@@ -269,9 +333,36 @@ async fn main() {
     .await
     .unwrap();
 
+    let weather_binary_path = build_crate("weather").unwrap();
+
+    load_to_virtual_file_system(
+        task_manager,
+        virtual_file_system,
+        &weather_binary_path,
+        "/binaries/weather",
+    )
+    .await
+    .unwrap();
+
     let _ = executable::execute(
+        executable_context,
         "/binaries/wasm",
         vec!["--install".to_string(), "/binaries/calculator".to_string()],
+        standard
+            .duplicate()
+            .await
+            .expect("Failed to duplicate standard for calculator."),
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
+
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec!["--install".to_string(), "/binaries/weather".to_string()],
         standard,
         None,
     )
@@ -283,8 +374,14 @@ async fn main() {
     // - - Create the default user
     let group_identifier = users::GroupIdentifier::new(1000);
 
+    let authentication_context = authentication::Context {
+        virtual_file_system,
+        task_manager,
+        users_manager,
+        task,
+    };
     let _ = authentication::create_group(
-        virtual_file_system::get_instance(),
+        &authentication_context,
         "administrator",
         Some(group_identifier),
     )
@@ -292,7 +389,7 @@ async fn main() {
     .unwrap();
 
     let _ = authentication::create_user(
-        virtual_file_system::get_instance(),
+        &authentication_context,
         "administrator",
         "",
         group_identifier,
@@ -312,29 +409,35 @@ async fn main() {
         .await
         .unwrap();
 
-    // wait some time to show the bootsplash
-    task::Manager::sleep(Duration::from_secs(2)).await;
-
-    bootsplash.stop(graphics_manager).await.unwrap();
+    if let (Some(bootsplash), Some(graphics_manager)) = (bootsplash, graphics_manager) {
+        // Wait briefly to show the bootsplash.
+        task::Manager::sleep(Duration::from_secs(2)).await;
+        bootsplash.stop(graphics_manager).await.unwrap();
+    }
 
     let standard = Standard::open(
         &"/devices/standard_in",
         &"/devices/standard_out",
         &"/devices/standard_error",
         task,
-        virtual_file_system::get_instance(),
+        virtual_file_system,
+        executable_context,
     )
     .await
     .unwrap();
 
     // - - Execute the shell
-    let _ = executable::execute("/binaries/graphical_shell", vec![], standard, None)
+    let shell_path = match config.interface {
+        cli::InterfaceMode::Graphical => "/binaries/graphical_shell",
+        cli::InterfaceMode::Terminal => "/binaries/command_line_shell",
+    };
+    let _ = executable::execute(executable_context, shell_path, vec![], standard, None)
         .await
         .unwrap()
         .join()
         .await;
 
-    virtual_file_system::get_instance().uninitialize().await;
+    virtual_file_system.uninitialize().await;
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

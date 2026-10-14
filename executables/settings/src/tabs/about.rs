@@ -1,6 +1,6 @@
 use crate::error::Result;
-use alloc::{ffi::CString, format};
-use core::{ffi::CStr, ptr::null_mut};
+use alloc::{ffi::CString, format, string::ToString, vec::Vec};
+use core::{ffi::CStr, ptr::null_mut, str};
 use xila::{
     about,
     graphics::{
@@ -10,16 +10,19 @@ use xila::{
     internationalization::{self, translate},
     memory,
     shared::{BYTES_SUFFIX, Unit},
+    virtual_file_system::File,
 };
 
 pub struct AboutTab {
+    context: &'static xila::executable::ExecutableContext,
     container: *mut lvgl::lv_obj_t,
     list: *mut lvgl::lv_obj_t,
 }
 
 impl AboutTab {
-    pub fn new() -> Self {
+    pub fn new(context: &'static xila::executable::ExecutableContext) -> Self {
         Self {
+            context,
             container: null_mut() as *mut _,
             list: null_mut() as *mut _,
         }
@@ -75,13 +78,62 @@ impl AboutTab {
         ))?;
         self.create_list_item(translate!(c"Locale:"), &locale)?;
 
-        let memory = memory::get_instance().get_total_size();
+        let memory = memory::global_manager().get_total_size();
         let memory = Unit::new(memory as f32, BYTES_SUFFIX.symbol);
         let memory = CString::new(format!("{}", memory))
             .map_err(|_| crate::error::Error::FailedToCreateUiElement)?;
         self.create_list_item(translate!(c"Memory:"), &memory)?;
 
+        let cpu_summary = CString::new(self.get_cpu_summary().await)
+            .map_err(|_| crate::error::Error::FailedToCreateUiElement)?;
+        self.create_list_item(translate!(c"CPU:"), &cpu_summary)?;
+
         Ok(self.container)
+    }
+
+    async fn get_cpu_summary(&self) -> alloc::string::String {
+        let virtual_file_system = &self.context.virtual_file_system;
+        let task = self
+            .context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
+
+        let mut buffer = Vec::new();
+
+        if File::read_from_path(
+            virtual_file_system,
+            task,
+            "/devices/cpu/informations",
+            &mut buffer,
+        )
+        .await
+        .is_err()
+        {
+            return "unknown (unknown cores, unknown)".to_string();
+        }
+
+        let content = str::from_utf8(&buffer).unwrap_or_default();
+
+        let model_name = Self::get_cpu_info_value(content, "model name").unwrap_or("unknown");
+        let cpu_cores = Self::get_cpu_info_value(content, "cpu cores").unwrap_or("unknown");
+        let architecture = Self::get_cpu_info_value(content, "architecture").unwrap_or("unknown");
+
+        format!("{} ({} cores, {})", model_name, cpu_cores, architecture)
+    }
+
+    fn get_cpu_info_value<'a>(content: &'a str, key: &str) -> Option<&'a str> {
+        for line in content.lines() {
+            let Some((line_key, line_value)) = line.split_once(':') else {
+                continue;
+            };
+
+            if line_key.trim() == key {
+                return Some(line_value.trim());
+            }
+        }
+
+        None
     }
 
     fn create_list_item(&mut self, name: &CStr, value: &CStr) -> Result<()> {

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-xila = { path = "../../", features = ["host"] }
+xila = { path = "../../", features = ["graphics"] }
 const_format = { version = "0.2", features = ["fmt"] }
 embedded-io = { workspace = true }
 
@@ -16,6 +16,12 @@ drivers_std = { workspace = true }
 little_fs = { workspace = true }
 abi_definitions = { workspace = true }
 testing = { workspace = true }
+
+[dev-dependencies]
+task = { workspace = true, features = ["test_harness"] }
+
+[features]
+test_harness = ["task/test_harness"]
 
 [[test]]
 name = "integration_test"

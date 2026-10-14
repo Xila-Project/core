@@ -1,4 +1,5 @@
 {
+  "Argument parsing error: {}": "Argument parsing error: {}",
   "Accessed": "Accessed",
   "Authentication failed: {}": "Authentication failed: {}",
   "Cannot resolve {}: Unknown host": "Cannot resolve {}: Unknown host",
@@ -17,6 +18,7 @@
   "Failed to open file: {}": "Failed to open file: {}",
   "Failed to read directory entry: {}": "Failed to read directory entry: {}",
   "Failed to read environment variable: {}": "Failed to read environment variable: {}",
+  "Failed to read file: {}": "Failed to read file: {}",
   "Failed to remove directory: {}": "Failed to remove directory: {}",
   "Failed to remove environment variable: {}": "Failed to remove environment variable: {}",
   "Failed to resolve domain '{}' for {} records: {}": "Failed to resolve domain '{}' for {} records: {}",

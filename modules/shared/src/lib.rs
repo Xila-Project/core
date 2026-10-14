@@ -7,6 +7,7 @@ mod bijective_map;
 mod error;
 pub mod flags;
 mod http;
+pub mod shadow_type;
 mod size;
 mod slice;
 pub mod task;

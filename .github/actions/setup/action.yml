@@ -1,45 +1,41 @@
 name: "Setup"
-description: "Setup Rust toolchains and build tools for Xila"
+description: "Use the shared Devbox environment for Xila checks and builds"
 
 runs:
   using: "composite"
   steps:
-    - name: Setup | Enable cache
+    - name: Setup | Read Devbox version
+      id: devbox-version
+      shell: bash
+      run: echo "version=$(cat .devbox-version)" >> "$GITHUB_OUTPUT"
+
+    - name: Setup | Devbox
+      uses: jetify-com/devbox-install-action@v0.15.0
+      with:
+        devbox-version: ${{ steps.devbox-version.outputs.version }}
+        enable-cache: true
+
+    - name: Setup | Cache toolchains and downloads
+      uses: actions/cache@v4
+      with:
+        path: .dev-environment
+        key: ${{ runner.os }}-${{ runner.arch }}-xila-tools-${{ hashFiles('development/toolchains.env', 'devbox.lock', 'package-lock.json') }}
+
+    - name: Setup | Rust targets and npm dependencies
+      shell: bash
+      run: devbox run setup
+
+    - name: Setup | Configure Rust cache paths
+      shell: bash
+      run: |
+        source development/toolchains.env
+        echo "CARGO_HOME=$GITHUB_WORKSPACE/.dev-environment/cargo" >> "$GITHUB_ENV"
+        echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.dev-environment/rustup" >> "$GITHUB_ENV"
+        echo "RUSTUP_TOOLCHAIN=$XILA_RUST_TOOLCHAIN" >> "$GITHUB_ENV"
+        echo "$GITHUB_WORKSPACE/.devbox/nix/profile/default/bin" >> "$GITHUB_PATH"
+        echo "$GITHUB_WORKSPACE/.dev-environment/cargo/bin" >> "$GITHUB_PATH"
+
+    - name: Setup | Rust build cache
       uses: Swatinem/rust-cache@v2
       with:
-        key: "Documentation"
-
-    - name: Setup | Install GCC multilib
-      shell: bash
-      run: sudo apt update && sudo apt install -y gcc-multilib
-
-    - name: Setup | Rust stable toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: wasm32-unknown-unknown, wasm32-wasip1
-
-    - name: Setup | Rust nightly toolchain
-      uses: dtolnay/rust-toolchain@nightly
-      with:
-        targets: wasm32-unknown-unknown
-
-    - name: Setup | Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-        cache: "npm"
-        cache-dependency-path: "./package-lock.json"
-
-    - name: Setup | Cargo binstall
-      uses: cargo-bins/cargo-binstall@main
-
-    - name: Setup | Cargo make
-      shell: bash
-      run: cargo binstall cargo-make --no-confirm --force
-
-    - name: Setup | Trunk
-      shell: bash
-      run: cargo binstall trunk --no-confirm --force
-
-    - name: Setup | Cargo llvm-cov
-      uses: taiki-e/install-action@cargo-llvm-cov
+        key: ${{ hashFiles('development/toolchains.env', 'devbox.json', 'devbox.lock') }}

@@ -126,6 +126,7 @@ impl TcpSocket {
         poll_fn(|cx| {
             self.poll_with_mutable(cx, |s, cx| match s.recv_slice(buffer) {
                 Ok(0) if buffer.is_empty() => Poll::Ready(Ok(0)),
+                Ok(0) if !s.may_recv() => Poll::Ready(Ok(0)),
                 Ok(0) => {
                     s.register_recv_waker(cx.waker());
                     Poll::Pending
@@ -278,7 +279,7 @@ mod tests {
             .new_tcp_socket(1024, 1024, None)
             .await
             .expect("Failed to create listener socket");
-        let task_manager = task::get_instance();
+        let task_manager = crate::tests::task_manager();
         let current_task = task_manager.get_current_task_identifier().await;
         let (listen_task, _) = task_manager
             .spawn(current_task, "TCP Listen Task", None, move |_| async move {
@@ -326,7 +327,7 @@ mod tests {
             .expect("Failed to create listener");
         let server_ready = Arc::new(Signal::<CriticalSectionRawMutex, ()>::new());
         let server_ready_clone = server_ready.clone();
-        let task_manager = task::get_instance();
+        let task_manager = crate::tests::task_manager();
         let current_task = task_manager.get_current_task_identifier().await;
         let (_server_task, _) = task_manager
             .spawn(current_task, "TCP Server Task", None, move |_| async move {
@@ -424,7 +425,7 @@ mod tests {
         let server_ready_clone = server_ready.clone();
         let connection_ready_clone = connection_ready.clone();
         let endpoints_checked_clone = endpoints_checked.clone();
-        let task_manager = task::get_instance();
+        let task_manager = crate::tests::task_manager();
         let current_task = task_manager.get_current_task_identifier().await;
         let (listen_task, _) = task_manager
             .spawn(
@@ -517,7 +518,7 @@ mod tests {
             .new_tcp_socket(1024, 1024, None)
             .await
             .expect("Failed to create listener");
-        let task_manager = task::get_instance();
+        let task_manager = crate::tests::task_manager();
         let current_task = task_manager.get_current_task_identifier().await;
         let (_server_task, _) = task_manager
             .spawn(

@@ -8,24 +8,23 @@ cstr_core = "0.2.6"
 file_system = { workspace = true }
 lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false }
 #lvgl_rust_sys = { workspace = true, default-features = false }
-syn = { version = "2.0", features = ["full"] }
+syn = { workspace = true, features = ["full"] }
 quote = "1.0"
 time = { workspace = true }
 shared = { workspace = true }
 synchronization = { workspace = true }
 log = { workspace = true }
 abi_declarations = { workspace = true }
-internationalization = { workspace = true }
-
+embedded-i18n = { workspace = true }
 task = { workspace = true }
 
 [dev-dependencies]
+task = { workspace = true, features = ["test_harness"] }
 drivers_native = { workspace = true }
 drivers_core = { workspace = true }
 drivers_shared = { workspace = true }
 drivers_std = { workspace = true }
 users = { workspace = true }
-task = { workspace = true }
 
 abi_definitions = { workspace = true }
 

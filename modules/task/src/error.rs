@@ -1,5 +1,5 @@
 use core::{fmt, num::NonZeroU32};
-use internationalization::translate;
+use embedded_i18n::translate;
 
 pub type Result<T> = core::result::Result<T, Error>;
 

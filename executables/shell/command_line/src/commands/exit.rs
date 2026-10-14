@@ -1,20 +1,43 @@
-use executable_macros::GetArgs;
 use getargs::Options;
+use getargs_derive::GetArgs;
+use xila::file_system::Path;
 
-use crate::{Result, Shell};
+use crate::Result;
 
-#[derive(GetArgs)]
-struct ExitArguments {}
+use super::{CommandContext, UserCommand};
 
-impl Shell {
-    pub async fn exit<'a, I>(&mut self, options: &mut Options<&'a str, I>) -> Result<()>
+pub struct ExitCommand;
+
+impl UserCommand for ExitCommand {
+    async fn execute<'a, I, C>(
+        &self,
+        context: &mut C,
+        options: &mut Options<&'a str, I>,
+        _paths: &[&Path],
+    ) -> Result<(), crate::Error<'a>>
     where
         I: Iterator<Item = &'a str>,
+        C: CommandContext,
     {
-        let _ = ExitArguments::parse(options)?;
-
-        self.running = false;
-
-        Ok(())
+        execute_exit(context, options)
     }
+}
+
+#[derive(GetArgs)]
+#[command(name = "exit", about = "Exit the shell.")]
+struct ExitArguments {}
+
+fn execute_exit<'a, I, C>(
+    context: &mut C,
+    options: &mut Options<&'a str, I>,
+) -> Result<(), crate::Error<'a>>
+where
+    I: Iterator<Item = &'a str>,
+    C: CommandContext,
+{
+    let _ = ExitArguments::parse(options)?;
+
+    context.stop();
+
+    Ok(())
 }

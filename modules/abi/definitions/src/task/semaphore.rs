@@ -1,6 +1,6 @@
 use core::ffi::{c_char, c_int};
 
-use crate::{XilaFileSystemMode, XilaFileSystemOpen};
+use crate::{XilaFileSystemAccess, XilaFileSystemOpen};
 
 pub struct XilaSemaphore;
 
@@ -13,7 +13,7 @@ pub struct XilaSemaphore;
 pub unsafe extern "C" fn xila_semaphore_open(
     _name: *const c_char,
     _open: XilaFileSystemOpen,
-    _mode: XilaFileSystemMode,
+    _mode: XilaFileSystemAccess,
     _value: isize,
 ) -> *mut XilaSemaphore {
     todo!()

@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use internationalization::translate;
+use embedded_i18n::translate;
 
 use crate::{
     lexer::Lexer,

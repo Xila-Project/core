@@ -1,6 +1,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 use crate::{Error, Result};
 use alloc::{
@@ -13,7 +15,6 @@ use core::fmt::Write;
 use core::num::NonZeroUsize;
 use error::*;
 use xila::file_system::Path;
-use xila::task;
 use xila::{executable, file_system::PathOwned};
 use xila::{
     executable::{ExecutableTrait, Standard},
@@ -26,9 +27,12 @@ mod error;
 mod resolver;
 //mod tokenizer;
 
+use commands::{CommandContext, dispatch_user_command, resolve_user_command};
+
 pub struct Shell {
+    context: &'static executable::ExecutableContext,
     task: TaskIdentifier,
-    standard: Standard,
+    standard: Standard<'static>,
     current_directory: PathOwned,
     running: bool,
     user: String,
@@ -37,24 +41,77 @@ pub struct Shell {
 
 pub struct ShellExecutable;
 
+struct ShellCommandContext<'a> {
+    shell: &'a mut Shell,
+}
+
+impl<'a> ShellCommandContext<'a> {
+    fn new(shell: &'a mut Shell) -> Self {
+        Self { shell }
+    }
+}
+
+impl CommandContext for ShellCommandContext<'_> {
+    fn executable_context(&self) -> &'static executable::ExecutableContext {
+        self.shell.context
+    }
+    fn task_id(&self) -> TaskIdentifier {
+        self.shell.task
+    }
+
+    fn current_directory(&self) -> &Path {
+        &self.shell.current_directory
+    }
+
+    fn set_current_directory(&mut self, directory: PathOwned) {
+        self.shell.current_directory = directory;
+    }
+
+    fn stop(&mut self) {
+        self.shell.running = false;
+    }
+
+    fn write_out_fmt(&mut self, arguments: core::fmt::Arguments<'_>) -> Result<()> {
+        self.shell
+            .standard
+            .out()
+            .write_fmt(arguments)
+            .map_err(Into::into)
+    }
+
+    async fn write_out(&mut self, buffer: &[u8]) {
+        let _ = self.shell.standard.out().write(buffer).await;
+    }
+
+    async fn write_out_line(&mut self, buffer: &[u8]) {
+        let _ = self.shell.standard.out().write_line(buffer).await;
+    }
+
+    fn standard(&mut self) -> &mut Standard<'static> {
+        &mut self.shell.standard
+    }
+}
+
 impl ExecutableTrait for ShellExecutable {
-    fn main(standard: Standard, arguments: Vec<String>) -> executable::MainFuture {
+    fn main(standard: Standard<'static>, arguments: Vec<String>) -> executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
 
 pub async fn main(
-    standard: Standard,
+    standard: Standard<'static>,
     arguments: Vec<String>,
 ) -> core::result::Result<(), NonZeroUsize> {
     Shell::new(standard).await.main(arguments).await
 }
 
 impl Shell {
-    pub async fn new(standard: Standard) -> Self {
+    pub async fn new(standard: Standard<'static>) -> Self {
+        let context = standard.context;
         Self {
+            context,
             standard,
-            task: task::get_instance().get_current_task_identifier().await,
+            task: context.task_manager.get_current_task_identifier().await,
             current_directory: Path::ROOT.to_owned(),
             running: true,
             user: "".to_string(),
@@ -73,23 +130,12 @@ impl Shell {
             None => return Ok(()),
         };
 
-        let result = match next_positional {
-            "exit" => self.exit(&mut options).await,
-            "cd" => self.change_directory(&mut options).await,
-            "echo" => self.echo(&mut options).await,
-            "ls" => self.list(&mut options).await,
-            "clear" => self.clear(&mut options).await,
-            "cat" => self.concatenate(&mut options).await,
-            "stat" => self.statistics(&mut options).await,
-            "mkdir" => self.create_directory(&mut options).await,
-            "export" => self.set_environment_variable(&mut options).await,
-            "unset" => self.remove_environment_variable(&mut options).await,
-            "rm" => self.remove(&mut options).await,
-            "web_request" => self.web_request(&mut options).await,
-            "dns_resolve" => self.dns_resolve(&mut options).await,
-            "ping" => self.ping(&mut options).await,
-            "ip" => self.ip(&mut options).await,
-            _ => self.execute(input, paths).await,
+        let result: Result<(), Error<'a>> = match resolve_user_command(next_positional) {
+            Some(user_command) => {
+                let mut context = ShellCommandContext::new(self);
+                dispatch_user_command(user_command, &mut context, &mut options, paths).await
+            }
+            None => self.execute(input, paths).await,
         };
 
         if let Err(error) = result {
@@ -134,12 +180,10 @@ impl Shell {
     }
 
     pub async fn main(&mut self, arguments: Vec<String>) -> core::result::Result<(), NonZeroUsize> {
-        let task = task::get_instance().get_current_task_identifier().await;
+        let task_manager = &self.context.task_manager;
+        let task = task_manager.get_current_task_identifier().await;
 
-        let user = match task::get_instance()
-            .get_environment_variable(task, "User")
-            .await
-        {
+        let user = match task_manager.get_environment_variable(task, "User").await {
             Ok(user) => user.get_value().to_string(),
             Err(_) => loop {
                 match self.authenticate().await {
@@ -153,7 +197,7 @@ impl Shell {
 
         self.user = user;
 
-        let paths = task::get_instance()
+        let paths = task_manager
             .get_environment_variable(task, "Paths")
             .await
             .map_err(|_| Error::FailedToGetPath)?;
@@ -164,7 +208,7 @@ impl Shell {
             .map(Path::from_str)
             .collect::<Vec<&Path>>();
 
-        let host = task::get_instance()
+        let host = task_manager
             .get_environment_variable(task, "Host")
             .await
             .map_err(|_| Error::FailedToGetPath)?;

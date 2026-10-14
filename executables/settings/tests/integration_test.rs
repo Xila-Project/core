@@ -9,20 +9,23 @@ async fn main() {
     extern crate abi_definitions;
 
     use settings::SettingsExecutable;
+    use xila::executable;
     use xila::executable::mount_executables;
-    use xila::{executable, task, virtual_file_system};
 
     let standard = testing::initialize(true, true).await;
+    let context = standard.context;
+    let task = context.task_manager.get_current_task_identifier().await;
 
     mount_executables!(
-        virtual_file_system::get_instance(),
-        task::get_instance().get_current_task_identifier().await,
+        context,
+        &context.virtual_file_system,
+        task,
         &[(&"/binaries/settings", SettingsExecutable),]
     )
     .await
     .unwrap();
 
-    let result = executable::execute("/binaries/settings", vec![], standard, None)
+    let result = executable::execute(context, "/binaries/settings", vec![], standard, None)
         .await
         .unwrap()
         .join()

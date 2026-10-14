@@ -9,17 +9,18 @@ async fn main() {
     extern crate abi_definitions;
 
     use graphical_shell::ShellExecutable;
+    use xila::executable;
     use xila::executable::mount_executables;
     use xila::virtual_file_system::File;
-    use xila::{executable, task, virtual_file_system};
 
     let standard = testing::initialize(true, true).await;
+    let context = standard.context;
+    let task = context.task_manager.get_current_task_identifier().await;
 
-    let task_manager = task::get_instance();
-    let virtual_file_system = virtual_file_system::get_instance();
-    let task = task_manager.get_current_task_identifier().await;
+    let virtual_file_system = &context.virtual_file_system;
 
     mount_executables!(
+        context,
         virtual_file_system,
         task,
         &[(&"/binaries/graphical_shell", ShellExecutable),]
@@ -46,7 +47,7 @@ async fn main() {
         .unwrap();
     }
 
-    let result = executable::execute("/binaries/graphical_shell", vec![], standard, None)
+    let result = executable::execute(context, "/binaries/graphical_shell", vec![], standard, None)
         .await
         .unwrap()
         .join()

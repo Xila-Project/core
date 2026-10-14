@@ -60,6 +60,10 @@ impl PathOwned {
         Some(self)
     }
 
+    pub fn truncate(&mut self, length: usize) {
+        self.0.truncate(length);
+    }
+
     pub fn append(self, path: &str) -> Option<Self> {
         self.join(Path::from_str(path))
     }

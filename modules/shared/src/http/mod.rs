@@ -28,28 +28,14 @@ pub fn add_line_iterator<'a, I>(buffer: &mut [u8], mut position: usize, iter: I)
 where
     I: Iterator<Item = &'a [u8]>,
 {
-    log::information!(
-        "Adding line iterator to buffer at position {} to buffer of length {}",
-        position,
-        buffer.len()
-    );
     for part in iter {
-        log::information!("Adding part: {:?}", core::str::from_utf8(part).ok());
         let part_length = part.len();
 
-        log::information!("Part length: {}", part_length);
-
         let destination_buffer = buffer.get_mut(position..position + part_length)?;
-
-        log::information!("Copying part to buffer at position {}", position);
         destination_buffer.copy_from_slice(part);
         position += part_length;
     }
 
-    log::information!(
-        "All parts added, final position before line ending: {}",
-        position
-    );
     // Add line ending
     let line_ending = LINE_ENDING.as_bytes();
     let destination_buffer = buffer.get_mut(position..position + line_ending.len())?;

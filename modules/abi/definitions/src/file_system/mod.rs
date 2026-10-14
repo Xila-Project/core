@@ -1,9 +1,13 @@
+mod common;
 mod directory;
-mod functions;
+mod file;
+mod path;
 mod socket;
 mod types;
 
+pub use common::*;
 pub use directory::*;
-pub use functions::*;
+pub use file::*;
+pub use path::*;
 pub use socket::*;
 pub use types::*;

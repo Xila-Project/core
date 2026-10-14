@@ -1,7 +1,7 @@
 use core::{fmt::Display, num::NonZeroU32};
 
+use embedded_i18n::translate;
 use embedded_io_async::ErrorKind;
-use internationalization::translate;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -39,6 +39,12 @@ pub enum Error {
 impl Error {
     pub fn get_discriminant(&self) -> NonZeroU32 {
         unsafe { *<*const _>::from(self).cast::<NonZeroU32>() }
+    }
+}
+
+impl From<Error> for u32 {
+    fn from(value: Error) -> Self {
+        NonZeroU32::from(value).get()
     }
 }
 

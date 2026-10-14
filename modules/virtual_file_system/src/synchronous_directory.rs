@@ -8,19 +8,22 @@ use task::block_on;
 
 use crate::{Error, ItemStatic, Result, VirtualFileSystem, blocking_operation};
 
-pub struct SynchronousDirectory {
+pub struct SynchronousDirectory<'a> {
+    virtual_file_system: &'a VirtualFileSystem,
     pub(crate) directory: &'static dyn file_system::FileSystemOperations,
     pub(crate) flags: Flags,
     pub(crate) context: Context,
 }
 
-impl SynchronousDirectory {
+impl<'a> SynchronousDirectory<'a> {
     pub fn new(
+        virtual_file_system: &'a VirtualFileSystem,
         directory: &'static dyn file_system::FileSystemOperations,
         flags: Flags,
         context: Context,
     ) -> Self {
         Self {
+            virtual_file_system,
             directory,
             flags,
             context,
@@ -35,7 +38,7 @@ impl SynchronousDirectory {
     }
 
     pub fn create(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: TaskIdentifier,
         path: impl AsRef<Path>,
     ) -> Result<()> {
@@ -43,7 +46,7 @@ impl SynchronousDirectory {
     }
 
     pub fn open(
-        virtual_file_system: &VirtualFileSystem,
+        virtual_file_system: &'a VirtualFileSystem,
         task: TaskIdentifier,
         path: impl AsRef<Path>,
     ) -> Result<Self> {
@@ -132,15 +135,15 @@ impl SynchronousDirectory {
     }
 }
 
-impl Drop for SynchronousDirectory {
+impl Drop for SynchronousDirectory<'_> {
     fn drop(&mut self) {
-        let _ = self.close_internal(crate::get_instance()).map_err(|e| {
+        let _ = self.close_internal(self.virtual_file_system).map_err(|e| {
             log::error!("Error closing directory: {}", e);
         });
     }
 }
 
-impl Iterator for SynchronousDirectory {
+impl Iterator for SynchronousDirectory<'_> {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -13,6 +13,8 @@ pub struct StackRunner<T> {
     wake_signal: WakeSignal,
 }
 
+const MAX_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
 impl<T> StackRunner<T>
 where
     T: Device,
@@ -43,8 +45,8 @@ where
                     embassy_futures::yield_now().await;
                     continue;
                 }
-                Some(d) => d,
-                None => Duration::from_millis(200),
+                Some(d) => d.min(MAX_POLL_INTERVAL),
+                None => MAX_POLL_INTERVAL,
             };
 
             select(task::sleep(sleep_duration), self.wake_signal.wait()).await;

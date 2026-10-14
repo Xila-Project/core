@@ -8,9 +8,17 @@ file_system = { workspace = true }
 log = { workspace = true }
 shared = { workspace = true }
 device = { workspace = true }
+network = { workspace = true }
+task = { workspace = true }
+synchronization = { workspace = true }
+embassy-futures = { workspace = true }
+embedded-io-async = { workspace = true }
+embedded-tls = { workspace = true }
+embedded-io = { workspace = true }
+rand_core = "0.6"
 
 getrandom = { version = "0.4.2" }
-sha2 = { version = "0.10", features = ["asm"] }
+sha2 = { version = "0.11" }
 
 [dev-dependencies]
 critical-section = { workspace = true, features = ["std"] }

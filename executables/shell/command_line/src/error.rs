@@ -5,11 +5,11 @@ use alloc::fmt;
 use xila::{authentication, internationalization::translate, task};
 use xila::{network, virtual_file_system};
 
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T, E = Error<'static>> = core::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 #[repr(u16)]
-pub enum Error {
+pub enum Error<'a> {
     AuthenticationFailed(authentication::Error) = 1,
     FailedToSetTaskUser(task::Error),
     FailedToSetEnvironmentVariable(task::Error),
@@ -32,8 +32,10 @@ pub enum Error {
     FailedToRemoveDirectory(virtual_file_system::Error),
     FailedToOpenDirectory(virtual_file_system::Error),
     FailedToOpenFile(virtual_file_system::Error),
+    FailedToReadFile(virtual_file_system::Error),
     RequiresValue,
     DoesNotRequireValue,
+    ArgumentParsing(getargs_derive::Error<'a>),
     InvalidArgument,
     MissingPositionalArgument(&'static str),
     InvalidOption,
@@ -44,7 +46,7 @@ pub enum Error {
     Format,
 }
 
-impl<A: getargs::Argument> From<getargs::Error<A>> for Error {
+impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
     fn from(value: getargs::Error<A>) -> Self {
         match value {
             getargs::Error::RequiresValue(_) => Error::RequiresValue,
@@ -54,19 +56,25 @@ impl<A: getargs::Argument> From<getargs::Error<A>> for Error {
     }
 }
 
-impl Error {
+impl<'a> From<getargs_derive::Error<'a>> for Error<'a> {
+    fn from(value: getargs_derive::Error<'a>) -> Self {
+        Error::ArgumentParsing(value)
+    }
+}
+
+impl Error<'_> {
     pub fn get_discriminant(&self) -> NonZeroU16 {
         unsafe { *<*const _>::from(self).cast::<NonZeroU16>() }
     }
 }
 
-impl From<fmt::Error> for Error {
+impl From<fmt::Error> for Error<'_> {
     fn from(_: fmt::Error) -> Self {
         Error::Format
     }
 }
 
-impl Display for Error {
+impl Display for Error<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             Error::AuthenticationFailed(error) => {
@@ -142,6 +150,9 @@ impl Display for Error {
             Error::FailedToOpenFile(error) => {
                 write!(formatter, translate!("Failed to open file: {}"), error)
             }
+            Error::FailedToReadFile(error) => {
+                write!(formatter, translate!("Failed to read file: {}"), error)
+            }
             Error::RequiresValue => {
                 write!(formatter, translate!("Option requires a value"))
             }
@@ -184,6 +195,9 @@ impl Display for Error {
             Error::FailedToCreateSocket(error) => {
                 write!(formatter, translate!("Failed to create socket: {}"), error)
             }
+            Error::ArgumentParsing(error) => {
+                write!(formatter, translate!("Argument parsing error: {}"), error)
+            }
             Error::Format => {
                 write!(formatter, translate!("Format error"))
             }
@@ -198,8 +212,29 @@ impl Display for Error {
     }
 }
 
-impl From<Error> for NonZeroUsize {
-    fn from(error: Error) -> Self {
+impl From<Error<'_>> for NonZeroUsize {
+    fn from(error: Error<'_>) -> Self {
         error.get_discriminant().into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+    use alloc::string::String;
+
+    #[test]
+    fn parser_error_keeps_the_borrowed_argument() {
+        let input = String::from("not-a-number");
+        let error: Error<'_> = getargs_derive::Error::InvalidValue {
+            name: "--lines <LINES>",
+            value: input.as_str(),
+        }
+        .into();
+        let Error::ArgumentParsing(getargs_derive::Error::InvalidValue { value, .. }) = error
+        else {
+            panic!("parser error was not preserved");
+        };
+        assert_eq!(value.as_ptr(), input.as_ptr());
     }
 }

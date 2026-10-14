@@ -1,5 +1,5 @@
 use core::{fmt::Display, num::NonZeroU8};
-use internationalization::translate;
+use embedded_i18n::translate;
 use smoltcp::socket::{dns, icmp, udp};
 
 pub type Result<T> = core::result::Result<T, Error>;

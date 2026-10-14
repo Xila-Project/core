@@ -1,6 +1,6 @@
 use file_system::{AccessFlags, CreateFlags, Kind, Position, StateFlags};
 
-use crate::{XilaGroupIdentifier, XilaTime, XilaUserIdentifier};
+use crate::{XilaFileSystemFile, XilaGroupIdentifier, XilaTime, XilaUserIdentifier};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -57,12 +57,12 @@ impl From<file_system::Kind> for XilaFileKind {
     }
 }
 
-pub type XilaFileSystemMode = u8;
+pub type XilaFileSystemAccess = u8;
 
 #[unsafe(no_mangle)]
-pub static XILA_FILE_SYSTEM_MODE_READ_MASK: u8 = AccessFlags::Read.bits();
+pub static XILA_FILE_SYSTEM_ACCESS_READ_MASK: u8 = AccessFlags::Read.bits();
 #[unsafe(no_mangle)]
-pub static XILA_FILE_SYSTEM_MODE_WRITE_MASK: u8 = AccessFlags::Write.bits();
+pub static XILA_FILE_SYSTEM_ACCESS_WRITE_MASK: u8 = AccessFlags::Write.bits();
 
 pub type XilaFileSystemOpen = u8;
 
@@ -143,8 +143,15 @@ impl XilaFileSystemStatistics {
     }
 }
 
-pub type XilaFileIdentifier = u16;
-
 pub type XilaFileSystemSize = u64;
 
 pub type XilaFileSystemResult = u32;
+
+pub const XILA_RESULT_OK: u32 = 0;
+
+#[repr(C)]
+pub struct XilaFileSystemPollEvent {
+    fd: XilaFileSystemFile,
+    events: u32,
+    revents: u32,
+}

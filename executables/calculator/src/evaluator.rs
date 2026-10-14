@@ -1,6 +1,6 @@
 use crate::parser::{BinaryOperator, Expression, UnaryOperator};
 use crate::token::FunctionToken;
-use internationalization::translate;
+use embedded_i18n::translate;
 
 pub struct Evaluator;
 

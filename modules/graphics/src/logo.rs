@@ -35,7 +35,7 @@ impl Logo {
             let size = Self::BASE_SIZE.scale(factor as f64);
 
             lvgl::lv_obj_set_size(object, size.x.into(), size.y.into());
-            lvgl::lv_obj_set_style_bg_opa(object, lvgl::LV_OPA_0 as u8, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_bg_opa(object, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_pad_all(object, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_radius(object, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(object, 0, lvgl::LV_STATE_DEFAULT);
