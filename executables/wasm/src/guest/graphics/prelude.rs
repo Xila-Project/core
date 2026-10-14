@@ -448,23 +448,6 @@ pub enum ObjectFlag {
     User4 = 1 << 30,
 }
 
-pub type State = u16;
-
-pub const STATE_DEFAULT: u16 = 0x0000;
-pub const STATE_CHECKED: u16 = 0x0001;
-pub const STATE_FOCUSED: u16 = 0x0002;
-pub const STATE_FOCUS_KEY: u16 = 0x0004;
-pub const STATE_EDITED: u16 = 0x0008;
-pub const STATE_HOVERED: u16 = 0x0010;
-pub const STATE_PRESSED: u16 = 0x0020;
-pub const STATE_SCROLLED: u16 = 0x0040;
-pub const STATE_DISABLED: u16 = 0x0080;
-pub const STATE_USER_1: u16 = 0x1000;
-pub const STATE_USER_2: u16 = 0x2000;
-pub const STATE_USER_3: u16 = 0x4000;
-pub const STATE_USER_4: u16 = 0x8000;
-pub const STATE_ANY: u16 = 0xFFFF;
-
 pub const PART_MAIN: u32 = 0x000000;
 pub const PART_SCROLLBAR: u32 = 0x010000;
 pub const PART_INDICATOR: u32 = 0x020000;
@@ -655,81 +638,6 @@ pub enum StyleRes {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum EventCode {
-    All = 0,
-    Pressed,
-    Pressing,
-    PressLost,
-    ShortClicked,
-    SingleClicked,
-    DoubleClicked,
-    TripleClicked,
-    LongPressed,
-    LongPressedRepeat,
-    Clicked,
-    Released,
-    ScrollBegin,
-    ScrollThrowBegin,
-    ScrollEnd,
-    Scroll,
-    Gesture,
-    Key,
-    Rotary,
-    Focused,
-    Defocused,
-    Leave,
-    HitTest,
-    IndevReset,
-    HoverOver,
-    HoverLeave,
-    CoverCheck,
-    RefreshExtDrawSize,
-    DrawMainBegin,
-    DrawMain,
-    DrawMainEnd,
-    DrawPostBegin,
-    DrawPost,
-    DrawPostEnd,
-    DrawTaskAdded,
-    ValueChanged,
-    Insert,
-    Refresh,
-    Ready,
-    Cancel,
-    Create,
-    Delete,
-    ChildChanged,
-    ChildCreated,
-    ChildDeleted,
-    ScreenUnloadStart,
-    ScreenLoadStart,
-    ScreenLoaded,
-    ScreenUnloaded,
-    SizeChanged,
-    StyleChanged,
-    LayoutChanged,
-    GetSelfSize,
-    InvalidateArea,
-    ResolutionChanged,
-    ColorFormatChanged,
-    RefreshRequest,
-    RefreshStart,
-    RefreshReady,
-    RenderStart,
-    RenderReady,
-    FlushStart,
-    FlushFinish,
-    FlushWaitStart,
-    FlushWaitFinish,
-    Vsync,
-    VsyncRequest,
-    Last,
-    Preprocess = 0x8000,
-    MarkedDeleting = 0x10000,
-}
-
-#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LabelLongMode {
     Wrap,
@@ -846,3 +754,9 @@ pub fn as_usize<T: Copy>(value: T) -> usize {
     bytes[..size_of::<T>()].copy_from_slice(src);
     usize::from_ne_bytes(bytes)
 }
+
+pub use super::enumeration::{
+    BlurQuality, EventCode, STATE_ANY, STATE_CHECKED, STATE_DEFAULT, STATE_DISABLED, STATE_EDITED,
+    STATE_FOCUS_KEY, STATE_FOCUSED, STATE_HOVERED, STATE_PRESSED, STATE_SCROLLED, STATE_USER_1,
+    STATE_USER_2, STATE_USER_3, STATE_USER_4, State, TextLeadingTrim,
+};

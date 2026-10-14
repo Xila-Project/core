@@ -1,57 +1,35 @@
-use alloc::boxed::Box;
+//! Xila's integration of the shared `lvgl_theme_shadcn` theme.
+//!
+//! The C theme owns shared styles and follows the display's lifetime. Call theme
+//! helpers while holding the graphics manager's LVGL lock.
 
-use crate::{Color, Display, fonts, lvgl, palette};
+use crate::{Color, Display, Error, Result, fonts, lvgl};
 
-pub const PRIMARY_COLOR: Color = Color::new(0xFA, 0xFA, 0xFA);
-pub const BACKGROUND_COLOR_PRIMARY: Color = Color::new(0x09, 0x09, 0x0b);
-pub const BACKGROUND_COLOR_PRIMARY_MUTED: Color = Color::new(0x18, 0x18, 0x1b);
-pub const BORDER_COLOR_PRIMARY: Color = Color::new(0x27, 0x27, 0x2a);
-pub const SECONDARY_COLOR: Color = palette::get(palette::Hue::Red, palette::Tone::MAIN);
-pub const IS_DARK: bool = true;
-
-pub const BORDER_WIDTH: i32 = 2;
-pub const RADIUS: i32 = BORDER_WIDTH * 4;
-pub const PADDING: i32 = 16;
-
-/// Rust representation of LVGL's `lv_theme_t` structure
-///
-/// This struct is C FFI compatible and must match the memory layout of the C struct.
-#[derive(Clone, Copy)]
-#[repr(C)]
-#[allow(dead_code)]
-pub(crate) struct Theme {
-    pub apply_cb: Option<lvgl::lv_theme_apply_cb_t>,
-    /// Apply the current theme's style on top of this theme.
-    pub parent: *mut Theme,
-    pub user_data: *mut core::ffi::c_void,
-    pub disp: *mut lvgl::lv_display_t,
-    pub color_primary: lvgl::lv_color_t,
-    pub color_secondary: lvgl::lv_color_t,
-    pub font_small: *const lvgl::lv_font_t,
-    pub font_normal: *const lvgl::lv_font_t,
-    pub font_large: *const lvgl::lv_font_t,
-    /// Any custom flag used by the theme
-    pub flags: u32,
+pub(crate) fn initialize(display: &Display) -> Result<()> {
+    unsafe { initialize_display(display.get_lvgl_display()) }
 }
 
-pub(crate) fn initialize(display: &Display) {
-    update(display, PRIMARY_COLOR, SECONDARY_COLOR, IS_DARK);
-
-    unsafe {
-        let default_theme = lvgl::lv_theme_default_get() as *const Theme;
-
-        let theme = Box::new(*default_theme);
-        let theme = Box::into_raw(theme) as *mut lvgl::lv_theme_t;
-
-        lvgl::lv_theme_set_parent(theme, default_theme as *mut lvgl::lv_theme_t);
-        lvgl::lv_theme_set_apply_cb(theme, Some(theme_apply));
-        lvgl::lv_display_set_theme(display.get_lvgl_display(), theme);
-        lvgl::lv_obj_set_style_bg_color(
-            display.get_object(),
-            BACKGROUND_COLOR_PRIMARY.into_lvgl_color(),
-            lvgl::LV_PART_MAIN,
-        );
+unsafe fn initialize_display(display: *mut lvgl::lv_display_t) -> Result<()> {
+    let fonts = lvgl::lv_theme_shadcn_fonts_t {
+        small: fonts::get_font_small(),
+        normal: fonts::get_font_medium(),
+        large: fonts::get_font_large(),
+        mono: fonts::get_font_monospace_medium(),
+    };
+    // The theme copies the palette/fonts and releases its state when the display
+    // is deleted. No Rust-owned callback, parent theme or leaked Box is needed.
+    let theme = unsafe {
+        lvgl::lv_theme_shadcn_init(
+            display,
+            lvgl::lv_theme_shadcn_palette_zinc_dark(),
+            &fonts,
+            lvgl::lv_theme_shadcn_flags_t_LV_THEME_SHADCN_FLAG_NONE,
+        )
+    };
+    if theme.is_null() {
+        return Err(Error::OutOfMemory);
     }
+    Ok(())
 }
 
 pub(crate) fn update(
@@ -61,195 +39,129 @@ pub(crate) fn update(
     is_dark: bool,
 ) {
     unsafe {
-        lvgl::lv_theme_default_init(
+        update_display(
             display.get_lvgl_display(),
-            primary_color.into_lvgl_color(),
-            secondary_color.into_lvgl_color(),
+            primary_color,
+            secondary_color,
             is_dark,
-            fonts::get_font_medium(),
-        );
+        )
     }
 }
 
-pub fn get_background_color_primary() -> Color {
-    BACKGROUND_COLOR_PRIMARY
-}
-
-pub fn get_background_color_primary_muted() -> Color {
-    BACKGROUND_COLOR_PRIMARY_MUTED
-}
-
-pub fn get_primary_color() -> Color {
-    PRIMARY_COLOR
-}
-
-pub fn get_secondary_color() -> Color {
-    SECONDARY_COLOR
-}
-
-pub fn get_border_color_primary() -> Color {
-    BORDER_COLOR_PRIMARY
-}
-
-/// Apply the default style to the given object
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers.
-pub unsafe fn apply_default_style(
-    object: *mut lvgl::lv_obj_t,
-    selector: lvgl::lv_style_selector_t,
+unsafe fn update_display(
+    display: *mut lvgl::lv_display_t,
+    primary_color: Color,
+    secondary_color: Color,
+    is_dark: bool,
 ) {
     unsafe {
-        lvgl::lv_obj_set_style_bg_color(
-            object,
-            BACKGROUND_COLOR_PRIMARY.into_lvgl_color(),
-            selector,
-        );
-        lvgl::lv_obj_set_style_border_color(
-            object,
-            BORDER_COLOR_PRIMARY.into_lvgl_color(),
-            selector,
-        );
+        let mut palette = if is_dark {
+            *lvgl::lv_theme_shadcn_palette_zinc_dark()
+        } else {
+            *lvgl::lv_theme_shadcn_palette_zinc_light()
+        };
+        palette.primary = primary_color.into_lvgl_color();
+        palette.primary_fg = contrasting_foreground(primary_color).into_lvgl_color();
+        palette.ring = palette.primary;
+        palette.secondary = secondary_color.into_lvgl_color();
+        palette.secondary_fg = contrasting_foreground(secondary_color).into_lvgl_color();
+        lvgl::lv_theme_shadcn_set_palette(display, &palette);
     }
 }
 
-/// Theme apply callback
+fn contrasting_foreground(color: Color) -> Color {
+    let brightness = 299 * color.get_red() as u32
+        + 587 * color.get_green() as u32
+        + 114 * color.get_blue() as u32;
+    if brightness >= 128_000 {
+        Color::BLACK
+    } else {
+        Color::WHITE
+    }
+}
+
+/// A semantic container surface that follows palette changes.
+#[derive(Clone, Copy)]
+pub enum Surface {
+    Background,
+    Card,
+    Popover,
+    Muted,
+}
+
+/// Apply a shared container surface instead of a local background color.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers.
-pub unsafe extern "C" fn theme_apply(_: *mut lvgl::lv_theme_t, object: *mut lvgl::lv_obj_t) {
-    unsafe {
-        let class = lvgl::lv_obj_get_class(object);
-        let parent = lvgl::lv_obj_get_parent(object);
+/// `object` must be live and the caller must hold the LVGL lock.
+pub unsafe fn set_surface(object: *mut lvgl::lv_obj_t, surface: Surface) {
+    let surface = match surface {
+        Surface::Background => lvgl::lv_theme_shadcn_surface_t_LV_THEME_SHADCN_SURFACE_BACKGROUND,
+        Surface::Card => lvgl::lv_theme_shadcn_surface_t_LV_THEME_SHADCN_SURFACE_CARD,
+        Surface::Popover => lvgl::lv_theme_shadcn_surface_t_LV_THEME_SHADCN_SURFACE_POPOVER,
+        Surface::Muted => lvgl::lv_theme_shadcn_surface_t_LV_THEME_SHADCN_SURFACE_MUTED,
+    };
+    unsafe { lvgl::lv_theme_shadcn_set_surface(object, surface) };
+}
 
-        if class == &lvgl::lv_button_class {
-            lvgl::lv_obj_set_style_bg_color(
-                object,
-                PRIMARY_COLOR.into_lvgl_color(),
-                lvgl::LV_PART_MAIN,
-            );
-            lvgl::lv_obj_set_style_text_color(
-                object,
-                BACKGROUND_COLOR_PRIMARY.into_lvgl_color(),
-                lvgl::LV_PART_MAIN,
-            );
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    extern crate abi_definitions;
+    use super::*;
 
-            let tab_view = lvgl::lv_obj_get_parent(parent);
+    drivers_std::memory::instantiate_global_allocator!();
 
-            if !tab_view.is_null()
-                && lvgl::lv_obj_get_child(tab_view, 0) == parent
-                && lvgl::lv_obj_check_type(tab_view, &lvgl::lv_tabview_class)
-            {
-                lvgl::lv_obj_set_style_pad_all(object, BORDER_WIDTH * 4, lvgl::LV_PART_MAIN);
-                lvgl::lv_obj_set_style_radius(object, RADIUS, lvgl::LV_PART_MAIN);
+    #[test]
+    fn palette_updates_restyle_existing_widgets_and_surfaces() {
+        unsafe {
+            lvgl::lv_init();
+            let display = lvgl::lv_display_create(320, 240);
+            initialize_display(display).unwrap();
+            let screen = lvgl::lv_display_get_screen_active(display);
+            let button = lvgl::lv_button_create(screen);
+            let surface = lvgl::lv_obj_create(screen);
+            set_surface(surface, Surface::Muted);
+            let dark = *lvgl::lv_theme_shadcn_get_palette(display);
+            assert!(dark.dark);
+            assert!(lvgl::lv_color_eq(
+                lvgl::lv_obj_get_style_bg_color(button, 0),
+                dark.primary
+            ));
+            assert!(lvgl::lv_color_eq(
+                lvgl::lv_obj_get_style_bg_color(surface, 0),
+                dark.muted
+            ));
 
-                lvgl::lv_obj_set_style_border_side(
-                    object,
-                    lvgl::lv_border_side_t_LV_BORDER_SIDE_FULL,
-                    lvgl::LV_STATE_CHECKED,
-                );
-                lvgl::lv_obj_set_style_border_side(
-                    object,
-                    lvgl::lv_border_side_t_LV_BORDER_SIDE_FULL,
-                    lvgl::LV_PART_MAIN,
-                );
-                lvgl::lv_obj_set_style_border_color(
-                    object,
-                    PRIMARY_COLOR.into_lvgl_color(),
-                    lvgl::LV_STATE_CHECKED,
-                );
-                lvgl::lv_obj_set_style_border_color(
-                    object,
-                    PRIMARY_COLOR.into_lvgl_color(),
-                    lvgl::LV_PART_MAIN,
-                );
+            let primary = Color::new(0x25, 0x63, 0xeb);
+            let secondary = Color::new(0xf4, 0xf4, 0xf5);
+            update_display(display, primary, secondary, false);
+            let light = *lvgl::lv_theme_shadcn_get_palette(display);
+            assert!(!light.dark);
+            assert!(lvgl::lv_color_eq(light.primary, primary.into_lvgl_color()));
+            assert!(lvgl::lv_color_eq(
+                light.secondary,
+                secondary.into_lvgl_color()
+            ));
+            assert!(lvgl::lv_color_eq(
+                light.primary_fg,
+                Color::WHITE.into_lvgl_color()
+            ));
+            assert!(lvgl::lv_color_eq(
+                light.secondary_fg,
+                Color::BLACK.into_lvgl_color()
+            ));
+            assert!(lvgl::lv_color_eq(
+                lvgl::lv_obj_get_style_bg_color(button, 0),
+                light.primary
+            ));
+            assert!(lvgl::lv_color_eq(
+                lvgl::lv_obj_get_style_bg_color(surface, 0),
+                light.muted
+            ));
 
-                lvgl::lv_obj_set_style_border_width(object, BORDER_WIDTH, lvgl::LV_PART_MAIN);
-                lvgl::lv_obj_set_style_border_width(object, BORDER_WIDTH, lvgl::LV_STATE_CHECKED);
-                lvgl::lv_obj_set_style_border_opa(
-                    object,
-                    lvgl::LV_OPA_TRANSP as _,
-                    lvgl::LV_PART_MAIN,
-                );
-                lvgl::lv_obj_set_style_border_opa(
-                    object,
-                    lvgl::LV_OPA_COVER as _,
-                    lvgl::LV_STATE_CHECKED,
-                );
-
-                lvgl::lv_obj_set_style_bg_opa(object, lvgl::LV_OPA_TRANSP as _, lvgl::LV_PART_MAIN);
-
-                lvgl::lv_obj_set_style_text_color(
-                    object,
-                    PRIMARY_COLOR.into_lvgl_color(),
-                    lvgl::LV_PART_MAIN,
-                );
-
-                lvgl::lv_obj_set_style_bg_color(
-                    parent,
-                    BACKGROUND_COLOR_PRIMARY_MUTED.into_lvgl_color(),
-                    lvgl::LV_PART_MAIN,
-                );
-                lvgl::lv_obj_set_style_radius(parent, RADIUS, lvgl::LV_PART_MAIN);
-                lvgl::lv_obj_set_style_pad_all(parent, BORDER_WIDTH * 2, lvgl::LV_PART_MAIN);
-                lvgl::lv_obj_set_flex_align(
-                    parent,
-                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
-                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
-                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
-                );
-            }
-        } else if class == &lvgl::lv_buttonmatrix_class {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
-            apply_default_style(object, lvgl::LV_PART_ITEMS);
-            lvgl::lv_obj_set_style_text_color(
-                object,
-                PRIMARY_COLOR.into_lvgl_color(),
-                lvgl::LV_PART_MAIN,
-            );
-
-            lvgl::lv_obj_set_style_border_width(object, BORDER_WIDTH, lvgl::LV_PART_ITEMS);
-            lvgl::lv_obj_set_style_text_color(
-                object,
-                PRIMARY_COLOR.into_lvgl_color(),
-                lvgl::LV_PART_ITEMS,
-            );
-        } else if class == &lvgl::lv_checkbox_class {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
-            apply_default_style(object, lvgl::LV_PART_INDICATOR);
-            lvgl::lv_obj_set_style_border_color(
-                object,
-                PRIMARY_COLOR.into_lvgl_color(),
-                lvgl::LV_PART_INDICATOR | lvgl::LV_STATE_CHECKED,
-            );
-            lvgl::lv_obj_set_style_text_color(
-                object,
-                BACKGROUND_COLOR_PRIMARY.into_lvgl_color(),
-                lvgl::LV_PART_INDICATOR | lvgl::LV_STATE_CHECKED,
-            );
-        } else if class == &lvgl::lv_list_text_class {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
-            lvgl::lv_obj_set_style_pad_left(object, PADDING, lvgl::LV_PART_MAIN);
-            lvgl::lv_obj_set_style_bg_color(
-                object,
-                BACKGROUND_COLOR_PRIMARY_MUTED.into_lvgl_color(),
-                lvgl::LV_PART_MAIN,
-            );
-        } else if class == &lvgl::lv_list_button_class {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
-            lvgl::lv_obj_set_style_pad_left(object, 2 * PADDING, lvgl::LV_PART_MAIN);
-        } else if class == &lvgl::lv_switch_class {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
-            apply_default_style(object, lvgl::LV_PART_INDICATOR);
-            lvgl::lv_obj_set_style_bg_color(
-                object,
-                BACKGROUND_COLOR_PRIMARY.into_lvgl_color(),
-                lvgl::LV_PART_KNOB | lvgl::LV_STATE_CHECKED,
-            );
-        } else {
-            apply_default_style(object, lvgl::LV_PART_MAIN);
+            lvgl::lv_display_delete(display);
+            // Theme state must be gone before display storage can be reused.
+            assert!(!lvgl::lv_theme_shadcn_is_active(display));
+            lvgl::lv_deinit();
         }
     }
 }

@@ -7,8 +7,8 @@ use crate::Point;
 pub const LV_SIZE_CONTENT: i32 = (LV_COORD_MAX | LV_COORD_TYPE_SPEC) as i32;
 
 pub const LV_STATE_DEFAULT: u32 = 0;
-pub const LV_STATE_CHECKED: u32 = 1 << 2;
-pub const LV_STATE_PRESSED: u32 = 1 << 7;
+pub const LV_STATE_CHECKED: lv_state_t = lv_state_t_LV_STATE_CHECKED;
+pub const LV_STATE_PRESSED: lv_state_t = lv_state_t_LV_STATE_PRESSED;
 
 pub const LV_PART_MAIN: u32 = 0;
 pub const LV_PART_INDICATOR: u32 = 0x020000;

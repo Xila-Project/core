@@ -75,6 +75,7 @@ unsafe extern "C" fn window_constructor(
         );
         lvgl::lv_obj_set_style_border_width(&mut (*window).object, 0, lvgl::LV_STATE_DEFAULT);
         lvgl::lv_obj_set_style_radius(&mut (*window).object, 0, lvgl::LV_STATE_DEFAULT);
+        crate::theme::set_surface(&mut (*window).object, crate::theme::Surface::Background);
     }
 }
 

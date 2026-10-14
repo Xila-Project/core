@@ -1,7 +1,9 @@
 # Wasmi runtime
 
 `wasm` is the Wasmi-based runtime and includes the guest graphics wrappers.
-It replaces the original WAMR implementation, preserving generated call IDs.
+It replaces the original WAMR implementation. Graphics call IDs and guest
+event/state definitions follow the bundled LVGL exports. LVGL upgrades may
+change this ABI; rebuild the host and guest applications together.
 
 Wasmi 2 runs with default features disabled for `no_std` hosts. Both the runtime
 and translation test harness explicitly enable validation, memory64 support,

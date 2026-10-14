@@ -9,4 +9,4 @@ quote = { workspace = true }
 syn = { workspace = true, features = ["full", "visit", "extra-traits"] }
 
 [dev-dependencies]
-lvgl_rust_sys = { git = "https://github.com/Xila-Project/lvgl_rust_sys.git", default-features = false }
+lvgl_rust_sys = { workspace = true }

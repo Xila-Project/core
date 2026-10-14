@@ -272,17 +272,7 @@ impl Layout {
                 lvgl::lv_obj_set_size(header, lvgl::lv_pct(100), 32);
                 lvgl::lv_obj_set_style_border_width(header, 0, lvgl::LV_STATE_DEFAULT); // Remove the default border
                 lvgl::lv_obj_set_style_pad_all(header, 8, lvgl::LV_STATE_DEFAULT); // Remove the default padding
-                lvgl::lv_obj_set_style_bg_color(
-                    header,
-                    theme::get_background_color_primary_muted().into_lvgl_color(),
-                    lvgl::LV_STATE_DEFAULT,
-                );
-                // Set the background color to black
-                lvgl::lv_obj_set_style_text_color(
-                    header,
-                    lvgl::lv_color_white(),
-                    lvgl::LV_STATE_DEFAULT,
-                ); // Set the text color to white for children
+                theme::set_surface(header, theme::Surface::Muted);
                 lvgl::lv_obj_set_style_radius(header, 0, lvgl::LV_STATE_DEFAULT); // Remove the default radius
 
                 header

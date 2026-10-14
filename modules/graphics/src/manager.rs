@@ -128,7 +128,7 @@ impl Manager {
         unsafe {
             let group = lvgl::lv_group_create();
             lvgl::lv_group_set_default(group);
-            theme::initialize(&display);
+            theme::initialize(&display)?;
         }
 
         Ok(Self {
@@ -315,6 +315,7 @@ impl Manager {
         secondary_color: Color,
         is_dark: bool,
     ) -> Result<()> {
+        let _lock = self.global_lock.lock().await;
         let displays = &self.inner.read().await.displays;
 
         for display in displays {

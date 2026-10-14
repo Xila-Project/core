@@ -5,6 +5,7 @@ mod catalog;
 pub mod context;
 pub mod enumeration;
 pub mod function;
+pub mod guest_constants;
 pub mod naming;
 
 pub use catalog::{Call, CallCatalog, GeneratorError};
