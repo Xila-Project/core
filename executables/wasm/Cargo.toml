@@ -21,7 +21,13 @@ embassy-time = { workspace = true, optional = true }
 guest = []
 c_bindings = ["guest", "graphics", "dep:cbindgen"]
 default_guest = ["guest", "graphics", "c_bindings", "memory_32"]
-host = ["dep:wasmi", "dep:xila", "dep:getargs-derive", "dep:getargs", "dep:embassy-time"]
+host = [
+  "dep:wasmi",
+  "dep:xila",
+  "dep:getargs-derive",
+  "dep:getargs",
+  "dep:embassy-time",
+]
 default = ["host", "memory_32"]
 memory_32 = []
 memory_64 = []
