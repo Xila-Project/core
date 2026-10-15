@@ -1,4 +1,4 @@
-use crate::{evaluator::Evaluator, parser::Parser};
+use crate::engine::evaluate_expression;
 use embedded_i18n::translate;
 use std::{ptr::null_mut, thread::sleep};
 use wasm::{
@@ -291,22 +291,9 @@ impl Interface {
             }
             ButtonIdentifier::Equals => {
                 if !self.current_expression.is_empty() {
-                    // Convert display operators to parser-friendly format
-                    let mut expression = self
-                        .current_expression
-                        .replace("pi", "3.141592653589793")
-                        .replace("e", "2.718281828459045");
-
-                    // Add angle mode prefix for trigonometric functions if in degree mode
-                    if !self.is_radian_mode {
-                        expression = expression.replace("sin(", "sind(");
-                        expression = expression.replace("cos(", "cosd(");
-                        expression = expression.replace("tan(", "tand(");
-                    }
-
-                    match evaluate_expression(&expression) {
+                    match evaluate_expression(&self.current_expression, self.is_radian_mode) {
                         Ok(result) => {
-                            self.current_expression = format_result(result);
+                            self.current_expression = result.to_string();
                             self.show_result = true;
                         }
                         Err(e) => {
@@ -337,7 +324,7 @@ impl Interface {
             ButtonIdentifier::TenPower => self.push_str("pow10("),
 
             // Other functions
-            ButtonIdentifier::Factorial => self.push_str("fact("),
+            ButtonIdentifier::Factorial => self.push_char('!'),
             ButtonIdentifier::Inverse => self.push_str("inv("),
             ButtonIdentifier::Abs => self.push_str("abs("),
             ButtonIdentifier::Random => {
@@ -449,25 +436,5 @@ impl Interface {
                 sleep(std::time::Duration::from_millis(10));
             }
         }
-    }
-}
-
-pub fn evaluate_expression(input: &str) -> Result<f64, String> {
-    // Parse the expression
-    let mut parser = Parser::new(input)?;
-    let expression = parser.parse()?;
-
-    // Evaluate the parsed expression
-    Evaluator::evaluate(&expression)
-}
-
-pub fn format_result(result: f64) -> String {
-    if result.fract() == 0.0 && result.abs() < 1e15 {
-        format!("{:.0}", result)
-    } else {
-        format!("{:.10}", result)
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_string()
     }
 }

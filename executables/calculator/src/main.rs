@@ -1,15 +1,9 @@
 embedded_i18n::track_locales!();
 
 #[cfg(any(target_arch = "wasm32", test))]
-mod evaluator;
+mod engine;
 #[cfg(any(target_arch = "wasm32", test))]
 mod install;
-#[cfg(any(target_arch = "wasm32", test))]
-mod lexer;
-#[cfg(any(target_arch = "wasm32", test))]
-mod parser;
-#[cfg(any(target_arch = "wasm32", test))]
-mod token;
 
 #[cfg(target_arch = "wasm32")]
 mod interface;
