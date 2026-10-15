@@ -1,22 +1,55 @@
-<h1 align="center">Xila core</h1>
+# Xila — Rust embedded operating system with WebAssembly apps
+
+Build embedded experiences with **Xila**, a modular, open-source operating system
+written in Rust. Xila brings together WebAssembly (Wasm) applications, an LVGL
+graphical interface, task management, networking, and storage for
+resource-constrained devices.
+
+[Documentation](https://www.xila.dev/docs/) ·
+[Run Xila natively](https://www.xila.dev/tutorials/native) ·
+[Try the browser example](https://www.xila.dev/tutorials/browser) ·
+[Community](https://matrix.to/#/#xila:anneraud.fr)
 
 [![codecov](https://codecov.io/github/Xila-Project/Core/graph/badge.svg?token=01M6GQFBEC)](https://codecov.io/github/Xila-Project/Core)
-[![État de la traduction](https://translate.anneraud.fr/widget/xila-core/svg-badge.svg)](https://translate.anneraud.fr/engage/xila-core/)
+[![Translation status](https://translate.anneraud.fr/widget/xila-core/svg-badge.svg)](https://translate.anneraud.fr/engage/xila-core/)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-yellow.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
-## 📝 Description
+## What you can explore
 
-This repository contains the core of Xila. It contains the code for xila's core functionalities like task management, file system, virtual machine, graphics, drivers, etc.
+- **Wasm applications:** run guest programs with the Wasmi runtime and explore
+  the included Calculator and Weather apps.
+- **Graphical interfaces:** build on LVGL, the shared Shadcn theme, and Xila's
+  graphical shell.
+- **OS building blocks:** work with task scheduling, a virtual filesystem,
+  device drivers, and networking through reusable Rust modules.
+- **Native development:** develop and investigate CPU and memory use on Linux
+  before validating shared code on your intended embedded target.
 
-## 🛠️ Build
+Xila is under active development. Hardware support varies by target; native and
+browser examples provide development environments, not proof that a particular
+board is supported. See the [capabilities and limits](https://www.xila.dev/reference/)
+before choosing a target.
+
+## Start here
+
+New to Xila? Follow the [native tutorial](https://www.xila.dev/tutorials/native)
+for a guided first run, or the [browser tutorial](https://www.xila.dev/tutorials/browser)
+to build a Wasm guest and run Calculator in browser-hosted Xila. To create an
+application, start with [building a guest](https://www.xila.dev/how-to/build-guest).
+
+This repository contains the OS implementation. The
+[website repository](https://github.com/xila-project/website) contains the
+documentation and learning guides.
+
+## Build and check Core
 
 **Devbox is the standard setup for local development and CI on x86_64 Linux.**
 Install [Devbox](https://www.jetify.com/docs/devbox/installing_devbox/) at the
 version recorded in `.devbox-version`, then:
 
 ```bash
-git clone https://github.com/Xila-Project/Core.git
-cd Core
+git clone https://github.com/xila-project/core.git
+cd core
 devbox shell
 devbox run setup
 devbox run check                # Linux host + WASM guest checks
@@ -184,6 +217,30 @@ The heaptrack smoke test compiles a local C API stand-in and verifies real nativ
 allocation events, failed requests, realloc preservation and silence without the
 feature. It does not require installing heaptrack or access to perf events.
 
-## ℹ️ About
+## Find your way around
+
+| Directory                      | Contents                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| [`modules/`](modules/)         | Reusable OS modules, including tasks, filesystems, graphics, and networking. |
+| [`drivers/`](drivers/)         | Platform support and device drivers.                                         |
+| [`executables/`](executables/) | Shells, applications, and the Wasm runtime and guest bindings.               |
+| [`examples/`](examples/)       | Native and browser integration examples.                                     |
+| [`tools/`](tools/)             | Development tools, including native profiling.                               |
+
+The [component map](https://www.xila.dev/explanation/architecture/components)
+connects the source tree to architecture explanations and API references.
+
+## Contribute
+
+Start with the [contributor guide](https://www.xila.dev/how-to/contribute-core)
+and [AGENTS.md](AGENTS.md) for development conventions. Browse
+[open issues](https://github.com/xila-project/core/issues) for planned work,
+report bugs with reproduction steps, or help improve
+[translations](https://translate.anneraud.fr/engage/xila-core/).
+
+Join the [Xila Matrix room](https://matrix.to/#/#xila:anneraud.fr) to discuss
+ideas or ask for help.
+
+## License
 
 This project is under the [GNU General Public License v2.0](license.md).
