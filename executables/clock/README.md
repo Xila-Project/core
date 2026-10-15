@@ -30,6 +30,10 @@ Weather. Run the native example using the normal graphical development workflow,
 then open **Clock** from the launcher. With `prebuilt-applications`, run
 `cargo make prepare-profiling` to prepare all three apps first.
 
+The browser example also bundles Clock and installs its launcher shortcut at
+boot, just like Calculator. Build both guests with `--release` before building
+the browser host; see the [browser instructions](../../examples/wasm/README.md).
+
 Other hosts can load `target/wasm32-wasip1/release-wasm/clock.wasm` into the VFS
 at `/binaries/clock`, then run these commands in **Xila's shell**:
 
@@ -40,7 +44,7 @@ wasm /binaries/clock
 
 The install export creates `/configuration/shared/shortcuts/clock.json`.
 The host must provision a writable `/configuration/shared/clock` directory for
-the app's user. Native boot assigns that directory to the default administrator
+the app's user. Native and browser boot assign that directory to the default administrator
 account without changing the protected shared-configuration parent.
 
 ## Timing and lifecycle

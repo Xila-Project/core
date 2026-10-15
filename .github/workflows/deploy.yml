@@ -46,7 +46,7 @@ jobs:
           EMBEDDED_I18N_LOCALE: en
         run: |
           cargo make generate-fonts
-          cargo build -p calculator --target wasm32-wasip1 --release
+          cargo build -p calculator -p clock --target wasm32-wasip1 --release
           (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
           mkdir -p pages/demonstrations/wasm/en/
           cp -r examples/wasm/dist/* pages/demonstrations/wasm/en/
@@ -56,7 +56,7 @@ jobs:
           EMBEDDED_I18N_LOCALE: fr
         run: |
           cargo make generate-fonts
-          cargo build -p calculator --target wasm32-wasip1 --release
+          cargo build -p calculator -p clock --target wasm32-wasip1 --release
           (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
           mkdir -p pages/demonstrations/wasm/fr/
           cp -r examples/wasm/dist/* pages/demonstrations/wasm/fr/
