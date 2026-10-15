@@ -234,13 +234,11 @@ fn generate_enumeration(
     lvgl_functions: &LvglContext,
 ) -> Result<(), String> {
     let enumeration = enumeration::generate_code(lvgl_functions.get_signatures().to_vec());
-    let close_requested = lvgl_rust_sys::lv_event_code_t_LV_EVENT_LAST + 3;
     let constants = graphics_bindgen::guest_constants::generate(lvgl_rust_sys::_bindgen_raw_src())
         .map_err(|error| error.to_string())?;
     let token_stream = quote! {
         #enumeration
         #constants
-        pub const EVENT_CLOSE_REQUESTED: u32 = #close_requested;
     };
 
     write_token_stream_to_file(path, token_stream)?;
@@ -338,6 +336,10 @@ pub fn generate(output_path: &Path) {
             // source files or recursively enabling this crate's host defaults.
             .with_src(&c_functions_generated_path)
             .with_src(&enumerations_generated_path)
+            .with_src(
+                std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                    .join("src/graphics_event.rs"),
+            )
             .with_src(
                 std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
                     .join("src/guest/graphics/prelude.rs"),

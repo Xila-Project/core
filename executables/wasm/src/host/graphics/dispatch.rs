@@ -107,7 +107,10 @@ pub fn dispatch(
             let mut window =
                 unsafe { Window::from_raw(pointer) }.ok_or(GraphicsError::InvalidHandle)?;
             let (code, target) = unsafe { window.as_mut().pop_event() }.map_or((0, 0), |event| {
-                (event.code as u32, state.handle_for(event.target))
+                (
+                    super::events::guest_code(event.code),
+                    state.handle_for(event.target),
+                )
             });
             memory
                 .write(GuestPointer::new(b), code)

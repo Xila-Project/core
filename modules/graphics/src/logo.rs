@@ -35,6 +35,14 @@ impl Logo {
             let size = Self::BASE_SIZE.scale(factor as f64);
 
             lvgl::lv_obj_set_size(object, size.x.into(), size.y.into());
+            // Logo bars use explicit corner geometry rather than the control's
+            // flex layout and minimum touch-control height.
+            lvgl::lv_obj_set_style_layout(
+                object,
+                lvgl::lv_layout_t_LV_LAYOUT_NONE as u16,
+                lvgl::LV_STATE_DEFAULT,
+            );
+            lvgl::lv_obj_set_style_min_height(object, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_bg_opa(object, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_pad_all(object, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_radius(object, 0, lvgl::LV_STATE_DEFAULT);
@@ -89,6 +97,7 @@ impl Logo {
             }
 
             lvgl::lv_obj_set_style_pad_all(part, 0, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_min_height(part, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_radius(part, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(part, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_add_flag(part, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_EVENT_BUBBLE);
