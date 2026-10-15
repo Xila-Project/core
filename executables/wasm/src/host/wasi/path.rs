@@ -88,6 +88,18 @@ fn resolve_guest_path(directory: &PathOwned, path: &str) -> Result<PathOwned, Er
 define_wasi_module! {
     module: "wasi_snapshot_preview1";
 
+    fn path_create_directory(caller: Caller<GlobalStore>, fd: i32, path_ptr: WasmUsize, path_len: WasmUsize) -> Result<WasiResult, wasmi::Error> {
+        wrap_function!({
+            let mut caller = caller;
+            let path_bytes = copy_guest_path(&mut caller, path_ptr, path_len)?;
+            let (task_id, directory) = base_path(&caller, fd)?;
+            let relative = core::str::from_utf8(&path_bytes).map_err(|_| Error::Ilseq)?;
+            let absolute_path = resolve_guest_path(&directory, relative)?;
+            task::block_on(caller.data().context.virtual_file_system.create_directory(task_id, &absolute_path)).map_err(vfs_error)?;
+            Ok(())
+        })
+    }
+
     fn path_open(caller: Caller<GlobalStore>, fd: i32, _dirflags: i32, path_ptr: WasmUsize, path_len: WasmUsize, oflags: i32, rights_base: i64, _rights_inheriting: i64, fdflags: i32, opened_fd_ptr: WasmUsize) -> Result<WasiResult, wasmi::Error> {
         wrap_function!({
             let mut caller = caller;

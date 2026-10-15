@@ -6,7 +6,7 @@ mod support;
 
 use wasm::{
     graphics::{Function, GraphicsCall, GraphicsError, GraphicsState, dispatch},
-    translation::{GuestMemory, GuestPointer, GuestValue, WasmUsize},
+    translation::{GuestMemory, GuestPointer, GuestSlice, GuestValue, WasmUsize},
 };
 use xila::graphics::lvgl;
 
@@ -477,6 +477,127 @@ async fn checked_graphics_core_owns_objects_maps_and_events() {
         ),
         Err(GraphicsError::InvalidHandle)
     );
+    drop(state);
+    assert_eq!(manager.get_window_count().await.unwrap(), 0);
+
+    // Clock widgets keep the same handle/type and borrowed-memory boundary.
+    let mut state = GraphicsState::new(Some(manager));
+    call(&mut state, &mut memory, Function::WindowCreate, &[], 1).unwrap();
+    let root = handle(&memory);
+    call(&mut state, &mut memory, Function::ButtonCreate, &[root], 1).unwrap();
+    let button = handle(&memory);
+    call(
+        &mut state,
+        &mut memory,
+        Function::CheckboxCreate,
+        &[root],
+        1,
+    )
+    .unwrap();
+    let checkbox = handle(&memory);
+    memory
+        .bytes_mut(GuestSlice::new(300, 6))
+        .unwrap()
+        .copy_from_slice(b"Clock\0");
+    call(
+        &mut state,
+        &mut memory,
+        Function::CheckboxSetText,
+        &[checkbox, 300],
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        call(
+            &mut state,
+            &mut memory,
+            Function::CheckboxSetText,
+            &[button, 300],
+            0
+        ),
+        Err(GraphicsError::InvalidHandle)
+    );
+    assert_eq!(
+        call(
+            &mut state,
+            &mut memory,
+            Function::CheckboxSetText,
+            &[checkbox, 4096],
+            0
+        ),
+        Err(GraphicsError::InvalidMemory)
+    );
+    call(
+        &mut state,
+        &mut memory,
+        Function::ObjectAddState,
+        &[checkbox, lvgl::lv_state_t_LV_STATE_CHECKED as WasmUsize],
+        0,
+    )
+    .unwrap();
+    call(
+        &mut state,
+        &mut memory,
+        Function::ObjectGetState,
+        &[checkbox],
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        memory.read(GuestPointer::<u32>::new(1)).unwrap() & lvgl::lv_state_t_LV_STATE_CHECKED,
+        lvgl::lv_state_t_LV_STATE_CHECKED
+    );
+    assert_eq!(
+        call(
+            &mut state,
+            &mut memory,
+            Function::ObjectAddState,
+            &[checkbox, 1 << 31],
+            0
+        ),
+        Err(GraphicsError::InvalidValue)
+    );
+    call(&mut state, &mut memory, Function::TabviewCreate, &[root], 1).unwrap();
+    let tabs = handle(&memory);
+    assert_eq!(
+        call(
+            &mut state,
+            &mut memory,
+            Function::TabviewGetTabActive,
+            &[button],
+            1
+        ),
+        Err(GraphicsError::InvalidHandle)
+    );
+    assert_eq!(
+        call(
+            &mut state,
+            &mut memory,
+            Function::TabviewAddTab,
+            &[checkbox, 300],
+            1
+        ),
+        Err(GraphicsError::InvalidHandle)
+    );
+    call(
+        &mut state,
+        &mut memory,
+        Function::TabviewAddTab,
+        &[tabs, 300],
+        1,
+    )
+    .unwrap();
+    let tab = handle(&memory);
+    assert_ne!(tab, tabs);
+    call(
+        &mut state,
+        &mut memory,
+        Function::TabviewGetTabActive,
+        &[tabs],
+        1,
+    )
+    .unwrap();
+    assert_eq!(memory.read(GuestPointer::<u32>::new(1)), Some(0));
     drop(state);
     assert_eq!(manager.get_window_count().await.unwrap(), 0);
 }

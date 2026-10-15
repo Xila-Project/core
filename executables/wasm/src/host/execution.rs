@@ -29,18 +29,25 @@ impl wasmi::errors::HostError for Suspend {}
 pub(crate) fn clock_now(
     context: &xila::executable::ExecutableContext,
 ) -> core::result::Result<[u64; 2], wasmi::Error> {
-    let realtime = context
-        .time_manager
+    clock_snapshot(context.time_manager)
+}
+
+fn clock_snapshot(
+    manager: &xila::time::Manager<'_>,
+) -> core::result::Result<[u64; 2], wasmi::Error> {
+    let realtime = manager
         .get_current_time()
-        .map_err(|_| wasmi::Error::new("clock error"))?;
-    let monotonic = context
-        .time_manager
-        .get_current_time_since_startup()
         .map_err(|_| wasmi::Error::new("clock error"))?;
     Ok([
         u64::try_from(realtime.as_nanos()).map_err(|_| wasmi::Error::new("clock overflow"))?,
-        u64::try_from(monotonic.as_nanos()).map_err(|_| wasmi::Error::new("clock overflow"))?,
+        monotonic_now(),
     ])
+}
+
+pub(crate) fn monotonic_now() -> u64 {
+    // Use the executor's platform clock, not elapsed civil time. This also
+    // keeps absolute WASI poll deadlines in the same epoch as clock_time_get.
+    embassy_time::Instant::now().as_nanos()
 }
 
 pub async fn run(
@@ -109,5 +116,54 @@ pub async fn run(
                 }
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+    use core::sync::atomic::{AtomicU64, Ordering};
+    use xila::file_system::{DirectBaseOperations, DirectCharacterDevice, MountOperations, Size};
+
+    struct WallClock(AtomicU64);
+    impl DirectBaseOperations for WallClock {
+        fn read(&self, buffer: &mut [u8], _: Size) -> xila::file_system::Result<usize> {
+            let time = Duration::from_secs(self.0.load(Ordering::Relaxed));
+            let bytes = unsafe {
+                core::slice::from_raw_parts(
+                    (&time as *const Duration).cast::<u8>(),
+                    size_of::<Duration>(),
+                )
+            };
+            buffer[..bytes.len()].copy_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn write(&self, _: &[u8], _: Size) -> xila::file_system::Result<usize> {
+            Err(xila::file_system::Error::UnsupportedOperation)
+        }
+    }
+    impl MountOperations for WallClock {}
+    impl DirectCharacterDevice for WallClock {}
+
+    #[test]
+    fn monotonic_clock_is_independent_of_wall_clock_corrections() {
+        let device = WallClock(AtomicU64::new(1000));
+        let manager = xila::time::Manager::new(&device).unwrap();
+        let first = clock_snapshot(&manager).unwrap();
+        device.0.store(2000, Ordering::Relaxed);
+        let forward = clock_snapshot(&manager).unwrap();
+        device.0.store(1500, Ordering::Relaxed);
+        let backward = clock_snapshot(&manager).unwrap();
+        assert_eq!(first[0], 1_000_000_000_000);
+        assert_eq!(backward[0], 1_500_000_000_000);
+        assert!(forward[1] >= first[1]);
+        assert!(
+            backward[1] >= forward[1],
+            "wall-clock corrections must not rewind timers"
+        );
+        assert!(
+            backward[1] - first[1] < 1_000_000_000,
+            "wall-clock jumps must not advance timers"
+        );
     }
 }

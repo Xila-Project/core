@@ -37,6 +37,8 @@ pub(crate) enum Kind {
     Object,
     Label,
     ButtonMatrix,
+    Checkbox,
+    TabView,
 }
 
 struct Entry {

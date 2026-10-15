@@ -47,6 +47,9 @@ pub fn dispatch(
         Function::WindowCreate
         | Function::ObjectCreate
         | Function::LabelCreate
+        | Function::ButtonCreate
+        | Function::CheckboxCreate
+        | Function::TabviewCreate
         | Function::ButtonmatrixCreate => {
             state.ensure_capacity()?;
             let (pointer, kind, parent) = if function == Function::WindowCreate {
@@ -60,6 +63,11 @@ pub fn dispatch(
                     match function {
                         Function::ObjectCreate => (lvgl::lv_obj_create(parent), Kind::Object),
                         Function::LabelCreate => (lvgl::lv_label_create(parent), Kind::Label),
+                        Function::ButtonCreate => (lvgl::lv_button_create(parent), Kind::Object),
+                        Function::CheckboxCreate => {
+                            (lvgl::lv_checkbox_create(parent), Kind::Checkbox)
+                        }
+                        Function::TabviewCreate => (lvgl::lv_tabview_create(parent), Kind::TabView),
                         Function::ButtonmatrixCreate => {
                             (lvgl::lv_buttonmatrix_create(parent), Kind::ButtonMatrix)
                         }
@@ -69,6 +77,17 @@ pub fn dispatch(
                 (pointer, kind, Some(a))
             };
             let handle = state.insert(pointer, kind, parent)?;
+            memory
+                .write(GuestPointer::new(call.result), handle)
+                .expect("validated result");
+        }
+        Function::TabviewAddTab => {
+            state.ensure_capacity()?;
+            let parent = state.object(a, Some(Kind::TabView))?;
+            let text = read_c_string(memory, b)?;
+            // LVGL copies the tab caption; it never retains guest memory.
+            let tab = unsafe { lvgl::lv_tabview_add_tab(parent, text.as_ptr()) };
+            let handle = state.insert(tab, Kind::Object, Some(a))?;
             memory
                 .write(GuestPointer::new(call.result), handle)
                 .expect("validated result");
@@ -126,11 +145,40 @@ pub fn dispatch(
                 })
                 .expect("validated result");
         }
-        Function::LabelSetText => {
-            let pointer = state.object(a, Some(Kind::Label))?;
+        Function::LabelSetText | Function::CheckboxSetText => {
+            let kind = if function == Function::LabelSetText {
+                Kind::Label
+            } else {
+                Kind::Checkbox
+            };
+            let pointer = state.object(a, Some(kind))?;
             let text = read_c_string(memory, b)?;
-            // lv_label_set_text copies synchronously; it does not retain guest bytes.
-            unsafe { lvgl::lv_label_set_text(pointer, text.as_ptr()) };
+            // Both setters copy synchronously; neither retains guest bytes.
+            unsafe {
+                if function == Function::LabelSetText {
+                    lvgl::lv_label_set_text(pointer, text.as_ptr());
+                } else {
+                    lvgl::lv_checkbox_set_text(pointer, text.as_ptr());
+                }
+            }
+        }
+        Function::TabviewGetTabActive | Function::ObjectGetState => {
+            let kind = if function == Function::TabviewGetTabActive {
+                Some(Kind::TabView)
+            } else {
+                None
+            };
+            let pointer = state.object(a, kind)?;
+            let value = unsafe {
+                if function == Function::TabviewGetTabActive {
+                    lvgl::lv_tabview_get_tab_active(pointer)
+                } else {
+                    lvgl::lv_obj_get_state(pointer)
+                }
+            };
+            memory
+                .write(GuestPointer::new(call.result), value)
+                .expect("validated result");
         }
         Function::ButtonmatrixSetMap => {
             state.object(a, Some(Kind::ButtonMatrix))?;
@@ -148,6 +196,7 @@ pub fn dispatch(
         | Function::ObjectSetFlexGrow
         | Function::ObjectSetHeight
         | Function::ObjectSetWidth
+        | Function::ObjectAddState
         | Function::ObjectAddFlag => {
             let pointer = state.object(a, None)?;
             unsafe {
@@ -164,6 +213,13 @@ pub fn dispatch(
                     ),
                     Function::ObjectSetHeight => lvgl::lv_obj_set_height(pointer, b as i32),
                     Function::ObjectSetWidth => lvgl::lv_obj_set_width(pointer, b as i32),
+                    Function::ObjectAddState => {
+                        let state = u32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?;
+                        if state & !lvgl::lv_state_t_LV_STATE_ANY != 0 {
+                            return Err(GraphicsError::InvalidValue);
+                        }
+                        lvgl::lv_obj_add_state(pointer, state);
+                    }
                     Function::ObjectAddFlag => lvgl::lv_obj_add_flag(
                         pointer,
                         u32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?,
