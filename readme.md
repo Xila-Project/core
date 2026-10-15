@@ -35,6 +35,10 @@ cargo make format-toml --check
 npm exec prettier -- --check "**/*.json"
 ```
 
+For opt-in native PCM playback using nanoaudio, see
+[the audio module](modules/audio/README.md). Run its tone example with
+`cargo run -p drivers_native --features audio --example audio` inside the shell.
+
 Run `devbox run gui` from a **Wayland desktop** and check rendering, input and
 window closing. Keep the host GPU drivers and enter without `--pure` to retain
 the display, runtime directory and session bus. Windows requires x86_64 WSL2/WSLg

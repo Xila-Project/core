@@ -3,8 +3,18 @@ name = "drivers_native"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+audio = ["dep:audio", "dep:sdl2"]
+
+[[example]]
+name = "audio"
+required-features = ["audio"]
+
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
 file_system = { workspace = true }
+audio = { workspace = true, optional = true }
+sdl2 = { version = "0.38", default-features = false, optional = true }
 
 graphics = { workspace = true, features = ["rendering_xrgb8888"] }
 task = { workspace = true }

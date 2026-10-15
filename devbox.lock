@@ -40,6 +40,9 @@
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libxkbcommon": {
       "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libxkbcommon"
     },
+    "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#SDL2": {
+      "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#SDL2"
+    },
     "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libGL": {
       "resolved": "github:NixOS/nixpkgs/7fd4004d0511991fff3a0524856a9be09e28c5f0#libGL"
     },

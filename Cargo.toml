@@ -25,6 +25,7 @@ embedded-i18n = { workspace = true }
 
 
 # - Host
+audio = { workspace = true, optional = true }
 abi_declarations = { workspace = true, optional = true }
 abi_definitions = { workspace = true, optional = true }
 little_fs = { workspace = true, optional = true }
@@ -66,6 +67,7 @@ default = [
 ]
 
 executable_building = ["executable/building"]
+audio = ["dep:audio"]
 abi_definitions = ["dep:abi_definitions"]
 bootsplash = ["dep:bootsplash"]
 graphics = ["dep:graphics", "executable/graphics"]
@@ -74,6 +76,11 @@ graphics_rendering_xrgb8888 = ["graphics", "graphics/rendering_xrgb8888"]
 
 
 [workspace.dependencies]
+audio = { path = "modules/audio" }
+nanoaudio = { git = "https://github.com/AlixANNERAUD/nanoaudio.git", rev = "e1419d7e301f66e8feed5de0ec23c2cf07e44c91", default-features = false, features = [
+  "buffer",
+  "dsp",
+] }
 abi_declarations = { path = "modules/abi/declarations" }
 abi_definitions = { path = "modules/abi/definitions" }
 little_fs = { path = "modules/little_fs" }
@@ -146,6 +153,7 @@ getargs-derive = { git = "https://github.com/AlixANNERAUD/getargs-derive.git", r
 
 [workspace]
 members = [
+  "modules/audio",
   "modules/file_system",
   "modules/graphics",
   "modules/task",
