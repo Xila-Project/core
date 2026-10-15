@@ -14,16 +14,19 @@ define_wasi_module! {
 
     fn clock_res_get(
         caller: Caller<GlobalStore>,
-        _clock_id: i32,
+        clock_id: i32,
         resolution_ptr: WasmUsize,
     ) -> Result<WasiResult, wasmi::Error> {
         let mut caller = caller;
         let memory = get_memory(&caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
-        let resolution = caller.data().context.time_manager
-            .get_current_time_since_startup()
-            .map_err(|_| wasmi::Error::new("time error"))?;
+        let resolution = match clock_id {
+            // The wall-clock device API does not expose finer resolution.
+            0 => 1_000_000u64,
+            1 => 1_000_000_000u64.div_ceil(embassy_time::TICK_HZ),
+            _ => return Ok(58),
+        };
         borrow_memory(&memory, &mut caller)
-            .write(GuestPointer::new(resolution_ptr), resolution.as_nanos() as u64)
+            .write(GuestPointer::new(resolution_ptr), resolution)
             .ok_or_else(|| wasmi::Error::new("invalid output pointer"))?;
         Ok(0)
     }
@@ -38,12 +41,12 @@ define_wasi_module! {
         let memory = get_memory(&caller).ok_or_else(|| wasmi::Error::new("missing memory"))?;
         let manager=caller.data().context.time_manager;
         let now = match clock_id {
-            0=>manager.get_current_time(),
-            1=>manager.get_current_time_since_startup(),
+            0=>u64::try_from(manager.get_current_time().map_err(|_| wasmi::Error::new("time error"))?.as_nanos()).map_err(|_| wasmi::Error::new("clock overflow"))?,
+            1=>crate::host::execution::monotonic_now(),
             _=>return Ok(58),
-        }.map_err(|_| wasmi::Error::new("time error"))?;
+        };
         borrow_memory(&memory, &mut caller)
-            .write(GuestPointer::new(time_ptr), now.as_nanos() as u64)
+            .write(GuestPointer::new(time_ptr), now)
             .ok_or_else(|| wasmi::Error::new("invalid output pointer"))?;
         Ok(0)
     }

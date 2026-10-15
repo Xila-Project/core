@@ -136,6 +136,8 @@ args = [
   "calculator",
   "--package",
   "weather",
+  "--package",
+  "clock",
 ]
 
 [tasks.check-localization]
@@ -221,6 +223,8 @@ args = [
   "calculator",
   "--package",
   "weather",
+  "--package",
+  "clock",
   "--target",
   "wasm32-wasip1",
   "--profile",

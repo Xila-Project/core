@@ -207,8 +207,15 @@ impl From<Error> for i32 {
 }
 
 pub fn vfs_error(err: xila::virtual_file_system::Error) -> Error {
+    use xila::file_system::Error as Fs;
     use xila::virtual_file_system::Error as Vfs;
     match err {
+        Vfs::FileSystem(Fs::NotFound) => Error::Noent,
+        Vfs::FileSystem(Fs::AlreadyExists | Fs::DirectoryAlreadyExists) => Error::Exist,
+        Vfs::FileSystem(Fs::PermissionDenied) => Error::Access,
+        Vfs::FileSystem(Fs::NoSpaceLeft | Fs::FileSystemFull) => Error::Nospc,
+        Vfs::FileSystem(Fs::NotDirectory) => Error::Notdir,
+        Vfs::FileSystem(Fs::IsDirectory) => Error::Isdir,
         Vfs::PermissionDenied => Error::Access,
         Vfs::NotADirectory => Error::Notdir,
         Vfs::InvalidPath => Error::Inval,
@@ -217,5 +224,35 @@ pub fn vfs_error(err: xila::virtual_file_system::Error) -> Error {
         Vfs::TooManyOpenFiles => Error::Nfile,
         Vfs::InvalidIdentifier => Error::Badf,
         _ => Error::Io,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use xila::{file_system::Error as Fs, virtual_file_system::Error as Vfs};
+
+    #[test]
+    fn filesystem_errors_preserve_guest_file_creation_semantics() {
+        assert!(matches!(
+            vfs_error(Vfs::FileSystem(Fs::NotFound)),
+            Error::Noent
+        ));
+        assert!(matches!(
+            vfs_error(Vfs::FileSystem(Fs::AlreadyExists)),
+            Error::Exist
+        ));
+        assert!(matches!(
+            vfs_error(Vfs::FileSystem(Fs::DirectoryAlreadyExists)),
+            Error::Exist
+        ));
+        assert!(matches!(
+            vfs_error(Vfs::FileSystem(Fs::PermissionDenied)),
+            Error::Access
+        ));
+        assert!(matches!(
+            vfs_error(Vfs::FileSystem(Fs::NoSpaceLeft)),
+            Error::Nospc
+        ));
     }
 }

@@ -68,7 +68,7 @@ impl Scratch {
     fn apps(&self) -> PathBuf {
         let path = self.0.join("apps with spaces");
         fs::create_dir(&path).unwrap();
-        for name in ["calculator", "weather"] {
+        for name in ["calculator", "weather", "clock"] {
             fs::write(path.join(format!("{name}.wasm")), b"\0asm").unwrap();
         }
         path
@@ -224,7 +224,7 @@ fn explicit_applications_are_hashed_and_forwarded() {
     assert!(result.status.success());
     let metadata = summary.unwrap().metadata;
     assert_eq!(metadata.applications_directory.as_deref(), apps.to_str());
-    assert_eq!(metadata.application_sha256.len(), 2);
+    assert_eq!(metadata.application_sha256.len(), 3);
     assert_eq!(
         metadata.application_sha256["calculator"],
         "cd5d4935a48c0672cb06407bb443bc0087aff947c6b864bac886982c73b3027f"

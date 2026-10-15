@@ -15,12 +15,19 @@ wasmi = { version = "2.0.0", default-features = false, features = [
 xila = { path = "../../", optional = true }
 getargs-derive = { workspace = true, optional = true }
 getargs = { version = "0.5", optional = true }
+embassy-time = { workspace = true, optional = true }
 
 [features]
 guest = []
 c_bindings = ["guest", "graphics", "dep:cbindgen"]
 default_guest = ["guest", "graphics", "c_bindings", "memory_32"]
-host = ["dep:wasmi", "dep:xila", "dep:getargs-derive", "dep:getargs"]
+host = [
+  "dep:wasmi",
+  "dep:xila",
+  "dep:getargs-derive",
+  "dep:getargs",
+  "dep:embassy-time",
+]
 default = ["host", "memory_32"]
 memory_32 = []
 memory_64 = []

@@ -1,10 +1,10 @@
 # Browser example
 
-From the repository root, build the Calculator guest first, generate the LVGL
+From the repository root, build the bundled guests first, generate the LVGL
 fonts, and then build the browser example:
 
 ```sh
-cargo +stable build -p calculator --target wasm32-wasip1 --release
+cargo +stable build -p calculator -p clock --target wasm32-wasip1 --release
 cargo make generate-fonts
 cargo +stable build -p wasm_example --target wasm32-unknown-unknown
 ```
@@ -21,19 +21,27 @@ Use localhost or HTTPS in a browser supporting OPFS,
 
 ## Running guest WebAssembly applications
 
-Calculator is embedded from `target/wasm32-wasip1/release/calculator.wasm` at
-browser build time. Startup copies it to `/binaries/calculator` and runs its
-installer to create an application-drawer shortcut. Rebuild the guest before
-rebuilding the browser example whenever Calculator changes. Guest builds must
-place this artifact in the repository's default `target` directory.
+Calculator and Clock are embedded from `target/wasm32-wasip1/release/` at
+browser build time. Startup copies them to `/binaries/calculator` and
+`/binaries/clock`, then runs their installers to create application-drawer
+shortcuts. Rebuild the guests before rebuilding the browser example whenever
+either application changes. Guest builds must place these artifacts in the
+repository's default `target` directory.
+
+Clock's settings directory is provisioned at `/configuration/shared/clock` and
+assigned to the administrator account when it exists. Its saved preferences and
+alarm follow the OPFS persistence limits below. Other accounts need write access
+to this directory to save settings. Clock alerts require the application to stay
+open; browser background-tab throttling can delay them.
 
 On a fresh disk, log in as **administrator** with an empty password; otherwise
 use your saved credentials. Open the application drawer using the Xila button
 in the dock. Select
-**Calculator**. It can also be launched from Xila's terminal:
+**Calculator** or **Clock**. They can also be launched from Xila's terminal:
 
 ```text
 /binaries/wasm /binaries/calculator
+/binaries/wasm /binaries/clock
 ```
 
 The example mounts the Wasmi-backed runtime at `/binaries/wasm`, with the same
@@ -53,9 +61,9 @@ limits.
 ## Browser limitations
 
 - The example persists its filesystem in OPFS; see the storage and durability
-  limits below. Startup reinstalls the bundled Calculator. Other guest files
+  limits below. Startup reinstalls the bundled Calculator and Clock. Other guest files
   must be present before launching; there is no upload mechanism.
-- Embedding Calculator increases the browser WASM download and retains the
+- Embedding applications increases the browser WASM download and retains the
   embedded bytes alongside the VFS copy. Running it also needs Wasmi's module
   and guest memory. This simple approach favors convenience over RAM usage.
 - Guests run cooperatively in Wasmi on the browser's executor, not as separate
@@ -87,7 +95,7 @@ Calculator bundling was additionally checked with a temporary probe that read
 the startup-created guest and shortcut without creating either, then ran the
 bundled guest through the same evaluation and teardown checks.
 
-The probes are not included in normal example startup; Calculator is. Generated
+The probes are not included in normal example startup; bundled applications are. Generated
 guest binaries are not committed. This is focused browser validation, not a
 claim of full WASI/graphics compatibility or support across all browsers.
 

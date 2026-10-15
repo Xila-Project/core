@@ -273,8 +273,11 @@ jobs:
       - name: Check | Documentation (Guest)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
-      - name: Build | Calculator (WASI)
-        run: cargo +${XILA_RUST_TOOLCHAIN} build -p calculator --target wasm32-wasip1 --release
+      - name: Build | Bundled applications (WASI)
+        run: cargo +${XILA_RUST_TOOLCHAIN} build -p calculator -p clock --target wasm32-wasip1 --release
+
+      - name: Check | Clock (WASI)
+        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p clock --all-targets --target wasm32-wasip1 -- -D warnings
 
       - name: Build | Example (WASM)
         run: cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build
