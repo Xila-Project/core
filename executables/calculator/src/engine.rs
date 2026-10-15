@@ -1,3 +1,4 @@
+use embedded_i18n::translate;
 use nanoexpr::{Context, ErrorKind, Evaluator, Exact, Functions, Math, Number, PercentSign};
 
 type CalculatorNumber = Exact<14, 99>;
@@ -41,7 +42,30 @@ pub fn evaluate_expression(input: &str, radian_mode: bool) -> Result<CalculatorN
         .percent_sign(PercentSign::Percentage)
         .implicit_multiplication(true)
         .evaluate::<CalculatorNumber>(input)
-        .map_err(|error| error.to_string())
+        .map_err(localize_error)
+}
+
+fn localize_error(error: nanoexpr::Error) -> String {
+    let message = match error.kind {
+        ErrorKind::UnexpectedCharacter => translate!("Unexpected character"),
+        ErrorKind::UnexpectedToken => translate!("Unexpected token"),
+        ErrorKind::UnexpectedEnd => translate!("Unexpected end of expression"),
+        ErrorKind::UnclosedParenthesis => translate!("Unclosed parenthesis"),
+        ErrorKind::InvalidNumber => translate!("Invalid number"),
+        ErrorKind::UnknownVariable => translate!("Unknown variable"),
+        ErrorKind::UnknownFunction => translate!("Unknown function"),
+        ErrorKind::TooManyArguments => translate!("Too many arguments"),
+        ErrorKind::ArgumentCount => translate!("Wrong number of arguments"),
+        ErrorKind::DivisionByZero => translate!("Division by zero"),
+        ErrorKind::Domain => translate!("Value outside function domain"),
+        ErrorKind::Overflow => translate!("Calculation overflow"),
+        ErrorKind::TooDeep => translate!("Expression nested too deeply"),
+        ErrorKind::Unsupported => translate!("Unsupported operation"),
+        ErrorKind::TooLong => translate!("Expression too long"),
+        ErrorKind::Inexact => translate!("Inexact result"),
+        _ => translate!("Calculation error"),
+    };
+    format!("{message} ({}..{})", error.span.start, error.span.end)
 }
 
 #[cfg(test)]
@@ -95,5 +119,17 @@ mod tests {
     fn converts_degrees_without_losing_decimal_precision() {
         let result = evaluate_expression("sin(90)", false).unwrap();
         assert_eq!(result.to_string(), "1");
+    }
+
+    #[test]
+    fn reports_localized_errors_with_the_input_span() {
+        assert_eq!(
+            evaluate_expression("1 / 0", true).unwrap_err(),
+            "Division by zero (0..5)"
+        );
+        assert_eq!(
+            evaluate_expression("sqrt(-1)", true).unwrap_err(),
+            "Value outside function domain (0..8)"
+        );
     }
 }
