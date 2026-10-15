@@ -116,6 +116,7 @@ terminal = { path = "executables/terminal" }
 settings = { path = "executables/settings" }
 calculator = { path = "executables/calculator" }
 weather = { path = "executables/weather" }
+clock = { path = "executables/clock" }
 
 # - External crates
 miniserde = { version = "0.1" }
@@ -186,6 +187,7 @@ members = [
   "modules/testing",
   "modules/device",
   "executables/weather",
+  "executables/clock",
   "modules/graphics/bindings_generator",
 ]
 

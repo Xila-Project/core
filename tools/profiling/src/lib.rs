@@ -238,7 +238,7 @@ fn metadata(options: &Options) -> Result<Metadata> {
     let path = executable(&options.command[0])?;
     let mut applications = BTreeMap::new();
     if let Some(directory) = &options.applications_dir {
-        for name in ["calculator", "weather"] {
+        for name in ["calculator", "weather", "clock"] {
             applications.insert(
                 name.into(),
                 digest(&directory.join(format!("{name}.wasm")))?,

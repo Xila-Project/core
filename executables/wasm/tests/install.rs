@@ -140,7 +140,11 @@ async fn install_selects_install_export_and_never_falls_back_to_main() {
             .create_directory(task, &"/configuration/shared/shortcuts")
             .await
             .unwrap();
-        for (app, name) in [("calculator", "Calculator"), ("weather", "Weather")] {
+        for (app, name) in [
+            ("calculator", "Calculator"),
+            ("weather", "Weather"),
+            ("clock", "Clock"),
+        ] {
             let binary = executable::build_crate(app).unwrap();
             let path = format!("/binaries/{app}");
             drivers_std::loader::load_to_virtual_file_system(

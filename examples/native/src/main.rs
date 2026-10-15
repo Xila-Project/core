@@ -358,6 +358,16 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
+    let clock_binary_path = application_binary("clock").unwrap();
+    load_to_virtual_file_system(
+        task_manager,
+        virtual_file_system,
+        &clock_binary_path,
+        "/binaries/clock",
+    )
+    .await
+    .unwrap();
+
     let _ = executable::execute(
         executable_context,
         "/binaries/wasm",
@@ -377,6 +387,18 @@ async fn main(task_manager: &'static xila::task::Manager) {
         executable_context,
         "/binaries/wasm",
         vec!["--install".to_string(), "/binaries/weather".to_string()],
+        standard.duplicate().await.unwrap(),
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
+
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec!["--install".to_string(), "/binaries/clock".to_string()],
         standard,
         None,
     )
@@ -402,7 +424,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
-    let _ = authentication::create_user(
+    let administrator = authentication::create_user(
         &authentication_context,
         "administrator",
         "",
@@ -411,6 +433,24 @@ async fn main(task_manager: &'static xila::task::Manager) {
     )
     .await
     .unwrap();
+
+    // The shared configuration parent belongs to root. Provision only Clock's
+    // settings directory for the default login user, without widening its parent.
+    virtual_file_system::ignore_already_exists_error(
+        virtual_file_system
+            .create_directory(task, &"/configuration/shared/clock")
+            .await,
+    )
+    .unwrap();
+    virtual_file_system
+        .set_ownership(
+            task,
+            "/configuration/shared/clock",
+            Some(administrator),
+            Some(group_identifier),
+        )
+        .await
+        .unwrap();
 
     // - - Set the environment variables
     task_manager

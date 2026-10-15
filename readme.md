@@ -137,7 +137,7 @@ cargo run --manifest-path tools/profiling/Cargo.toml -- measure \
 The `profiling` Cargo profile keeps release optimizations and full debug symbols.
 If using an explicit Cargo target or custom target directory, adjust the binary
 path. The `prebuilt-applications` feature and `--applications-dir` load prepared
-Calculator/Weather files instead of invoking Cargo during startup. A missing
+Calculator/Weather/Clock files instead of invoking Cargo during startup. A missing
 file fails explicitly. The recorder also recognizes and hashes application files
 selected by `XILA_PROFILE_APP_DIR`. Default native builds keep their existing startup builds.
 Measurements still include OS startup; they are not steady-state-only data.
