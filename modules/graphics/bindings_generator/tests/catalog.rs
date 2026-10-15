@@ -2,39 +2,10 @@ use graphics_bindgen::{CallCatalog, MAX_ARGUMENTS};
 use quote::ToTokens;
 
 #[test]
-fn guest_event_and_state_constants_follow_lvgl_exports() {
+fn guest_state_constants_follow_lvgl_exports() {
     let generated =
         graphics_bindgen::guest_constants::generate(lvgl_rust_sys::_bindgen_raw_src()).unwrap();
     let file = syn::parse2::<syn::File>(generated).unwrap();
-    let events = file
-        .items
-        .iter()
-        .find_map(|item| match item {
-            syn::Item::Enum(item) if item.ident == "EventCode" => Some(item),
-            _ => None,
-        })
-        .unwrap();
-    for (name, expected) in [
-        (
-            "ValueChanged",
-            lvgl_rust_sys::lv_event_code_t_LV_EVENT_VALUE_CHANGED,
-        ),
-        ("Delete", lvgl_rust_sys::lv_event_code_t_LV_EVENT_DELETE),
-        ("Last", lvgl_rust_sys::lv_event_code_t_LV_EVENT_LAST),
-    ] {
-        let variant = events
-            .variants
-            .iter()
-            .find(|variant| variant.ident == name)
-            .unwrap();
-        let (_, syn::Expr::Lit(value)) = variant.discriminant.as_ref().unwrap() else {
-            panic!("nonliteral event value")
-        };
-        let syn::Lit::Int(value) = &value.lit else {
-            panic!("noninteger event value")
-        };
-        assert_eq!(value.base10_parse::<u32>().unwrap(), expected);
-    }
     let pressed = file
         .items
         .iter()

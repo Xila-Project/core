@@ -111,12 +111,37 @@ mod tests {
     drivers_std::memory::instantiate_global_allocator!();
 
     #[test]
-    fn palette_updates_restyle_existing_widgets_and_surfaces() {
+    fn palette_updates_preserve_widget_styles_and_logo_geometry() {
         unsafe {
             lvgl::lv_init();
             let display = lvgl::lv_display_create(320, 240);
             initialize_display(display).unwrap();
             let screen = lvgl::lv_display_get_screen_active(display);
+            let logos = [1, 2, 4].map(|factor| {
+                (
+                    crate::Logo::new(screen, factor, Color::WHITE).unwrap(),
+                    factor,
+                )
+            });
+            for (logo, factor) in &logos {
+                assert_logo_geometry(logo, *factor);
+                // Desktop uses outline bars; bootsplash uses filled bars.
+                if *factor == 4 {
+                    for index in 0..4 {
+                        let part = lvgl::lv_obj_get_child(logo.get_inner_object(), index);
+                        lvgl::lv_obj_remove_local_style_prop(
+                            part,
+                            lvgl::_lv_style_id_t_LV_STYLE_BORDER_WIDTH as lvgl::lv_style_prop_t,
+                            0,
+                        );
+                        lvgl::lv_theme_shadcn_set_variant(
+                            part,
+                            lvgl::lv_theme_shadcn_variant_t_LV_THEME_SHADCN_VARIANT_OUTLINE,
+                        );
+                    }
+                    assert_logo_geometry(logo, *factor);
+                }
+            }
             let button = lvgl::lv_button_create(screen);
             let surface = lvgl::lv_obj_create(screen);
             set_surface(surface, Surface::Muted);
@@ -158,10 +183,43 @@ mod tests {
                 light.muted
             ));
 
+            for (logo, factor) in &logos {
+                assert_logo_geometry(logo, *factor);
+            }
+            drop(logos);
             lvgl::lv_display_delete(display);
             // Theme state must be gone before display storage can be reused.
             assert!(!lvgl::lv_theme_shadcn_is_active(display));
             lvgl::lv_deinit();
+        }
+    }
+    unsafe fn assert_logo_geometry(logo: &crate::Logo, factor: u8) {
+        unsafe {
+            let object = logo.get_inner_object();
+            lvgl::lv_obj_update_layout(object);
+            assert_eq!(lvgl::lv_obj_get_width(object), 32 * i32::from(factor));
+            assert_eq!(lvgl::lv_obj_get_height(object), 32 * i32::from(factor));
+            let mut bounds = lvgl::lv_area_t::default();
+            lvgl::lv_obj_get_coords(object, &mut bounds);
+            for index in 0..4 {
+                let part = lvgl::lv_obj_get_child(object, index);
+                let (width, height) = if index % 2 == 0 { (10, 21) } else { (21, 10) };
+                assert_eq!(lvgl::lv_obj_get_width(part), width * i32::from(factor));
+                assert_eq!(lvgl::lv_obj_get_height(part), height * i32::from(factor));
+                let mut coordinates = lvgl::lv_area_t::default();
+                lvgl::lv_obj_get_coords(part, &mut coordinates);
+                let expected_x = if index < 2 {
+                    bounds.x1
+                } else {
+                    bounds.x2 - width * i32::from(factor) + 1
+                };
+                let expected_y = if index == 0 || index == 3 {
+                    bounds.y1
+                } else {
+                    bounds.y2 - height * i32::from(factor) + 1
+                };
+                assert_eq!((coordinates.x1, coordinates.y1), (expected_x, expected_y));
+            }
         }
     }
 }

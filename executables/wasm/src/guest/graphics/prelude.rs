@@ -1,4 +1,5 @@
 pub use crate::FunctionCall;
+pub use crate::{EVENT_CLOSE_REQUESTED, EventCode};
 pub use core::ffi::c_void;
 
 #[link(wasm_import_module = "host")]
@@ -756,7 +757,7 @@ pub fn as_usize<T: Copy>(value: T) -> usize {
 }
 
 pub use super::enumeration::{
-    BlurQuality, EventCode, STATE_ANY, STATE_CHECKED, STATE_DEFAULT, STATE_DISABLED, STATE_EDITED,
+    BlurQuality, STATE_ANY, STATE_CHECKED, STATE_DEFAULT, STATE_DISABLED, STATE_EDITED,
     STATE_FOCUS_KEY, STATE_FOCUSED, STATE_HOVERED, STATE_PRESSED, STATE_SCROLLED, STATE_USER_1,
     STATE_USER_2, STATE_USER_3, STATE_USER_4, State, TextLeadingTrim,
 };

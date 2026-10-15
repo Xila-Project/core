@@ -10,6 +10,7 @@ fn main() {
         println!("cargo:rerun-if-changed=build/guest.rs");
         println!("cargo:rerun-if-changed=build/utilities");
         println!("cargo:rerun-if-changed=src/guest/graphics/prelude.rs");
+        println!("cargo:rerun-if-changed=src/graphics_event.rs");
         guest::generate(&std::path::PathBuf::from(
             std::env::var_os("OUT_DIR").unwrap(),
         ));
