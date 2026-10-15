@@ -5,7 +5,7 @@ authors = ["Alix ANNERAUD <alix@anneraud.fr>"]
 edition = "2024"
 resolver = "2"
 rust-version = "1.90.0"
-license = "GPL-2.0-only"
+license = "Apache-2.0"
 description = "An operating system for embedded systems written in Rust."
 
 [profile.release-wasm]

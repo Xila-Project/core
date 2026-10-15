@@ -12,7 +12,7 @@ resource-constrained devices.
 
 [![codecov](https://codecov.io/github/Xila-Project/Core/graph/badge.svg?token=01M6GQFBEC)](https://codecov.io/github/Xila-Project/Core)
 [![Translation status](https://translate.anneraud.fr/widget/xila-core/svg-badge.svg)](https://translate.anneraud.fr/engage/xila-core/)
-[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-yellow.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 ## What you can explore
 
@@ -243,4 +243,4 @@ ideas or ask for help.
 
 ## License
 
-This project is under the [GNU General Public License v2.0](license.md).
+This project is under the [Apache License 2.0](license.md).
