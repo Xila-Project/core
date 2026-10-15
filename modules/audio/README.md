@@ -80,8 +80,6 @@ total host-driver memory or an assertion about allocations inside SDL.
 The opt-in native backend uses the MIT Rust SDL2 bindings and the zlib-licensed
 SDL2 system library. The pinned Devbox shell provides SDL2; other environments
 need their platform's SDL2 development library (e.g. `libsdl2-dev` on Debian).
-CPAL 0.16 is Apache-2.0-only,
-which conflicts with this project's GPL-2.0-only license.
 
 `drivers_native::audio::new()` returns an output device and a runner. Keep the
 runner on its creating thread for the duration of playback. SDL receives F32
