@@ -53,7 +53,9 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use alloc::boxed::Box;
     use alloc::string::ToString;
     use alloc::vec;
+    use core::sync::atomic::{AtomicBool, Ordering};
     use drivers_wasm::devices::graphics::GraphicsDevices;
+    use wasm_bindgen::{JsCast, closure::Closure};
     use xila::bootsplash::Bootsplash;
     use xila::executable::{self, Standard, mount_executables};
     use xila::file_system::mbr::Mbr;
@@ -63,8 +65,6 @@ async fn main(task_manager: &'static xila::task::Manager) {
     use xila::time::{self, Duration};
     use xila::virtual_file_system::{File, mount_static};
     use xila::{authentication, graphics, users, virtual_file_system};
-    use core::sync::atomic::{AtomicBool, Ordering};
-    use wasm_bindgen::{JsCast, closure::Closure};
 
     console_error_panic_hook::set_once();
 
@@ -124,19 +124,15 @@ async fn main(task_manager: &'static xila::task::Manager) {
     // Open the origin's persistent disk before synchronous MBR/LittleFS setup.
     let selected_disk = selected_xila_disk();
     let selected_disk_path = Path::from_str(&selected_disk);
-    let drive: &'static drivers_wasm::devices::DriveDevice = match drivers_wasm::devices::DriveDevice::new(
-        selected_disk_path,
-        16 * 1024 * 1024,
-    )
-    .await
-    {
-        Ok(drive) => Box::leak(Box::new(drive)),
-        Err(error) => {
-            let message = alloc::format!("Could not open {selected_disk}: {error}");
-            disk_manager_error(&message);
-            panic!("{message}");
-        }
-    };
+    let drive: &'static drivers_wasm::devices::DriveDevice =
+        match drivers_wasm::devices::DriveDevice::new(selected_disk_path, 16 * 1024 * 1024).await {
+            Ok(drive) => Box::leak(Box::new(drive)),
+            Err(error) => {
+                let message = alloc::format!("Could not open {selected_disk}: {error}");
+                disk_manager_error(&message);
+                panic!("{message}");
+            }
+        };
 
     // Format only an empty disk; mount errors on saved images are fatal.
     let file_system = match storage::mount(drive) {
@@ -396,8 +392,7 @@ async fn main(task_manager: &'static xila::task::Manager) {
         .await
         .unwrap();
 
-    let switch_requested: &'static AtomicBool =
-        Box::leak(Box::new(AtomicBool::new(false)));
+    let switch_requested: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
     let runtime_running: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(true)));
     let disk_name_for_switch = selected_disk.clone();
     let switch_callback: Closure<dyn FnMut()> = Closure::wrap(Box::new(move || {
