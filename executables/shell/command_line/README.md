@@ -64,8 +64,13 @@ sleep 2
 sleep 250ms
 chmod 0640 notes.txt
 tree -L 2 /configuration
+realpath ../notes.txt /configuration
 help chmod
 ```
+
+`realpath PATH...` prints canonical absolute paths for existing files and
+directories. Relative operands are resolved from the current directory; VFS
+metadata checks report missing paths and access errors.
 
 `sleep` accepts one nonnegative integer with `ms`, `s`, `m`, or `h`; omitted
 units mean seconds. Fractions, multiple durations, and values exceeding the
