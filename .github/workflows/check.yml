@@ -95,7 +95,7 @@ jobs:
               - 'executables/wasm/tests/translation/**'
 
   localization:
-    name: Translation coverage (${{ matrix.locale }})
+    name: Localization checks (${{ matrix.locale }})
     needs: [changes]
     # Always runs: a new translation key added in a .rs-only PR must still
     # be checked with EMBEDDED_I18N_STRICT=1 (correctness over minutes).
@@ -122,7 +122,7 @@ jobs:
   # main/manual runs and filter failures run the full suite; !cancelled()
   # permits runs after a skipped dependency. Heavy steps run off PRs only.
   wasm-translation:
-    name: WASM translation (${{ matrix.memory }})
+    name: WASM ABI checks (${{ matrix.memory }})
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
@@ -207,7 +207,7 @@ jobs:
         run: npm exec prettier -- --check "**/*.json"
 
   host-clippy:
-    name: Host clippy checks
+    name: Host checks (Clippy)
     needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
@@ -234,7 +234,7 @@ jobs:
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
 
   host-test:
-    name: Host test checks
+    name: Host checks (Tests)
     needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
@@ -285,7 +285,7 @@ jobs:
           fail_ci_if_error: true
 
   host-audio-docs:
-    name: Host audio and docs checks
+    name: Host checks (Audio, docs, build)
     needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
