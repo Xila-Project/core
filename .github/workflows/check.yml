@@ -348,11 +348,11 @@ jobs:
         with:
           # Trunk downloads wasm-bindgen/wasm-opt into its ProjectDirs cache
           # (~/.cache/trunk/<tool>-<version>/); a version drift self-heals by
-          # re-downloading the missing directory.
+          # re-downloading the missing directory. dist/ is build output and is
+          # rebuilt by `trunk build`, so it is intentionally not cached.
           path: |
             ~/.cache/trunk
-            examples/wasm/dist
-          key: trunk-tools-${{ runner.os }}
+          key: trunk-tools-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
           restore-keys: |
             trunk-tools-
 
