@@ -65,7 +65,7 @@ unsafe extern "C" fn event_handler(event: *mut lvgl::lv_event_t) {
 }
 
 impl Desk {
-    const DOCK_ICON_SIZE: Point = Point::new(32, 32);
+    const DOCK_ICON_SIZE: Point = Point::new(40, 40);
     const DRAWER_ICON_SIZE: Point = Point::new(48, 48);
 
     pub const HOME_EVENT: EventKind = EventKind::Custom1;
@@ -189,11 +189,15 @@ impl Desk {
                 lvgl::lv_obj_set_align(dock, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_size(dock, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);
                 lvgl::lv_obj_set_flex_flow(dock, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
-                // Flat dock bar chrome: keep the theme surface but drop the
-                // card padding, border and radius around the themed icons.
-                lvgl::lv_obj_set_style_pad_all(dock, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_border_width(dock, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_radius(dock, 0, lvgl::LV_STATE_DEFAULT);
+                // Floating dock bar: the theme container style supplies the card
+                // padding, radius, border and icon gap; only the surface is set.
+                // Center items so the smaller main button aligns with the icons.
+                lvgl::lv_obj_set_flex_align(
+                    dock,
+                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+                    lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+                );
 
                 dock
             };
