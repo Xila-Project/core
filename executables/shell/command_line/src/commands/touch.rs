@@ -8,7 +8,8 @@ use xila::{
 
 use super::{CommandContext, UserCommand, check_no_more_options, directory::resolve_path};
 
-const HELP: &str = "Usage: touch FILE...\nCreate missing files and update access and modification times.";
+const HELP: &str =
+    "Usage: touch FILE...\nCreate missing files and update access and modification times.";
 
 pub struct TouchCommand;
 
