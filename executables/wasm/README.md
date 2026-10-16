@@ -62,6 +62,26 @@ tests, 100% line/function coverage commands, and Miri commands are documented in
 
 ## Graphics architecture
 
+Pixel Painter uses the reusable indexed-canvas helpers. `indexed_canvas_create`
+allocates a host-owned image; `indexed_canvas_set_pixels` validates and copies
+palette indexes and RGB888 palette entries from guest memory. The per-VM image
+budget is 65,536 pixels. Buffers remain alive through native object deletion and
+are reclaimed afterward or at VM teardown.
+
+`window_pop_pointer_event` extends event polling with event-time x/y coordinates
+relative to the target content area and its width/height. For events without
+pointer data it writes `i32::MIN` to x/y and zero to width/height. The original
+`window_pop_event` contract is unchanged. Textarea copying, keyboard attachment,
+padding, and flag removal also have checked adapters. New Xila helpers have
+append-only IDs starting at `0xf000`, preserving existing call numbering.
+
+Run the headless Wasm app acceptance and ABI boundary tests with:
+
+```sh
+cargo test -p wasm --features graphics,xila/graphics_rendering_xrgb8888 \
+  --test graphics_canvas --test pixel_painter
+```
+
 - `modules/graphics/bindings_generator` discovers and orders one shared LVGL ABI
   catalog; unsupported calls keep their IDs. Wasmi's supported-call table checks
   full C signatures, not just argument counts. The catalog is compatible with

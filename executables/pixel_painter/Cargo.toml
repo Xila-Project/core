@@ -1,0 +1,15 @@
+[package]
+name = "pixel_painter"
+version = "0.1.0"
+edition = "2024"
+description = "A bounded pixel drawing app for Xila WebAssembly."
+
+[dependencies]
+embedded-i18n = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm = { workspace = true, default-features = false, features = [
+  "guest",
+  "graphics",
+  "memory_32",
+] }

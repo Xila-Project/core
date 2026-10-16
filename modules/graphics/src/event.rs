@@ -5,11 +5,19 @@ pub struct Event {
     pub code: EventKind,
     pub target: *mut lvgl::lv_obj_t,
     pub key: Option<Key>,
+    /// Pointer position relative to the target content, plus content width/height,
+    /// captured at event time rather than when a consumer drains the queue.
+    pub pointer: Option<[i32; 4]>,
 }
 
 impl Event {
     pub fn new(code: EventKind, target: *mut lvgl::lv_obj_t, key: Option<Key>) -> Self {
-        Self { code, target, key }
+        Self {
+            code,
+            target,
+            key,
+            pointer: None,
+        }
     }
 }
 

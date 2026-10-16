@@ -337,6 +337,32 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await;
     assert_eq!(install_status, 0, "Failed to install bundled Clock");
 
+    // Use the same guest runtime and installation path for Pixel Painter.
+    File::write_to_path(
+        virtual_file_system,
+        task,
+        "/binaries/pixel_painter",
+        include_bytes!("../../../target/wasm32-wasip1/release/pixel_painter.wasm"),
+    )
+    .await
+    .unwrap();
+
+    let install_status = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec![
+            "--install".to_string(),
+            "/binaries/pixel_painter".to_string(),
+        ],
+        standard.duplicate().await.unwrap(),
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
+    assert_eq!(install_status, 0, "Failed to install bundled Pixel Painter");
+
     // - - Load saved accounts, or create defaults only on a fresh disk.
     let authentication_context = authentication::Context {
         virtual_file_system,
@@ -361,6 +387,26 @@ async fn main(task_manager: &'static xila::task::Manager) {
             .set_ownership(
                 task,
                 "/configuration/shared/clock",
+                Some(administrator),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    // Provision Pixel Painter's settings without widening access to the shared parent.
+    // An existing disk may have removed the default administrator account.
+    virtual_file_system::ignore_already_exists_error(
+        virtual_file_system
+            .create_directory(task, &"/configuration/shared/pixel_painter")
+            .await,
+    )
+    .unwrap();
+    if let Ok(administrator) = users_manager.get_user_identifier("administrator").await {
+        virtual_file_system
+            .set_ownership(
+                task,
+                "/configuration/shared/pixel_painter",
                 Some(administrator),
                 None,
             )

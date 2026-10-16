@@ -17,7 +17,7 @@ concurrency:
 
 defaults:
   run:
-    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
+    shell: bash
 
 jobs:
   build:
@@ -41,12 +41,19 @@ jobs:
           mkdir -p ./pages/guest/
           cp -r ./target/wasm32-unknown-unknown/doc/* ./pages/guest/
 
+      # NOTE: en/fr must build separately. EMBEDDED_I18N_LOCALE is baked in
+      # at compile time by the embedded-i18n proc macro (calculator/clock
+      # strings), embedded into the trunk bundle via include_bytes!, and
+      # selects per-locale font subsets in generate-fonts. A single build
+      # copied to both dirs would serve wrong-locale strings and miss
+      # French glyphs. Shared setup (checkout, toolchains, docs) runs once
+      # above; only the locale-dependent steps repeat per locale.
       - name: Build | WASM demonstration (en)
         env:
           EMBEDDED_I18N_LOCALE: en
         run: |
           cargo make generate-fonts
-          cargo build -p calculator -p clock --target wasm32-wasip1 --release
+          cargo build -p calculator -p clock -p pixel_painter --target wasm32-wasip1 --release
           (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
           mkdir -p pages/demonstrations/wasm/en/
           cp -r examples/wasm/dist/* pages/demonstrations/wasm/en/
@@ -56,7 +63,7 @@ jobs:
           EMBEDDED_I18N_LOCALE: fr
         run: |
           cargo make generate-fonts
-          cargo build -p calculator -p clock --target wasm32-wasip1 --release
+          cargo build -p calculator -p clock -p pixel_painter --target wasm32-wasip1 --release
           (cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build --release --public-url ./)
           mkdir -p pages/demonstrations/wasm/fr/
           cp -r examples/wasm/dist/* pages/demonstrations/wasm/fr/

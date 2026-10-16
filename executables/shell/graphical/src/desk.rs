@@ -713,8 +713,7 @@ impl Desk {
                 // Ignore consecutive windows parent child changed events
                 if let Some(Event {
                     code: WINDOWS_PARENT_CHILD_CHANGED,
-                    target: _,
-                    key: _,
+                    ..
                 }) = self.window.peek_event()
                 {
                     return Ok(());

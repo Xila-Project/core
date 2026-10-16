@@ -1,0 +1,16 @@
+{
+  "Pixel Painter": "Pixel Painter",
+  "Undo": "Undo",
+  "Clear": "Clear",
+  "Save": "Save",
+  "Open": "Open",
+  "Ready - white erases": "Ready - white erases",
+  "Unsaved drawing - close again to discard": "Unsaved drawing - close again to discard",
+  "Unsaved drawing - Open again to discard": "Unsaved drawing - Open again to discard",
+  "Enter an absolute file path": "Enter an absolute file path",
+  "Opened": "Opened",
+  "Saved": "Saved",
+  "Invalid Pixel Painter file - drawing kept": "Invalid Pixel Painter file - drawing kept",
+  "Open failed - check path and storage": "Open failed - check path and storage",
+  "Save failed - drawing kept; check path and storage": "Save failed - drawing kept; check path and storage"
+}
