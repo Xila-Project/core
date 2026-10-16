@@ -142,7 +142,6 @@ impl InterfacePanel {
                 lvgl::lv_flex_align_t_LV_FLEX_ALIGN_START,
                 lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
             );
-            lvgl::lv_obj_set_style_pad_all(container, 10, lvgl::LV_STATE_DEFAULT);
 
             // Label: Configuration Mode
             let mode_label = lvgl::lv_label_create(container);
@@ -186,6 +185,7 @@ impl InterfacePanel {
                 lvgl::lv_textarea_set_placeholder_text(address_input, c"192.168.1.100/24".as_ptr());
             }
             lvgl::lv_textarea_set_one_line(address_input, true);
+            lvgl::lv_obj_set_width(address_input, lvgl::lv_pct(100));
 
             // Gateway input
             let gateway_label = lvgl::lv_label_create(container);
@@ -199,6 +199,7 @@ impl InterfacePanel {
                 lvgl::lv_textarea_set_placeholder_text(gateway_input, c"192.168.1.1".as_ptr());
             }
             lvgl::lv_textarea_set_one_line(gateway_input, true);
+            lvgl::lv_obj_set_width(gateway_input, lvgl::lv_pct(100));
 
             // DNS inputs
             let dns_label = lvgl::lv_label_create(container);
@@ -235,6 +236,7 @@ impl InterfacePanel {
                 }
 
                 lvgl::lv_textarea_set_one_line(*dns_input, true);
+                lvgl::lv_obj_set_width(*dns_input, lvgl::lv_pct(100));
             }
 
             // TODO: Connect radio buttons to show/hide static_container
@@ -274,6 +276,7 @@ impl InterfacePanel {
             lvgl::lv_obj_set_flex_flow(main_container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
             lvgl::lv_obj_set_style_pad_all(main_container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_style_border_width(main_container, 0, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_radius(main_container, 0, lvgl::LV_STATE_DEFAULT);
         }
 
         // Create button container
@@ -284,6 +287,13 @@ impl InterfacePanel {
 
         unsafe {
             lvgl::lv_obj_set_size(button_container, lvgl::lv_pct(100), lvgl::LV_SIZE_CONTENT);
+            lvgl::lv_obj_set_flex_flow(button_container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
+            lvgl::lv_obj_set_flex_align(
+                button_container,
+                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_SPACE_BETWEEN,
+                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+            );
             lvgl::lv_obj_set_style_border_side(
                 button_container,
                 lvgl::lv_border_side_t_LV_BORDER_SIDE_BOTTOM,
@@ -297,7 +307,6 @@ impl InterfacePanel {
             let cancel_label = lvgl::lv_label_create(cancel_button);
             let cancel_text = translate!(c"Cancel");
             lvgl::lv_label_set_text(cancel_label, cancel_text.as_ptr() as *const _);
-            lvgl::lv_obj_set_align(cancel_button, lvgl::lv_align_t_LV_ALIGN_LEFT_MID);
 
             cancel_button
         };
@@ -307,7 +316,6 @@ impl InterfacePanel {
             let title_label = lvgl::lv_label_create(button_container);
             let title_text = c"Interface Configuration";
             lvgl::lv_label_set_text(title_label, title_text.as_ptr() as *const _);
-            lvgl::lv_obj_set_align(title_label, lvgl::lv_align_t_LV_ALIGN_CENTER);
         }
 
         // Apply button
@@ -316,7 +324,6 @@ impl InterfacePanel {
             let apply_label = lvgl::lv_label_create(apply_button);
             let apply_text = translate!(c"Apply");
             lvgl::lv_label_set_text(apply_label, apply_text.as_ptr() as *const _);
-            lvgl::lv_obj_set_align(apply_button, lvgl::lv_align_t_LV_ALIGN_RIGHT_MID);
             apply_button
         };
 

@@ -189,9 +189,9 @@ impl PasswordTab {
             lvgl::lv_obj_set_flex_flow(tab_container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
             lvgl::lv_obj_set_flex_align(
                 tab_container,
-                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
                 lvgl::lv_flex_align_t_LV_FLEX_ALIGN_START,
-                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_CENTER,
+                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_START,
+                lvgl::lv_flex_align_t_LV_FLEX_ALIGN_START,
             );
         }
 
@@ -219,6 +219,7 @@ impl PasswordTab {
             let current_password_text_area = lvgl::lv_textarea_create(tab_container);
             lvgl::lv_textarea_set_password_mode(current_password_text_area, true);
             lvgl::lv_textarea_set_one_line(current_password_text_area, true);
+            lvgl::lv_obj_set_width(current_password_text_area, lvgl::lv_pct(100));
 
             // New password
             let new_password_label = lvgl::lv_label_create(tab_container);
@@ -227,6 +228,7 @@ impl PasswordTab {
             let new_password_text_area = lvgl::lv_textarea_create(tab_container);
             lvgl::lv_textarea_set_password_mode(new_password_text_area, true);
             lvgl::lv_textarea_set_one_line(new_password_text_area, true);
+            lvgl::lv_obj_set_width(new_password_text_area, lvgl::lv_pct(100));
 
             // Confirm password
             let confirm_password_label = lvgl::lv_label_create(tab_container);
@@ -238,6 +240,7 @@ impl PasswordTab {
             let confirm_password_text_area = lvgl::lv_textarea_create(tab_container);
             lvgl::lv_textarea_set_password_mode(confirm_password_text_area, true);
             lvgl::lv_textarea_set_one_line(confirm_password_text_area, true);
+            lvgl::lv_obj_set_width(confirm_password_text_area, lvgl::lv_pct(100));
 
             // Change password button
             let change_password_button = lvgl::lv_button_create(tab_container);
@@ -249,13 +252,6 @@ impl PasswordTab {
             // Status label
             let password_status_label = lvgl::lv_label_create(tab_container);
             lvgl::lv_label_set_text(password_status_label, c"".as_ptr());
-            lvgl::lv_obj_align_to(
-                password_status_label,
-                change_password_button,
-                lvgl::lv_align_t_LV_ALIGN_OUT_BOTTOM_MID,
-                0,
-                10,
-            );
 
             (
                 current_password_text_area,
