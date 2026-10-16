@@ -88,8 +88,12 @@ jobs:
               - 'examples/wasm/**'
             localization:
               - *shared
-              - 'src/**'
-              - 'executables/**'
+              - '**/*.ftl'
+              - '**/*.json'
+              - '**/i18n/**'
+              - '**/localization/**'
+              - 'executables/wasm/src/host/translation/**'
+              - 'executables/wasm/tests/translation/**'
 
   localization:
     name: Translation coverage (${{ matrix.locale }})
