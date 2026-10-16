@@ -144,10 +144,10 @@ impl Shell {
             None => self.execute(input, paths).await,
         };
 
-        if let Err(error) = &result {
-            if !matches!(error, Error::ExitStatus(_)) {
-                writeln!(self.standard.standard_error, "{}", error).map_err(Error::from)?;
-            }
+        if let Err(error) = &result
+            && !matches!(error, Error::ExitStatus(_))
+        {
+            writeln!(self.standard.standard_error, "{}", error).map_err(Error::from)?;
         }
 
         result.map_err(Into::into)

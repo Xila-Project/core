@@ -652,6 +652,7 @@ mod tests {
             let kind = resolve_user_command(name).expect("boolean command must be a builtin");
             let mut context = HelpContext {
                 output: alloc::string::String::new(),
+                ..Default::default()
             };
             // Both commands ignore operands and options, as POSIX specifies.
             let mut options = getargs::Options::new(["--ignored", "operand"].into_iter());
