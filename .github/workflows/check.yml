@@ -121,6 +121,7 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: ci-full
     strategy:
       matrix:
         memory: [memory_32, memory_64]
@@ -229,6 +230,7 @@ jobs:
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: ci-full
     steps:
       - name: Check | Translation coverage gate
         if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
