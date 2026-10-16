@@ -27,7 +27,7 @@ impl UserCommand for HeadCommand {
 
 #[derive(GetArgs)]
 #[command(name = "head", about = "Print the first lines of a file.")]
-struct HeadArguments<'a> {
+pub(super) struct HeadArguments<'a> {
     path: &'a str,
     #[arg(short = 'n', long = "lines", default_value_t = 10)]
     lines: usize,

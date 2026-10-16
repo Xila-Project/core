@@ -44,6 +44,10 @@ pub enum Error<'a> {
     FailedToResolve(network::Error),
     FailedToCreateSocket(network::Error),
     Format,
+    InvalidSleepDuration,
+    FailedToSetPermissions(virtual_file_system::Error),
+    FailedToGetTaskUser(task::Error),
+    ExitStatus(NonZeroUsize),
     Syntax(crate::tokenizer::SyntaxError),
     FailedToWriteFile(virtual_file_system::Error),
 }
@@ -79,6 +83,7 @@ impl From<fmt::Error> for Error<'_> {
 impl Display for Error<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
+            Error::ExitStatus(status) => write!(formatter, "{status}"),
             Error::Syntax(error) => write!(
                 formatter,
                 translate!("Syntax error at byte {}: {}"),
@@ -114,6 +119,9 @@ impl Display for Error<'_> {
             }
             Error::MissingCommand => write!(formatter, translate!("Missing command")),
             Error::CommandNotFound => write!(formatter, translate!("Command not found")),
+            Error::FailedToGetTaskUser(error) => {
+                write!(formatter, translate!("Failed to get task user: {}"), error)
+            }
             Error::FailedToGetTaskIdentifier => {
                 write!(formatter, translate!("Failed to get task identifier"))
             }
@@ -208,6 +216,21 @@ impl Display for Error<'_> {
             Error::ArgumentParsing(error) => {
                 write!(formatter, translate!("Argument parsing error: {}"), error)
             }
+            Error::InvalidSleepDuration => {
+                write!(
+                    formatter,
+                    translate!(
+                        "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)"
+                    )
+                )
+            }
+            Error::FailedToSetPermissions(error) => {
+                write!(
+                    formatter,
+                    translate!("Failed to set permissions: {}"),
+                    error
+                )
+            }
             Error::Format => {
                 write!(formatter, translate!("Format error"))
             }
@@ -224,7 +247,10 @@ impl Display for Error<'_> {
 
 impl From<Error<'_>> for NonZeroUsize {
     fn from(error: Error<'_>) -> Self {
-        error.get_discriminant().into()
+        match error {
+            Error::ExitStatus(status) => status,
+            error => error.get_discriminant().into(),
+        }
     }
 }
 

@@ -29,7 +29,7 @@ impl UserCommand for ListCommand {
 
 #[derive(GetArgs)]
 #[command(name = "ls", about = "List a directory.")]
-struct ListArguments<'a> {
+pub(super) struct ListArguments<'a> {
     #[arg(default_value = "")]
     path: &'a str,
     #[arg(short = 'l', long = "long")]

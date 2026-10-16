@@ -476,3 +476,44 @@ async fn interactive_eof_executes_the_final_line_once() {
     let output = contents(&shell, "/shell-output").await;
     assert_eq!(output.matches("final\n").count(), 1);
 }
+
+#[xila::task::test(task_path = xila::task)]
+async fn utility_commands_compose_with_streaming_and_redirection() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("sleep 0 && help sleep | cat > /sleep-help")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        contents(&shell, "/sleep-help")
+            .await
+            .contains("Usage: sleep")
+    );
+    assert_eq!(shell.execute_line("mkdir /utility-tree; echo saved > /utility-tree/file; chmod 600 /utility-tree/file; tree -L 1 /utility-tree | cat > /tree-output").await.unwrap(), 0);
+    assert_eq!(
+        contents(&shell, "/tree-output").await,
+        "/utility-tree\n|-- file\n"
+    );
+    assert_eq!(
+        shell
+            .context
+            .virtual_file_system
+            .get_statistics(&"/utility-tree/file")
+            .await
+            .unwrap()
+            .permissions
+            .as_u16(),
+        0o600
+    );
+    assert_eq!(
+        shell
+            .execute_line("false 2> /false-errors || true")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/false-errors").await, "");
+}

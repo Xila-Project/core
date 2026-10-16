@@ -60,23 +60,23 @@ impl UserCommand for RemoveDirectoryCommand {
 
 #[derive(GetArgs)]
 #[command(name = "mkdir", about = "Create a directory.")]
-struct DirectoryCreateArguments<'a> {
+pub(super) struct DirectoryCreateArguments<'a> {
     path: &'a str,
 }
 
 #[derive(GetArgs)]
 #[command(name = "rmdir", about = "Remove a directory.")]
-struct DirectoryRemoveArguments<'a> {
+pub(super) struct DirectoryRemoveArguments<'a> {
     path: &'a str,
 }
 
 #[derive(GetArgs)]
 #[command(name = "rm", about = "Remove a file.")]
-struct FileRemoveArguments<'a> {
+pub(super) struct FileRemoveArguments<'a> {
     path: &'a str,
 }
 
-fn resolve_path<C: CommandContext>(
+pub(super) fn resolve_path<C: CommandContext>(
     context: &C,
     path: &str,
 ) -> Result<xila::file_system::PathOwned> {

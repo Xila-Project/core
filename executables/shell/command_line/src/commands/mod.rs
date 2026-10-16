@@ -1,5 +1,6 @@
 mod authentication;
 mod change_directory;
+mod chmod;
 mod clear;
 mod concatenate;
 mod directory;
@@ -9,12 +10,15 @@ mod environment_variables;
 mod execute;
 mod exit;
 mod head;
+mod help;
 mod ip;
 mod list;
 mod ping;
 mod print_working_directory;
+mod sleep;
 mod statistics;
 mod tail;
+mod tree;
 mod web_request;
 mod which;
 mod word_count;
@@ -31,6 +35,7 @@ use xila::{
 
 use self::{
     change_directory::ChangeDirectoryCommand,
+    chmod::ChmodCommand,
     clear::ClearCommand,
     concatenate::ConcatenateCommand,
     directory::{CreateDirectoryCommand, RemoveDirectoryCommand, RemoveFileCommand},
@@ -46,8 +51,10 @@ use self::{
     list::ListCommand,
     ping::PingCommand,
     print_working_directory::PrintWorkingDirectoryCommand,
+    sleep::SleepCommand,
     statistics::StatisticsCommand,
     tail::TailCommand,
+    tree::TreeCommand,
     web_request::WebRequestCommand,
     which::WhichCommand,
     word_count::WordCountCommand,
@@ -82,11 +89,14 @@ pub trait UserCommand {
 
 #[derive(Clone, Copy)]
 pub enum UserCommandKind {
+    True,
+    False,
     Exit,
     ChangeDirectory,
     Echo,
     List,
     Clear,
+    Chmod,
     Concatenate,
     Statistics,
     CreateDirectory,
@@ -104,34 +114,113 @@ pub enum UserCommandKind {
     WordCount,
     Head,
     Tail,
+    Sleep,
+    Help,
+    Tree,
 }
 
+/// Names and help text shared by command resolution and `help`.
+/// Register new built-ins here so they are discoverable in the shell.
+const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
+    (
+        "true",
+        UserCommandKind::True,
+        "Usage: true\nReturn success without output.",
+    ),
+    (
+        "false",
+        UserCommandKind::False,
+        "Usage: false\nReturn status 1 without output.",
+    ),
+    ("exit", UserCommandKind::Exit, exit::ExitArguments::HELP),
+    (
+        "cd",
+        UserCommandKind::ChangeDirectory,
+        change_directory::ChangeDirectoryArguments::HELP,
+    ),
+    (
+        "echo",
+        UserCommandKind::Echo,
+        "Usage: echo [TEXT]...\nPrint text and expand environment variables.",
+    ),
+    ("ls", UserCommandKind::List, list::ListArguments::HELP),
+    ("clear", UserCommandKind::Clear, clear::ClearArguments::HELP),
+    (
+        "cat",
+        UserCommandKind::Concatenate,
+        "Usage: cat [FILE]...\nPrint file contents.",
+    ),
+    (
+        "stat",
+        UserCommandKind::Statistics,
+        statistics::StatisticsArguments::HELP,
+    ),
+    (
+        "mkdir",
+        UserCommandKind::CreateDirectory,
+        directory::DirectoryCreateArguments::HELP,
+    ),
+    (
+        "export",
+        UserCommandKind::SetEnvironmentVariable,
+        environment_variables::SetEnvironmentVariableArguments::HELP,
+    ),
+    (
+        "unset",
+        UserCommandKind::RemoveEnvironmentVariable,
+        environment_variables::RemoveEnvironmentVariableArguments::HELP,
+    ),
+    (
+        "rm",
+        UserCommandKind::RemoveFile,
+        directory::FileRemoveArguments::HELP,
+    ),
+    (
+        "rmdir",
+        UserCommandKind::RemoveDirectory,
+        directory::DirectoryRemoveArguments::HELP,
+    ),
+    (
+        "web_request",
+        UserCommandKind::WebRequest,
+        "Usage: web_request [-h HEADER] [-m METHOD] [-b BODY] [-f BODY_FILE] URL\nSend an HTTP request.",
+    ),
+    (
+        "dns_resolve",
+        UserCommandKind::DnsResolve,
+        dns::DnsResolveArguments::HELP,
+    ),
+    ("ping", UserCommandKind::Ping, ping::PingArguments::HELP),
+    ("ip", UserCommandKind::Ip, ip::IpArguments::HELP),
+    (
+        "pwd",
+        UserCommandKind::PrintWorkingDirectory,
+        "Usage: pwd\nPrint the current directory.",
+    ),
+    (
+        "printenv",
+        UserCommandKind::PrintEnvironmentVariable,
+        environment_variables::GetEnvironmentVariableArguments::HELP,
+    ),
+    ("which", UserCommandKind::Which, which::WhichArguments::HELP),
+    (
+        "wc",
+        UserCommandKind::WordCount,
+        word_count::WordCountArguments::HELP,
+    ),
+    ("head", UserCommandKind::Head, head::HeadArguments::HELP),
+    ("tail", UserCommandKind::Tail, tail::TailArguments::HELP),
+    ("help", UserCommandKind::Help, help::HelpArguments::HELP),
+    ("tree", UserCommandKind::Tree, tree::TreeArguments::HELP),
+    ("sleep", UserCommandKind::Sleep, sleep::SleepArguments::HELP),
+    ("chmod", UserCommandKind::Chmod, chmod::ChmodArguments::HELP),
+];
+
 pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
-    match name {
-        "exit" => Some(UserCommandKind::Exit),
-        "cd" => Some(UserCommandKind::ChangeDirectory),
-        "echo" => Some(UserCommandKind::Echo),
-        "ls" => Some(UserCommandKind::List),
-        "clear" => Some(UserCommandKind::Clear),
-        "cat" => Some(UserCommandKind::Concatenate),
-        "stat" => Some(UserCommandKind::Statistics),
-        "mkdir" => Some(UserCommandKind::CreateDirectory),
-        "export" => Some(UserCommandKind::SetEnvironmentVariable),
-        "unset" => Some(UserCommandKind::RemoveEnvironmentVariable),
-        "rm" => Some(UserCommandKind::RemoveFile),
-        "rmdir" => Some(UserCommandKind::RemoveDirectory),
-        "web_request" => Some(UserCommandKind::WebRequest),
-        "dns_resolve" => Some(UserCommandKind::DnsResolve),
-        "ping" => Some(UserCommandKind::Ping),
-        "ip" => Some(UserCommandKind::Ip),
-        "pwd" => Some(UserCommandKind::PrintWorkingDirectory),
-        "printenv" => Some(UserCommandKind::PrintEnvironmentVariable),
-        "which" => Some(UserCommandKind::Which),
-        "wc" => Some(UserCommandKind::WordCount),
-        "head" => Some(UserCommandKind::Head),
-        "tail" => Some(UserCommandKind::Tail),
-        _ => None,
-    }
+    BUILTINS
+        .iter()
+        .find(|entry| entry.0 == name)
+        .map(|entry| entry.1)
 }
 
 pub async fn dispatch_user_command<'a, I, C>(
@@ -145,6 +234,8 @@ where
     C: CommandContext,
 {
     let result = match kind {
+        UserCommandKind::True => Ok(()),
+        UserCommandKind::False => Err(crate::Error::ExitStatus(core::num::NonZeroUsize::MIN)),
         UserCommandKind::Exit => ExitCommand.execute(context, options, paths).await,
         UserCommandKind::ChangeDirectory => {
             ChangeDirectoryCommand
@@ -154,6 +245,7 @@ where
         UserCommandKind::Echo => EchoCommand.execute(context, options, paths).await,
         UserCommandKind::List => ListCommand.execute(context, options, paths).await,
         UserCommandKind::Clear => ClearCommand.execute(context, options, paths).await,
+        UserCommandKind::Chmod => ChmodCommand.execute(context, options, paths).await,
         UserCommandKind::Concatenate => ConcatenateCommand.execute(context, options, paths).await,
         UserCommandKind::Statistics => StatisticsCommand.execute(context, options, paths).await,
         UserCommandKind::CreateDirectory => {
@@ -195,6 +287,9 @@ where
         UserCommandKind::WordCount => WordCountCommand.execute(context, options, paths).await,
         UserCommandKind::Head => HeadCommand.execute(context, options, paths).await,
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
+        UserCommandKind::Sleep => SleepCommand.execute(context, options, paths).await,
+        UserCommandKind::Help => help::HelpCommand.execute(context, options, paths).await,
+        UserCommandKind::Tree => TreeCommand.execute(context, options, paths).await,
     };
 
     match result {
@@ -221,16 +316,20 @@ where
 mod tests {
     use super::{UserCommandKind, resolve_user_command};
 
+    #[derive(Default)]
     struct HelpContext {
         output: alloc::string::String,
+        executable_context: Option<&'static xila::executable::ExecutableContext>,
+        task: Option<xila::task::TaskIdentifier>,
     }
 
     impl super::CommandContext for HelpContext {
         fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
-            panic!("help must not access OS services")
+            self.executable_context
+                .expect("help must not access OS services")
         }
         fn task_id(&self) -> xila::task::TaskIdentifier {
-            panic!("help must not access the current task")
+            self.task.expect("help must not access the current task")
         }
         fn current_directory(&self) -> &xila::file_system::Path {
             panic!("help must not access the filesystem")
@@ -268,6 +367,11 @@ mod tests {
 
         for (name, kind) in [
             ("head", UserCommandKind::Head),
+            (
+                "sleep",
+                resolve_user_command("sleep").expect("sleep builtin"),
+            ),
+            ("tree", UserCommandKind::Tree),
             ("exit", UserCommandKind::Exit),
             ("ping", UserCommandKind::Ping),
             ("ls", UserCommandKind::List),
@@ -275,6 +379,7 @@ mod tests {
             ("wc", UserCommandKind::WordCount),
             ("cd", UserCommandKind::ChangeDirectory),
             ("clear", UserCommandKind::Clear),
+            ("chmod", UserCommandKind::Chmod),
             ("mkdir", UserCommandKind::CreateDirectory),
             ("rm", UserCommandKind::RemoveFile),
             ("rmdir", UserCommandKind::RemoveDirectory),
@@ -288,6 +393,7 @@ mod tests {
         ] {
             let mut context = HelpContext {
                 output: alloc::string::String::new(),
+                ..Default::default()
             };
             let mut options = getargs::Options::new(["--help"].into_iter());
             {
@@ -304,6 +410,272 @@ mod tests {
                 ));
             }
             assert!(context.output.contains(&alloc::format!("Usage: {name}")));
+        }
+    }
+
+    #[xila::task::test(task_path = xila::task)]
+    async fn sleep_yields_then_completes_without_accessing_os_services() {
+        use core::{
+            future::{Future, poll_fn},
+            task::Poll,
+        };
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+            ..Default::default()
+        };
+        let mut options = getargs::Options::new(["5ms"].into_iter());
+        let mut future = core::pin::pin!(super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[]
+        ));
+        let start = std::time::Instant::now();
+        poll_fn(|task_context| {
+            assert!(matches!(future.as_mut().poll(task_context), Poll::Pending));
+            Poll::Ready(())
+        })
+        .await;
+        future.await.unwrap();
+        // Embassy truncates its clock to microseconds; allow for that rounding.
+        assert!(start.elapsed() >= core::time::Duration::from_millis(4));
+    }
+
+    #[xila::task::test(task_path = xila::task)]
+    async fn sleep_zero_completes_without_output() {
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+            ..Default::default()
+        };
+        let mut options = getargs::Options::new(["0"].into_iter());
+        super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[],
+        )
+        .await
+        .unwrap();
+        assert!(context.output.is_empty());
+    }
+
+    #[test]
+    fn sleep_rejects_invalid_duration_before_waiting() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+            ..Default::default()
+        };
+        let mut options = getargs::Options::new(["1.5s"].into_iter());
+        let mut future = core::pin::pin!(super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[]
+        ));
+        let mut task_context = Context::from_waker(Waker::noop());
+        assert!(matches!(
+            future.as_mut().poll(&mut task_context),
+            Poll::Ready(Err(crate::Error::InvalidSleepDuration))
+        ));
+    }
+
+    #[test]
+    fn help_lists_builtins_and_shows_usage_without_running_commands() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+        for (arguments, expected) in [
+            (alloc::vec![], "Built-in commands:"),
+            (alloc::vec!["exit"], "Usage: exit"),
+            (alloc::vec!["cat"], "Usage: cat"),
+            (alloc::vec!["echo"], "Usage: echo"),
+            (alloc::vec!["pwd"], "Usage: pwd"),
+            (alloc::vec!["web_request"], "Usage: web_request"),
+            (alloc::vec!["help"], "Usage: help"),
+            (alloc::vec!["--help"], "Usage: help"),
+        ] {
+            let mut context = HelpContext {
+                output: alloc::string::String::new(),
+                ..Default::default()
+            };
+            let mut options = getargs::Options::new(arguments.into_iter());
+            {
+                let mut future = core::pin::pin!(super::dispatch_user_command(
+                    resolve_user_command("help").expect("help must be registered"),
+                    &mut context,
+                    &mut options,
+                    &[]
+                ));
+                assert!(matches!(
+                    future
+                        .as_mut()
+                        .poll(&mut Context::from_waker(Waker::noop())),
+                    Poll::Ready(Ok(()))
+                ));
+            }
+            assert!(context.output.contains(expected), "{}", context.output);
+            if expected == "Built-in commands:" {
+                for name in ["help", "exit", "ls", "wc", "tail"] {
+                    assert!(context.output.lines().any(|line| line == name));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn help_rejects_unknown_commands_and_extra_arguments() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+        for arguments in [["nonexistent", ""], ["ls", "extra"], ["--unknown", ""]] {
+            let mut context = HelpContext {
+                output: alloc::string::String::new(),
+                ..Default::default()
+            };
+            let arguments = arguments
+                .into_iter()
+                .filter(|argument| !argument.is_empty());
+            let mut options = getargs::Options::new(arguments);
+            let mut future = core::pin::pin!(super::dispatch_user_command(
+                resolve_user_command("help").expect("help must be registered"),
+                &mut context,
+                &mut options,
+                &[]
+            ));
+            assert!(matches!(
+                future
+                    .as_mut()
+                    .poll(&mut Context::from_waker(Waker::noop())),
+                Poll::Ready(Err(_))
+            ));
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[xila::task::test(task_path = xila::task)]
+    async fn help_discovers_mounted_executables_and_ignores_nonexecutable_entries() {
+        use xila::{
+            executable::mount_executables,
+            file_system::{AccessFlags, CreateFlags, Flags, Path},
+            virtual_file_system::{Directory, File},
+        };
+        let standard = testing::initialize(false, false).await;
+        let executable_context = standard.context;
+        let vfs = &executable_context.virtual_file_system;
+        let task = executable_context
+            .task_manager
+            .get_current_task_identifier()
+            .await;
+        Directory::create(vfs, task, "/help_test").await.unwrap();
+        Directory::create(vfs, task, "/help_test/subdirectory")
+            .await
+            .unwrap();
+        let file = File::open(
+            vfs,
+            task,
+            "/help_test/plain_file",
+            Flags::new(AccessFlags::Write, Some(CreateFlags::Create), None),
+        )
+        .await
+        .unwrap();
+        file.close(vfs).await.unwrap();
+        mount_executables!(
+            executable_context,
+            vfs,
+            task,
+            &[("/help_test/tool", crate::ShellExecutable)]
+        )
+        .await
+        .unwrap();
+        let mut context = HelpContext {
+            executable_context: Some(executable_context),
+            task: Some(task),
+            ..Default::default()
+        };
+        let paths = [
+            Path::from_str("/help_missing"),
+            Path::from_str("/help_test"),
+        ];
+        let mut options = getargs::Options::new([].into_iter());
+        super::dispatch_user_command(
+            resolve_user_command("help").unwrap(),
+            &mut context,
+            &mut options,
+            &paths,
+        )
+        .await
+        .unwrap();
+        assert!(
+            context.output.lines().any(|line| line == "tool"),
+            "{}",
+            context.output
+        );
+        assert!(!context.output.contains("plain_file"));
+        assert!(!context.output.contains("subdirectory"));
+        context.output.clear();
+        let mut options = getargs::Options::new(["tool"].into_iter());
+        super::dispatch_user_command(
+            resolve_user_command("help").unwrap(),
+            &mut context,
+            &mut options,
+            &paths,
+        )
+        .await
+        .unwrap();
+        assert!(context.output.contains("external executable"));
+        for command in ["missing", "plain_file", "subdirectory"] {
+            let mut options = getargs::Options::new([command].into_iter());
+            assert!(matches!(
+                super::dispatch_user_command(
+                    resolve_user_command("help").unwrap(),
+                    &mut context,
+                    &mut options,
+                    &paths
+                )
+                .await,
+                Err(crate::Error::CommandNotFound)
+            ));
+        }
+    }
+
+    #[test]
+    fn boolean_commands_resolve_without_os_services_or_output() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+
+        for (name, succeeds) in [("true", true), ("false", false)] {
+            let kind = resolve_user_command(name).expect("boolean command must be a builtin");
+            let mut context = HelpContext {
+                output: alloc::string::String::new(),
+                ..Default::default()
+            };
+            // Both commands ignore operands and options, as POSIX specifies.
+            let mut options = getargs::Options::new(["--ignored", "operand"].into_iter());
+            {
+                let mut future = core::pin::pin!(super::dispatch_user_command(
+                    kind,
+                    &mut context,
+                    &mut options,
+                    &[]
+                ));
+                let mut task_context = Context::from_waker(Waker::noop());
+                let Poll::Ready(result) = future.as_mut().poll(&mut task_context) else {
+                    panic!("boolean commands must complete immediately");
+                };
+                assert_eq!(result.is_ok(), succeeds);
+                if let Err(error) = result {
+                    assert_eq!(core::num::NonZeroUsize::from(error).get(), 1);
+                }
+            }
+            assert!(context.output.is_empty());
         }
     }
 
@@ -396,6 +768,14 @@ mod tests {
         assert!(matches!(
             resolve_user_command("tail"),
             Some(UserCommandKind::Tail)
+        ));
+        assert!(matches!(
+            resolve_user_command("chmod"),
+            Some(UserCommandKind::Chmod)
+        ));
+        assert!(matches!(
+            resolve_user_command("tree"),
+            Some(UserCommandKind::Tree)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }

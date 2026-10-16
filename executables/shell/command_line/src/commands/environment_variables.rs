@@ -59,19 +59,19 @@ impl UserCommand for PrintEnvironmentVariableCommand {
     name = "export",
     about = "Set an environment variable using NAME=VALUE."
 )]
-struct SetEnvironmentVariableArguments<'a> {
+pub(super) struct SetEnvironmentVariableArguments<'a> {
     argument: &'a str,
 }
 
 #[derive(GetArgs)]
 #[command(name = "unset", about = "Remove an environment variable.")]
-struct RemoveEnvironmentVariableArguments<'a> {
+pub(super) struct RemoveEnvironmentVariableArguments<'a> {
     name: &'a str,
 }
 
 #[derive(GetArgs)]
 #[command(name = "printenv", about = "Print one or all environment variables.")]
-struct GetEnvironmentVariableArguments<'a> {
+pub(super) struct GetEnvironmentVariableArguments<'a> {
     #[arg(default_value = "")]
     key: &'a str,
 }

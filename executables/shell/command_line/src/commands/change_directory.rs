@@ -24,7 +24,7 @@ impl UserCommand for ChangeDirectoryCommand {
 
 #[derive(GetArgs)]
 #[command(name = "cd", about = "Change the current directory.")]
-struct ChangeDirectoryArguments<'a> {
+pub(super) struct ChangeDirectoryArguments<'a> {
     path: &'a str,
 }
 

@@ -347,12 +347,6 @@ impl Shell {
         let Some(name) = arguments.first() else {
             return 0;
         };
-        if name == "true" {
-            return 0;
-        }
-        if name == "false" {
-            return 1;
-        }
         let paths = self
             .context
             .task_manager
@@ -378,6 +372,7 @@ impl Shell {
         };
         match result {
             Ok(status) => status,
+            Err(Error::ExitStatus(status)) => status.get(),
             Err(error) => {
                 let status = if matches!(error, Error::CommandNotFound) {
                     127

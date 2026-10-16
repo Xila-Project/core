@@ -25,7 +25,7 @@ impl UserCommand for ExitCommand {
 
 #[derive(GetArgs)]
 #[command(name = "exit", about = "Exit the shell.")]
-struct ExitArguments {}
+pub(super) struct ExitArguments {}
 
 fn execute_exit<'a, I, C>(
     context: &mut C,
