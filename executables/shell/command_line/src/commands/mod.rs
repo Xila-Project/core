@@ -1,5 +1,6 @@
 mod authentication;
 mod change_directory;
+mod chmod;
 mod clear;
 mod concatenate;
 mod directory;
@@ -32,6 +33,7 @@ use xila::{
 
 use self::{
     change_directory::ChangeDirectoryCommand,
+    chmod::ChmodCommand,
     clear::ClearCommand,
     concatenate::ConcatenateCommand,
     directory::{CreateDirectoryCommand, RemoveDirectoryCommand, RemoveFileCommand},
@@ -89,6 +91,7 @@ pub enum UserCommandKind {
     Echo,
     List,
     Clear,
+    Chmod,
     Concatenate,
     Statistics,
     CreateDirectory,
@@ -116,6 +119,7 @@ pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
         "echo" => Some(UserCommandKind::Echo),
         "ls" => Some(UserCommandKind::List),
         "clear" => Some(UserCommandKind::Clear),
+        "chmod" => Some(UserCommandKind::Chmod),
         "cat" => Some(UserCommandKind::Concatenate),
         "stat" => Some(UserCommandKind::Statistics),
         "mkdir" => Some(UserCommandKind::CreateDirectory),
@@ -158,6 +162,7 @@ where
         UserCommandKind::Echo => EchoCommand.execute(context, options, paths).await,
         UserCommandKind::List => ListCommand.execute(context, options, paths).await,
         UserCommandKind::Clear => ClearCommand.execute(context, options, paths).await,
+        UserCommandKind::Chmod => ChmodCommand.execute(context, options, paths).await,
         UserCommandKind::Concatenate => ConcatenateCommand.execute(context, options, paths).await,
         UserCommandKind::Statistics => StatisticsCommand.execute(context, options, paths).await,
         UserCommandKind::CreateDirectory => {
@@ -281,6 +286,7 @@ mod tests {
             ("wc", UserCommandKind::WordCount),
             ("cd", UserCommandKind::ChangeDirectory),
             ("clear", UserCommandKind::Clear),
+            ("chmod", UserCommandKind::Chmod),
             ("mkdir", UserCommandKind::CreateDirectory),
             ("rm", UserCommandKind::RemoveFile),
             ("rmdir", UserCommandKind::RemoveDirectory),
@@ -469,6 +475,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("tail"),
             Some(UserCommandKind::Tail)
+        ));
+        assert!(matches!(
+            resolve_user_command("chmod"),
+            Some(UserCommandKind::Chmod)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }

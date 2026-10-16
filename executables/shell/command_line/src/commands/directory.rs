@@ -76,7 +76,7 @@ struct FileRemoveArguments<'a> {
     path: &'a str,
 }
 
-fn resolve_path<C: CommandContext>(
+pub(super) fn resolve_path<C: CommandContext>(
     context: &C,
     path: &str,
 ) -> Result<xila::file_system::PathOwned> {

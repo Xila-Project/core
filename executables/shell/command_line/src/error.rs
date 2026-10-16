@@ -45,6 +45,7 @@ pub enum Error<'a> {
     FailedToCreateSocket(network::Error),
     Format,
     InvalidSleepDuration,
+    FailedToSetPermissions(virtual_file_system::Error),
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -205,6 +206,13 @@ impl Display for Error<'_> {
                     translate!(
                         "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)"
                     )
+                )
+            }
+            Error::FailedToSetPermissions(error) => {
+                write!(
+                    formatter,
+                    translate!("Failed to set permissions: {}"),
+                    error
                 )
             }
             Error::Format => {
