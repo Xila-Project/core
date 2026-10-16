@@ -145,6 +145,26 @@ async fn simultaneous_writers_are_rejected_and_unmount_releases_the_lock() {
 }
 
 #[wasm_bindgen_test]
+async fn stops_writes_before_sync_and_unmount() {
+    let name = name();
+    let drive = DriveDevice::new(Path::from_str(&name), 512).await.unwrap();
+    drive.write(b"saved", 0).unwrap();
+
+    drive.stop_writes();
+
+    assert_eq!(drive.write(b"lost", 0), Err(Error::RessourceBusy));
+    drive.sync().await.unwrap();
+    drive.unmount().unwrap();
+
+    let reopened = DriveDevice::new(Path::from_str(&name), 512).await.unwrap();
+    let mut contents = [0; 5];
+    reopened.read(&mut contents, 0).unwrap();
+    assert_eq!(&contents, b"saved");
+    reopened.unmount().unwrap();
+    remove(&name).await;
+}
+
+#[wasm_bindgen_test]
 async fn writes_during_a_save_are_saved_by_the_next_sync() {
     use std::{
         future::Future,

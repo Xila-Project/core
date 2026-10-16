@@ -101,13 +101,21 @@ claim of full WASI/graphics compatibility or support across all browsers.
 
 ## Persistent storage
 
-The example stores its 16 MiB MBR/LittleFS disk in the origin-private file
-`xila_drive.img`. Files, configuration, and credentials survive reloads on the
-same origin. The default administrator with an empty password is created only
-on a fresh disk. Existing users/groups are loaded even if the administrator
+The example stores each 16 MiB MBR/LittleFS disk as an origin-private file.
+Open the left Help panel to select a disk, create a date-named disk, or remove
+an unused disk. New images are named `xila_YYYY-MM-DD.img`; repeated creations
+on the same date receive a numeric suffix. The existing `xila_drive.img` remains
+available as the default disk, preserving data from earlier versions. The
+selected disk is remembered for this browser origin.
+
+Switching disks stops new writes, commits pending changes, releases the current
+disk's Web Lock, and reloads Xila on the selected image. A disk open in another
+tab cannot be removed. Removing a disk asks for confirmation and permanently
+deletes its files. The default administrator with an empty password is created
+only on a fresh disk. Existing users/groups are loaded even if the administrator
 account was removed. Invalid MBRs or filesystem mount errors stop boot without
-reformatting an existing image. A Web Lock allows only one Xila tab to open
-this disk at a time; close the first tab before opening another.
+reformatting an existing image. A Web Lock allows only one Xila tab to open a
+given disk at a time.
 
 Synchronous OPFS handles are available only in workers, while this example's
 UI and filesystem run on the browser main thread. The drive therefore keeps a
@@ -147,3 +155,5 @@ cargo test -p drivers_wasm --target wasm32-unknown-unknown --test opfs
 For a non-default browser binary, set `WASM_BINDGEN_TEST_WEBDRIVER_JSON` to a JSON
 file containing `{"goog:chromeOptions":{"binary":"/path/to/chromium"}}`.
 These tests use real OPFS files, including MBR/LittleFS save/reopen coverage.
+The disk-name and collision rules can also be tested with
+`node --test examples/wasm/tests/disk_manager.test.mjs`.

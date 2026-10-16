@@ -10,6 +10,7 @@
 compile_error!("The OPFS cache driver requires single-threaded browser WASM");
 
 use alloc::sync::Arc;
+use core::sync::atomic::{AtomicBool, Ordering};
 use file_system::{
     ControlCommand, ControlCommandIdentifier, DirectBaseOperations, DirectBlockDevice, Error,
     MountOperations, Path, Position, Size,
@@ -127,6 +128,7 @@ unsafe impl Sync for Inner {}
 struct State {
     inner: MutexMountWrapper<CriticalSectionRawMutex, Inner>,
     saving: Mutex<CriticalSectionRawMutex, ()>,
+    accepting_writes: AtomicBool,
 }
 
 impl State {
@@ -238,6 +240,7 @@ impl DriveDevice {
                     _lease: lease,
                 }),
                 saving: Mutex::new(()),
+                accepting_writes: AtomicBool::new(true),
             }),
             is_new,
         ))
@@ -264,6 +267,17 @@ impl DriveDevice {
         });
         completion.wait().await
     }
+
+    /// Temporarily reject writes so the browser host can safely save and
+    /// release this disk before switching to another image.
+    pub fn stop_writes(&self) {
+        self.0.accepting_writes.store(false, Ordering::Release);
+    }
+
+    /// Resume writes when a requested disk switch could not be saved.
+    pub fn resume_writes(&self) {
+        self.0.accepting_writes.store(true, Ordering::Release);
+    }
 }
 
 impl DirectBaseOperations for DriveDevice {
@@ -283,6 +297,9 @@ impl DirectBaseOperations for DriveDevice {
     }
 
     fn write(&self, buffer: &[u8], position: Size) -> file_system::Result<usize> {
+        if !self.0.accepting_writes.load(Ordering::Acquire) {
+            return Err(Error::RessourceBusy);
+        }
         let mut inner = self.0.inner.try_get()?;
         let position = u32::try_from(position).map_err(|_| Error::InvalidParameter)?;
         let size = inner.data.length();

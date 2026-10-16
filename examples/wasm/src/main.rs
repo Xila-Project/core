@@ -1,5 +1,40 @@
 #![no_std]
 
+extern crate alloc;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+export function selectedXilaDisk() {
+    const selected = localStorage.getItem('xila.selectedDisk');
+    return selected === 'xila_drive.img' || /^xila_\d{4}-\d{2}-\d{2}(?:-\d+)?\.img$/.test(selected)
+        ? selected
+        : 'xila_drive.img';
+}
+export function xilaDiskManagerReady(name) {
+    window.xilaDiskManagerReady?.(name);
+}
+export function xilaDiskManagerError(message) {
+    window.xilaDiskManagerError?.(message);
+}
+export function reloadXilaForDiskSwitch() {
+    window.location.reload();
+}
+"#)]
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = selectedXilaDisk)]
+    fn selected_xila_disk() -> alloc::string::String;
+
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = xilaDiskManagerReady)]
+    fn disk_manager_ready(name: &str);
+
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = xilaDiskManagerError)]
+    fn disk_manager_error(message: &str);
+
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = reloadXilaForDiskSwitch)]
+    fn reload_xila_for_disk_switch();
+}
+
 #[cfg(target_arch = "wasm32")]
 mod storage;
 
@@ -15,12 +50,12 @@ static TASK_MANAGER: xila::task::Manager = xila::task::Manager::new();
 async fn main(task_manager: &'static xila::task::Manager) {
     drivers_wasm::memory::instantiate_global_allocator!();
 
-    extern crate alloc;
-
     use alloc::boxed::Box;
     use alloc::string::ToString;
     use alloc::vec;
+    use core::sync::atomic::{AtomicBool, Ordering};
     use drivers_wasm::devices::graphics::GraphicsDevices;
+    use wasm_bindgen::{JsCast, closure::Closure};
     use xila::bootsplash::Bootsplash;
     use xila::executable::{self, Standard, mount_executables};
     use xila::file_system::mbr::Mbr;
@@ -87,15 +122,30 @@ async fn main(task_manager: &'static xila::task::Manager) {
 
     // - Initialize the file system
     // Open the origin's persistent disk before synchronous MBR/LittleFS setup.
-    let drive: &'static drivers_wasm::devices::DriveDevice = Box::leak(Box::new(
-        drivers_wasm::devices::DriveDevice::new(Path::new("xila_drive.img"), 16 * 1024 * 1024)
-            .await
-            .expect("Failed to open OPFS disk (use HTTPS/localhost and close other Xila tabs)"),
-    ));
+    let selected_disk = selected_xila_disk();
+    let selected_disk_path = Path::from_str(&selected_disk);
+    let drive: &'static drivers_wasm::devices::DriveDevice =
+        match drivers_wasm::devices::DriveDevice::new(selected_disk_path, 16 * 1024 * 1024).await {
+            Ok(drive) => Box::leak(Box::new(drive)),
+            Err(error) => {
+                let message = alloc::format!("Could not open {selected_disk}: {error}");
+                disk_manager_error(&message);
+                panic!("{message}");
+            }
+        };
 
     // Format only an empty disk; mount errors on saved images are fatal.
-    let file_system = storage::mount(drive)
-        .expect("Failed to mount OPFS disk; existing data was not reformatted");
+    let file_system = match storage::mount(drive) {
+        Ok(file_system) => file_system,
+        Err(error) => {
+            if drive.sync().await.is_ok() {
+                let _ = drive.unmount();
+            }
+            let message = alloc::format!("Could not mount {selected_disk}: {error}");
+            disk_manager_error(&message);
+            panic!("{message}; saved data was not reformatted");
+        }
+    };
 
     // Print MBR information
     let mbr = Mbr::read_from_device(drive).unwrap();
@@ -326,7 +376,6 @@ async fn main(task_manager: &'static xila::task::Manager) {
 
     // Main-thread OPFS commits are asynchronous. Keep one autosave running and
     // explicitly join it before the final shutdown save.
-    use core::sync::atomic::{AtomicBool, Ordering};
     let autosave_running: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(true)));
     let (autosave, _) = task_manager
         .spawn(task, "OPFS autosave", None, move |_| async move {
@@ -342,6 +391,63 @@ async fn main(task_manager: &'static xila::task::Manager) {
         })
         .await
         .unwrap();
+
+    let switch_requested: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
+    let runtime_running: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(true)));
+    let disk_name_for_switch = selected_disk.clone();
+    let switch_callback: Closure<dyn FnMut()> = Closure::wrap(Box::new(move || {
+        switch_requested.store(true, Ordering::Release);
+    }) as Box<dyn FnMut()>);
+    web_sys::window()
+        .unwrap()
+        .add_event_listener_with_callback(
+            "xila-disk-switch",
+            switch_callback.as_ref().unchecked_ref(),
+        )
+        .unwrap();
+    switch_callback.forget();
+
+    let (lifecycle, _) = task_manager
+        .spawn(task, "Disk manager", None, move |_| async move {
+            loop {
+                if switch_requested.swap(false, Ordering::AcqRel) {
+                    // Quiesce the block device before the first commit. If it
+                    // fails, leave autosave running and let the user retry.
+                    drive.stop_writes();
+                    if let Err(error) = drive.sync().await {
+                        drive.resume_writes();
+                        let message =
+                            alloc::format!("Could not save {disk_name_for_switch}: {error}");
+                        disk_manager_error(&message);
+                        continue;
+                    }
+
+                    autosave_running.store(false, Ordering::Release);
+                    autosave.join().await;
+                    drive
+                        .sync()
+                        .await
+                        .expect("Failed to commit disk before switching");
+                    drive
+                        .unmount()
+                        .expect("Failed to release disk before switching");
+                    reload_xila_for_disk_switch();
+                    return;
+                }
+
+                if !runtime_running.load(Ordering::Acquire) {
+                    break;
+                }
+
+                task::Manager::sleep(Duration::from_millis(100)).await;
+            }
+
+            autosave_running.store(false, Ordering::Release);
+            autosave.join().await;
+        })
+        .await
+        .unwrap();
+    disk_manager_ready(&selected_disk);
 
     // - - Set the environment variables
     task_manager
@@ -381,8 +487,8 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .join()
     .await;
 
-    autosave_running.store(false, Ordering::Relaxed);
-    autosave.join().await;
+    runtime_running.store(false, Ordering::Release);
+    lifecycle.join().await;
     virtual_file_system.uninitialize().await;
     drive
         .sync()
