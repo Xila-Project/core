@@ -120,9 +120,7 @@ jobs:
   wasm-translation:
     name: WASM translation (${{ matrix.memory }})
     needs: [changes]
-    # memory_64 runs only in the merge queue and on main; PRs run memory_32
-    # only. Job-level skips satisfy required checks (see note above).
-    if: ${{ !cancelled() && (matrix.memory == 'memory_32' || github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -149,7 +147,6 @@ jobs:
           --fail-under-lines 100 --fail-under-functions 100
 
       - name: Check | Translation Miri
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: >-
           cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
@@ -162,7 +159,7 @@ jobs:
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | 64-bit guest on 32-bit host (Miri)
-        if: matrix.memory == 'memory_64' && (github.event_name == 'merge_group' || github.ref == 'refs/heads/main')
+        if: matrix.memory == 'memory_64'
         run: >-
           cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
@@ -170,7 +167,7 @@ jobs:
           --target i686-unknown-linux-gnu
 
       - name: Check | Little-endian ABI on big-endian host (Miri)
-        if: matrix.memory == 'memory_32' && (github.event_name == 'merge_group' || github.ref == 'refs/heads/main')
+        if: matrix.memory == 'memory_32'
         run: >-
           cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
           --manifest-path executables/wasm/tests/translation/Cargo.toml
@@ -254,19 +251,16 @@ jobs:
           cargo test --manifest-path tools/profiling/Cargo.toml
 
       - name: Check | Profiling instrumentation
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: |
           cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
           cargo test -p native_example --bin native_example --features profiling,heaptrack
 
       - name: Run | Test
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: |
           rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
           cargo make coverage --lcov --output-path lcov.info
 
       - name: Upload | Coverage to Codecov
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
@@ -305,7 +299,6 @@ jobs:
           SDL_AUDIODRIVER=dummy cargo +${XILA_RUST_TOOLCHAIN} test -p drivers_native --features audio --lib devices::audio::tests -- --include-ignored
 
       - name: Check | Documentation (Host)
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
 
       - name: Build | Example (Native)
@@ -333,7 +326,6 @@ jobs:
         run: cargo +${XILA_RUST_TOOLCHAIN} check -p audio --target wasm32-unknown-unknown
 
       - name: Check | Documentation (Guest)
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
       - name: Build | Bundled applications (WASI)
@@ -357,5 +349,4 @@ jobs:
             trunk-tools-
 
       - name: Build | Example (WASM)
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         run: cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build
