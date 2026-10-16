@@ -22,6 +22,7 @@
   "Failed to read environment variable: {}": "Failed to read environment variable: {}",
   "Failed to read file: {}": "Failed to read file: {}",
   "Failed to remove directory: {}": "Failed to remove directory: {}",
+  "Failed to rename path: {}": "Failed to rename path: {}",
   "Failed to remove environment variable: {}": "Failed to remove environment variable: {}",
   "Failed to resolve domain '{}' for {} records: {}": "Failed to resolve domain '{}' for {} records: {}",
   "Failed to resolve domain: {}": "Failed to resolve domain: {}",

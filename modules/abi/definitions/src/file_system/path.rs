@@ -63,6 +63,7 @@ abi_unsafe_function! {
     ///
     /// This function is unsafe because it dereferences raw pointers.
     fn xila_file_system_rename(
+        task: XilaTaskIdentifier,
         old_path: *const c_char,
         new_path: *const c_char,
     ) -> XilaFileSystemResult {
@@ -71,7 +72,11 @@ abi_unsafe_function! {
 
         // Debug: Renaming files
 
-        block_on(crate::runtime_context().virtual_file_system.rename(&old_path, &new_path))?;
+        block_on(
+            crate::runtime_context()
+                .virtual_file_system
+                .rename(task.into(), &old_path, &new_path),
+        )?;
         Ok(())
     }
 }

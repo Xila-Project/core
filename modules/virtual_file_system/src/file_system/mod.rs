@@ -670,6 +670,7 @@ impl VirtualFileSystem {
 
     pub async fn rename(
         &self,
+        task: TaskIdentifier,
         old_path: &impl AsRef<Path>,
         new_path: &impl AsRef<Path>,
     ) -> Result<()> {
@@ -683,6 +684,21 @@ impl VirtualFileSystem {
 
         if !ptr::eq(old_file_system, new_file_system) {
             return Err(Error::InvalidPath);
+        }
+
+        let (_, user, _) = self.get_time_user_group(task).await?;
+
+        for parent_path in [
+            old_relative_path.go_parent().ok_or(Error::InvalidPath)?,
+            new_relative_path.go_parent().ok_or(Error::InvalidPath)?,
+        ] {
+            self.check_permissions(
+                old_file_system.file_system,
+                parent_path,
+                Permission::Write,
+                user,
+            )
+            .await?;
         }
 
         poll(|| {

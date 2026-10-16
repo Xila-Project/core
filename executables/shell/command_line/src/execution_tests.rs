@@ -594,7 +594,6 @@ async fn realpath_resolves_relative_and_multiple_existing_operands() {
         contents(&shell, "/shell-output").await,
         "/realpath\n/realpath/file\n/realpath/file\n"
     );
-
     assert_eq!(shell.execute_line("help realpath").await.unwrap(), 0);
     assert!(
         contents(&shell, "/shell-output")
@@ -608,4 +607,203 @@ async fn realpath_rejects_missing_operands() {
     let mut shell = shell().await;
     assert_eq!(shell.execute_line("realpath /missing").await.unwrap(), 1);
     assert_eq!(contents(&shell, "/shell-output").await, "");
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn mv_renames_a_file_to_a_new_path() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("echo moved > /mv-source; mv /mv-source /mv-destination")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/mv-destination").await, "moved\n");
+    assert!(
+        shell
+            .context
+            .virtual_file_system
+            .get_statistics(&"/mv-source")
+            .await
+            .is_err()
+    );
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn mv_rejects_invalid_operands_and_reports_rename_errors() {
+    let mut shell = shell().await;
+    assert_eq!(shell.execute_line("mv").await.unwrap(), 1);
+    assert_eq!(shell.execute_line("mv source").await.unwrap(), 1);
+    assert_eq!(
+        shell
+            .execute_line("mv source destination extra")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        shell
+            .execute_line("mv -f source destination")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        shell
+            .execute_line("echo source > /mv-error-source; echo destination > /mv-error-destination; mv /missing /new")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        shell
+            .execute_line("mv /mv-error-source /mv-error-destination")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/mv-error-destination").await, "source\n");
+    assert!(
+        shell
+            .context
+            .virtual_file_system
+            .get_statistics(&"/mv-error-source")
+            .await
+            .is_err()
+    );
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn mv_checks_write_permission_on_both_parent_directories() {
+    use xila::users::{GroupIdentifier, UserIdentifier};
+
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("mkdir /mv-protected; echo protected > /mv-protected/source")
+            .await
+            .unwrap(),
+        0
+    );
+
+    let owner = UserIdentifier::new(265);
+    let other = UserIdentifier::new(266);
+    for (user, name) in [(owner, "mv_owner"), (other, "mv_other")] {
+        shell
+            .context
+            .users_manager
+            .add_user(user, name, GroupIdentifier::ROOT)
+            .await
+            .unwrap();
+    }
+
+    let vfs = shell.context.virtual_file_system;
+    vfs.set_ownership(shell.task, "/mv-protected", Some(owner), None)
+        .await
+        .unwrap();
+    vfs.set_permissions(
+        shell.task,
+        "/mv-protected",
+        xila::file_system::Permissions::from_octal(0o700).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("mkdir /mv-public; echo public > /mv-public/source")
+            .await
+            .unwrap(),
+        0
+    );
+    vfs.set_ownership(shell.task, "/mv-public", Some(other), None)
+        .await
+        .unwrap();
+    vfs.set_permissions(
+        shell.task,
+        "/mv-public",
+        xila::file_system::Permissions::from_octal(0o700).unwrap(),
+    )
+    .await
+    .unwrap();
+
+    shell
+        .context
+        .task_manager
+        .set_user(shell.task, other)
+        .await
+        .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("mv /mv-protected/source /mv-protected/denied")
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(vfs.get_statistics(&"/mv-protected/source").await.is_ok());
+    assert_eq!(
+        shell
+            .execute_line("mv /mv-public/source /mv-protected/denied")
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(vfs.get_statistics(&"/mv-public/source").await.is_ok());
+
+    shell
+        .context
+        .task_manager
+        .set_user(shell.task, owner)
+        .await
+        .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("mv /mv-protected/source /mv-protected/allowed")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(vfs.get_statistics(&"/mv-protected/source").await.is_err());
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn rename_checks_parent_paths_relative_to_the_mounted_filesystem() {
+    let shell = shell().await;
+    let device = xila::file_system::MemoryDevice::<512>::new_static(1024 * 512);
+    little_fs::FileSystem::format(device, 256).unwrap();
+    let file_system = little_fs::FileSystem::new(device, 256).unwrap();
+    xila::file_system::FileSystemOperations::set_attributes(
+        &file_system,
+        xila::file_system::Path::ROOT,
+        &xila::file_system::Attributes::new()
+            .set_user(xila::users::UserIdentifier::ROOT)
+            .set_group(xila::users::GroupIdentifier::ROOT)
+            .set_permissions(xila::file_system::Permissions::ALL_FULL),
+    )
+    .unwrap();
+    let source_path = xila::file_system::Path::from_str("/source");
+    xila::file_system::FileSystemOperations::create_file(&file_system, source_path).unwrap();
+    xila::file_system::FileSystemOperations::set_attributes(
+        &file_system,
+        source_path,
+        &xila::file_system::Attributes::new()
+            .set_user(xila::users::UserIdentifier::ROOT)
+            .set_group(xila::users::GroupIdentifier::ROOT)
+            .set_permissions(xila::file_system::Permissions::FILE_DEFAULT)
+            .set_kind(xila::file_system::Kind::File),
+    )
+    .unwrap();
+
+    let vfs = shell.context.virtual_file_system;
+    vfs.mount_file_system(file_system, "/mv-nested-mount", shell.task)
+        .await
+        .unwrap();
+
+    vfs.rename(
+        shell.task,
+        &"/mv-nested-mount/source",
+        &"/mv-nested-mount/destination",
+    )
+    .await
+    .unwrap();
 }
