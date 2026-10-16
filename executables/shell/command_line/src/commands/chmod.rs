@@ -121,11 +121,15 @@ mod filesystem_tests {
         fn stop(&mut self) {
             panic!("unexpected exit")
         }
-        fn write_out_fmt(&mut self, _: core::fmt::Arguments<'_>) -> Result<()> {
+        async fn write_out_fmt(&mut self, _: core::fmt::Arguments<'_>) -> Result<()> {
             Ok(())
         }
-        async fn write_out(&mut self, _: &[u8]) {}
-        async fn write_out_line(&mut self, _: &[u8]) {}
+        async fn write_out(&mut self, _: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        async fn write_out_line(&mut self, _: &[u8]) -> Result<()> {
+            Ok(())
+        }
         fn standard(&mut self) -> &mut Standard<'static> {
             &mut self.standard
         }

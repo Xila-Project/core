@@ -125,9 +125,14 @@ impl CanvasScreenDevice {
         let window_clone = window.clone();
         let closure = Closure::wrap(Box::new(move |_: web_sys::Event| {
             if let Some((width, height)) = get_window_size(&window_clone) {
-                canvas.set_width(width);
-                canvas.set_height(height);
-                block_on(device_clone.write()).was_resized = true;
+                // Setting either dimension clears the bitmap even when its
+                // value is unchanged. LVGL does not redraw for an unchanged
+                // resolution, so ignore redundant browser resize events.
+                if canvas.width() != width || canvas.height() != height {
+                    canvas.set_width(width);
+                    canvas.set_height(height);
+                    block_on(device_clone.write()).was_resized = true;
+                }
             } else {
                 log::error!("Failed to get window size");
             }

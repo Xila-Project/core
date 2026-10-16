@@ -16,7 +16,9 @@ impl UserCommand for PrintWorkingDirectoryCommand {
         C: CommandContext,
     {
         let current_directory = context.current_directory_owned();
-        context.write_out_fmt(format_args!("{}\n", current_directory.as_str()))?;
+        context
+            .write_out_fmt(format_args!("{}\n", current_directory.as_str()))
+            .await?;
         Ok(())
     }
 }

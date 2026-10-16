@@ -104,7 +104,7 @@ where
     .map_err(Error::FailedToOpenFile)?;
 
     let output = read_head_bytes(file, lines).await?;
-    context.write_out(&output).await;
+    context.write_out(&output).await?;
 
     Ok(())
 }

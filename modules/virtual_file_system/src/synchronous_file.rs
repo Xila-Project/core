@@ -1,4 +1,4 @@
-use core::{fmt::Debug, mem::forget};
+use core::fmt::Debug;
 
 use crate::{Error, ItemStatic, Result, VirtualFileSystem};
 use alloc::{vec, vec::Vec};
@@ -13,9 +13,10 @@ use task::block_on;
 use users::{GroupIdentifier, UserIdentifier};
 
 pub struct SynchronousFile<'a> {
+    closed: bool,
     virtual_file_system: &'a VirtualFileSystem,
     pub(crate) item: ItemStatic,
-    pub(crate) position: Size,
+    cursor: crate::cursor::Cursor,
     pub(crate) flags: Flags,
     pub(crate) context: Context,
 }
@@ -24,7 +25,10 @@ impl Debug for SynchronousFile<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SynchronousFile")
             .field("item", &self.item)
-            .field("position", &self.position)
+            .field(
+                "position",
+                &self.cursor.update(|position| Ok((position, position))),
+            )
             .field("flags", &self.flags)
             .finish()
     }
@@ -39,9 +43,10 @@ impl<'a> SynchronousFile<'a> {
         context: Context,
     ) -> Self {
         Self {
+            closed: false,
             virtual_file_system,
             item,
-            position,
+            cursor: crate::cursor::Cursor::new(position),
             flags,
             context,
         }
@@ -59,13 +64,15 @@ impl<'a> SynchronousFile<'a> {
     }
 
     pub fn set_position(&mut self, position: &Position) -> Result<Size> {
-        self.position = self
+        let operations = self
             .item
             .as_base_operations()
-            .ok_or(Error::UnsupportedOperation)?
-            .set_position(&mut self.context, self.position, position)?;
-
-        Ok(self.position)
+            .ok_or(Error::UnsupportedOperation)?;
+        let context = &mut self.context;
+        self.cursor.update(|current| {
+            let next = operations.set_position(context, current, position)?;
+            Ok((next, next))
+        })
     }
 
     // - Operations
@@ -74,32 +81,30 @@ impl<'a> SynchronousFile<'a> {
         if !self.flags.get_access().contains(AccessFlags::Write) {
             return Err(Error::InvalidMode);
         }
-
-        let size = self
+        let operations = self
             .item
             .as_base_operations()
-            .ok_or(Error::UnsupportedOperation)?
-            .write(&mut self.context, buffer, self.position)?;
-
-        self.position += size as Size;
-
-        Ok(size)
+            .ok_or(Error::UnsupportedOperation)?;
+        let context = &mut self.context;
+        self.cursor.update(|position| {
+            let count = operations.write(context, buffer, position)?;
+            Ok((count, position + count as Size))
+        })
     }
 
     pub fn write_vectored(&mut self, buffers: &[&[u8]]) -> Result<usize> {
         if !self.flags.get_access().contains(AccessFlags::Write) {
             return Err(Error::InvalidMode);
         }
-
-        let size = self
+        let operations = self
             .item
             .as_base_operations()
-            .ok_or(Error::UnsupportedOperation)?
-            .write_vectored(&mut self.context, buffers, self.position)?;
-
-        self.position += size as Size;
-
-        Ok(size)
+            .ok_or(Error::UnsupportedOperation)?;
+        let context = &mut self.context;
+        self.cursor.update(|position| {
+            let count = operations.write_vectored(context, buffers, position)?;
+            Ok((count, position + count as Size))
+        })
     }
 
     pub fn write_line(&mut self, buffer: &[u8]) -> Result<usize> {
@@ -109,27 +114,33 @@ impl<'a> SynchronousFile<'a> {
     }
 
     pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let size = self
+        if !self.flags.get_access().contains(AccessFlags::Read) {
+            return Err(Error::InvalidMode);
+        }
+        let operations = self
             .item
             .as_base_operations()
-            .ok_or(Error::UnsupportedOperation)?
-            .read(&mut self.context, buffer, self.position)?;
-
-        self.position += size as Size;
-
-        Ok(size)
+            .ok_or(Error::UnsupportedOperation)?;
+        let context = &mut self.context;
+        self.cursor.update(|position| {
+            let count = operations.read(context, buffer, position)?;
+            Ok((count, position + count as Size))
+        })
     }
 
     pub fn read_until(&mut self, buffer: &mut [u8], delimiter: &[u8]) -> Result<usize> {
-        let size = self
+        if !self.flags.get_access().contains(AccessFlags::Read) {
+            return Err(Error::InvalidMode);
+        }
+        let operations = self
             .item
             .as_base_operations()
-            .ok_or(Error::UnsupportedOperation)?
-            .read_until(&mut self.context, buffer, self.position, delimiter)?;
-
-        self.position += size as Size;
-
-        Ok(size)
+            .ok_or(Error::UnsupportedOperation)?;
+        let context = &mut self.context;
+        self.cursor.update(|position| {
+            let count = operations.read_until(context, buffer, position, delimiter)?;
+            Ok((count, position + count as Size))
+        })
     }
 
     pub fn read_to_end(&mut self, buffer: &mut Vec<u8>, chunk_size: usize) -> Result<usize> {
@@ -137,17 +148,11 @@ impl<'a> SynchronousFile<'a> {
 
         let mut chunk = vec![0u8; chunk_size];
         loop {
-            let read_size = self
-                .item
-                .as_base_operations()
-                .ok_or(Error::UnsupportedOperation)?
-                .read(&mut self.context, &mut chunk, self.position)?;
+            let read_size = self.read(&mut chunk)?;
 
             if read_size == 0 {
                 break;
             }
-
-            self.position += read_size as Size;
 
             total_read_size += read_size;
 
@@ -175,11 +180,13 @@ impl<'a> SynchronousFile<'a> {
             .as_base_operations()
             .ok_or(Error::UnsupportedOperation)?
             .clone_context(&self.context)?;
+        block_on(self.virtual_file_system.retain(&self.item))?;
 
         Ok(Self {
+            closed: false,
             virtual_file_system: self.virtual_file_system,
             item: self.item.clone(),
-            position: self.position,
+            cursor: self.cursor.duplicate(),
             flags: self.flags,
             context,
         })
@@ -259,14 +266,15 @@ impl<'a> SynchronousFile<'a> {
     }
 
     pub fn close_internal(&mut self, virtual_file_system: &VirtualFileSystem) -> crate::Result<()> {
+        if self.closed {
+            return Ok(());
+        }
+        self.closed = true;
         block_on(virtual_file_system.close(&self.item, &mut self.context))
     }
 
     pub fn close(mut self, virtual_file_system: &VirtualFileSystem) -> crate::Result<()> {
-        let result = self.close_internal(virtual_file_system);
-        forget(self);
-
-        result
+        self.close_internal(virtual_file_system)
     }
 }
 

@@ -45,14 +45,14 @@ impl UserCommand for TreeCommand {
         let vfs = context.executable_context().virtual_file_system;
         let task = context.task_id();
         // Open before printing so nonexistent or inaccessible roots fail without a false listing.
-        walk(vfs, task, path, depth, |level, name| {
+        walk(vfs, task, path, depth, async |level, name| {
             if level == 0 {
-                return context.write_out_fmt(format_args!("{name}\n"));
+                return context.write_out_fmt(format_args!("{name}\n")).await;
             }
             for _ in 1..level {
-                context.write_out_fmt(format_args!("|   "))?;
+                context.write_out_fmt(format_args!("|   ")).await?;
             }
-            context.write_out_fmt(format_args!("|-- {name}\n"))
+            context.write_out_fmt(format_args!("|-- {name}\n")).await
         })
         .await
     }
@@ -89,7 +89,7 @@ async fn walk(
     task: TaskIdentifier,
     mut path: PathOwned,
     max_depth: usize,
-    mut write_entry: impl FnMut(usize, &str) -> Result<()>,
+    mut write_entry: impl AsyncFnMut(usize, &str) -> Result<()>,
 ) -> Result<()> {
     if max_depth > MAX_DEPTH {
         return Err(Error::InvalidArgument);
@@ -100,7 +100,7 @@ async fn walk(
     let root = Directory::open(vfs, task, &path)
         .await
         .map_err(Error::FailedToOpenDirectory)?;
-    write_entry(0, path.as_str())?;
+    write_entry(0, path.as_str()).await?;
     if max_depth == 0 {
         return root.close(vfs).await.map_err(Error::FailedToOpenDirectory);
     }
@@ -124,7 +124,7 @@ async fn walk(
             continue;
         }
         let depth = stack.len();
-        write_entry(depth, &entry.name)?;
+        write_entry(depth, &entry.name).await?;
         if entry.kind == Kind::Directory && depth < max_depth {
             let parent_length = path.as_str().len();
             if parent_length + entry.name.len() + 1 > MAX_PATH_BYTES {
@@ -194,7 +194,7 @@ mod tests {
                 task,
                 Path::from_str("/tree_test").to_owned(),
                 depth,
-                |depth, name| {
+                async |depth, name| {
                     if depth > 0 {
                         writeln!(output, "{depth}:{name}").unwrap();
                     }
@@ -214,7 +214,7 @@ mod tests {
             task,
             Path::from_str("/tree_test").to_owned(),
             1,
-            |_, name| {
+            async |_, name| {
                 hidden.push(alloc::string::String::from(name));
                 Ok(())
             },
@@ -242,7 +242,7 @@ mod tests {
                 task,
                 Path::from_str("/tree_test/file").to_owned(),
                 1,
-                |_, _| Ok(())
+                async |_, _| Ok(())
             )
             .await,
             Err(Error::FailedToOpenDirectory(_))
@@ -253,7 +253,7 @@ mod tests {
                 task,
                 Path::from_str("/tree_test").to_owned(),
                 33,
-                |_, _| Ok(())
+                async |_, _| Ok(())
             )
             .await,
             Err(Error::InvalidArgument)
@@ -264,7 +264,7 @@ mod tests {
                 task,
                 Path::from_str("/tree_missing").to_owned(),
                 1,
-                |_, _| Ok(())
+                async |_, _| Ok(())
             )
             .await,
             Err(Error::FailedToOpenDirectory(_))
@@ -287,7 +287,7 @@ mod tests {
             task,
             Path::from_str("/tree_test").to_owned(),
             1,
-            |_, _| Ok(()),
+            async |_, _| Ok(()),
         )
         .await;
         standard

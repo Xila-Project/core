@@ -143,7 +143,7 @@ where
     let group = resolve_group_name(context, statistics.group).await;
     let output = format_statistics(&statistics, &user, &group);
 
-    context.write_out_fmt(format_args!("{}", output))?;
+    context.write_out_fmt(format_args!("{}", output)).await?;
 
     Ok(())
 }

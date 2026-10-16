@@ -21,7 +21,6 @@ fn convert_position(position: &Position) -> (i32, i32) {
     }
 }
 
-#[derive(Clone)]
 pub struct File {
     internal_attributes: InternalAttributes,
     attributes: littlefs::lfs_attr,

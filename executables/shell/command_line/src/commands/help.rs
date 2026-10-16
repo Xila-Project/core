@@ -29,23 +29,29 @@ impl UserCommand for HelpCommand {
     {
         let HelpArguments { command } = HelpArguments::parse(options)?;
         if let Some((_, _, help)) = BUILTINS.iter().find(|entry| entry.0 == command) {
-            return context.write_out_fmt(format_args!("{help}\n"));
+            return context.write_out_fmt(format_args!("{help}\n")).await;
         }
 
         if !command.is_empty() {
             if visit_executables(context, paths, Some(command)).await? {
-                return context.write_out_fmt(format_args!(
-                    "{command}: external executable; usage is provided by the executable.\n"
-                ));
+                return context
+                    .write_out_fmt(format_args!(
+                        "{command}: external executable; usage is provided by the executable.\n"
+                    ))
+                    .await;
             }
             return Err(Error::CommandNotFound);
         }
 
-        context.write_out_fmt(format_args!("Built-in commands:\n"))?;
+        context
+            .write_out_fmt(format_args!("Built-in commands:\n"))
+            .await?;
         for (name, _, _) in BUILTINS {
-            context.write_out_fmt(format_args!("{name}\n"))?;
+            context.write_out_fmt(format_args!("{name}\n")).await?;
         }
-        context.write_out_fmt(format_args!("Executables in Paths:\n"))?;
+        context
+            .write_out_fmt(format_args!("Executables in Paths:\n"))
+            .await?;
         visit_executables(context, paths, None).await?;
         Ok(())
     }
@@ -104,7 +110,9 @@ async fn visit_executables<C: CommandContext>(
             if query.is_some() {
                 return Ok(true);
             }
-            context.write_out_fmt(format_args!("{}\n", entry.name))?;
+            context
+                .write_out_fmt(format_args!("{}\n", entry.name))
+                .await?;
         }
     }
     Ok(false)

@@ -54,7 +54,17 @@ async fn read_file_and_write<C: CommandContext>(context: &mut C, path: &Path) ->
     .await
     .map_err(Error::FailedToOpenFile)?;
 
-    let _ = file.display_content(context.standard().out(), 256).await;
+    let mut buffer = [0; 256];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .await
+            .map_err(Error::FailedToReadFile)?;
+        if count == 0 {
+            break;
+        }
+        context.write_out(&buffer[..count]).await?;
+    }
 
     Ok(())
 }
@@ -69,12 +79,35 @@ where
 {
     check_no_more_options(options)?;
 
+    let mut supplied = false;
     while let Some(argument) = options.next_positional() {
-        let path = resolve_path(context, argument)?;
-        read_file_and_write(context, &path).await?;
+        supplied = true;
+        if argument == "-" {
+            copy_input(context).await?;
+        } else {
+            let path = resolve_path(context, argument)?;
+            read_file_and_write(context, &path).await?;
+        }
+    }
+    if !supplied {
+        copy_input(context).await?;
     }
 
-    context.write_out_fmt(format_args!("\n"))?;
-
     Ok(())
+}
+
+async fn copy_input<C: CommandContext>(context: &mut C) -> Result<()> {
+    let mut buffer = [0; 256];
+    loop {
+        let count = context
+            .standard()
+            .input()
+            .read(&mut buffer)
+            .await
+            .map_err(Error::FailedToReadFile)?;
+        if count == 0 {
+            return Ok(());
+        }
+        context.write_out(&buffer[..count]).await?;
+    }
 }

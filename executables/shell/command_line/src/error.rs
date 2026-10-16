@@ -48,6 +48,8 @@ pub enum Error<'a> {
     FailedToSetPermissions(virtual_file_system::Error),
     FailedToGetTaskUser(task::Error),
     ExitStatus(NonZeroUsize),
+    Syntax(crate::tokenizer::SyntaxError),
+    FailedToWriteFile(virtual_file_system::Error),
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -82,6 +84,14 @@ impl Display for Error<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             Error::ExitStatus(status) => write!(formatter, "{status}"),
+            Error::Syntax(error) => write!(
+                formatter,
+                translate!("Syntax error at byte {}: {}"),
+                error.position, error.message
+            ),
+            Error::FailedToWriteFile(error) => {
+                write!(formatter, translate!("Failed to write file: {}"), error)
+            }
             Error::AuthenticationFailed(error) => {
                 write!(formatter, translate!("Authentication failed: {}"), error)
             }

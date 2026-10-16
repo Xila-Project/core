@@ -1,35 +1,29 @@
 #![no_std]
-
 extern crate alloc;
-
-xila::internationalization::track_locales!();
 #[cfg(test)]
 extern crate std;
+xila::internationalization::track_locales!();
 
-use crate::{Error, Result};
 use alloc::{
     borrow::ToOwned,
     boxed::Box,
     string::{String, ToString},
     vec::Vec,
 };
-use core::fmt::Write;
 use core::num::NonZeroUsize;
-use error::*;
-use xila::file_system::Path;
-use xila::{executable, file_system::PathOwned};
 use xila::{
-    executable::{ExecutableTrait, Standard},
+    executable::{self, ExecutableTrait, Standard},
+    file_system::{Path, PathOwned},
     task::TaskIdentifier,
 };
-
 mod commands;
 mod error;
-//mod parser;
+mod execution;
+mod parser;
 mod resolver;
-//mod tokenizer;
-
-use commands::{CommandContext, dispatch_user_command, resolve_user_command};
+mod tokenizer;
+use commands::CommandContext;
+pub use error::*;
 
 pub struct Shell {
     context: &'static executable::ExecutableContext,
@@ -39,20 +33,46 @@ pub struct Shell {
     running: bool,
     user: String,
     host: String,
+    last_status: usize,
+    background_jobs: Vec<xila::task::JoinHandle<usize>>,
 }
-
 pub struct ShellExecutable;
 
-struct ShellCommandContext<'a> {
-    shell: &'a mut Shell,
-}
-
-impl<'a> ShellCommandContext<'a> {
-    fn new(shell: &'a mut Shell) -> Self {
-        Self { shell }
+/// Reused per built-in, bounded even if a Display implementation emits large text.
+#[derive(Default)]
+struct OutputBuffer(String);
+impl core::fmt::Write for OutputBuffer {
+    fn write_str(&mut self, value: &str) -> core::fmt::Result {
+        if self.0.len() + value.len() > execution::MAX_EXPANDED_BYTES {
+            return Err(core::fmt::Error);
+        }
+        self.0.push_str(value);
+        Ok(())
     }
 }
-
+impl OutputBuffer {
+    async fn write(
+        &mut self,
+        file: &mut xila::virtual_file_system::File<'_>,
+        arguments: core::fmt::Arguments<'_>,
+    ) -> Result<()> {
+        self.0.clear();
+        core::fmt::write(self, arguments)?;
+        execution::write_all(file, self.0.as_bytes()).await
+    }
+}
+struct ShellCommandContext<'a> {
+    shell: &'a mut Shell,
+    output: OutputBuffer,
+}
+impl<'a> ShellCommandContext<'a> {
+    fn new(shell: &'a mut Shell) -> Self {
+        Self {
+            shell,
+            output: OutputBuffer::default(),
+        }
+    }
+}
 impl CommandContext for ShellCommandContext<'_> {
     fn executable_context(&self) -> &'static executable::ExecutableContext {
         self.shell.context
@@ -60,53 +80,42 @@ impl CommandContext for ShellCommandContext<'_> {
     fn task_id(&self) -> TaskIdentifier {
         self.shell.task
     }
-
     fn current_directory(&self) -> &Path {
         &self.shell.current_directory
     }
-
     fn set_current_directory(&mut self, directory: PathOwned) {
         self.shell.current_directory = directory;
     }
-
     fn stop(&mut self) {
         self.shell.running = false;
     }
-
-    fn write_out_fmt(&mut self, arguments: core::fmt::Arguments<'_>) -> Result<()> {
-        self.shell
-            .standard
-            .out()
-            .write_fmt(arguments)
-            .map_err(Into::into)
+    async fn write_out_fmt(&mut self, arguments: core::fmt::Arguments<'_>) -> Result<()> {
+        self.output
+            .write(self.shell.standard.out(), arguments)
+            .await
     }
-
-    async fn write_out(&mut self, buffer: &[u8]) {
-        let _ = self.shell.standard.out().write(buffer).await;
+    async fn write_out(&mut self, buffer: &[u8]) -> Result<()> {
+        execution::write_all(self.shell.standard.out(), buffer).await
     }
-
-    async fn write_out_line(&mut self, buffer: &[u8]) {
-        let _ = self.shell.standard.out().write_line(buffer).await;
+    async fn write_out_line(&mut self, buffer: &[u8]) -> Result<()> {
+        self.write_out(buffer).await?;
+        self.write_out(b"\n").await
     }
-
     fn standard(&mut self) -> &mut Standard<'static> {
         &mut self.shell.standard
     }
 }
-
 impl ExecutableTrait for ShellExecutable {
     fn main(standard: Standard<'static>, arguments: Vec<String>) -> executable::MainFuture {
         Box::pin(async move { main(standard, arguments).await })
     }
 }
-
 pub async fn main(
     standard: Standard<'static>,
     arguments: Vec<String>,
 ) -> core::result::Result<(), NonZeroUsize> {
     Shell::new(standard).await.main(arguments).await
 }
-
 impl Shell {
     pub async fn new(standard: Standard<'static>) -> Self {
         let context = standard.context;
@@ -116,116 +125,138 @@ impl Shell {
             task: context.task_manager.get_current_task_identifier().await,
             current_directory: Path::ROOT.to_owned(),
             running: true,
-            user: "".to_string(),
-            host: "".to_string(),
+            user: String::new(),
+            host: String::new(),
+            last_status: 0,
+            background_jobs: Vec::new(),
         }
     }
-
-    async fn parse_input<'a, I>(
-        &mut self,
-        input: I,
-        paths: &[&Path],
-    ) -> core::result::Result<(), NonZeroUsize>
-    where
-        I: IntoIterator<Item = &'a str> + Clone,
-    {
-        let mut options = getargs::Options::new(input.clone().into_iter());
-
-        let next_positional = match options.next_positional() {
-            Some(arg) => arg,
-            None => return Ok(()),
-        };
-
-        let result: Result<(), Error<'a>> = match resolve_user_command(next_positional) {
-            Some(user_command) => {
-                let mut context = ShellCommandContext::new(self);
-                dispatch_user_command(user_command, &mut context, &mut options, paths).await
-            }
-            None => self.execute(input, paths).await,
-        };
-
-        if let Err(error) = &result
-            && !matches!(error, Error::ExitStatus(_))
-        {
-            writeln!(self.standard.standard_error, "{}", error).map_err(Error::from)?;
-        }
-
-        result.map_err(Into::into)
+    async fn diagnostic(&mut self, error: impl core::fmt::Display) {
+        let _ = OutputBuffer::default()
+            .write(self.standard.error(), format_args!("{error}\n"))
+            .await;
     }
-
-    async fn main_interactive(&mut self, paths: &[&Path]) -> Result<()> {
-        let mut input_string = String::with_capacity(64);
-
+    async fn main_interactive(&mut self) -> Result<()> {
+        let mut input = Vec::with_capacity(64);
         while self.running {
-            let _ = write!(
-                self.standard.out(),
-                "{}@{}:{}$ ",
-                self.user,
-                self.host,
-                self.current_directory
-            );
-
+            let _ = OutputBuffer::default()
+                .write(
+                    self.standard.out(),
+                    format_args!("{}@{}:{}$ ", self.user, self.host, self.current_directory),
+                )
+                .await;
             let _ = self.standard.out().flush().await;
-
-            input_string.clear();
-
-            self.standard.read_line(&mut input_string).await.unwrap();
-
-            if input_string.is_empty() {
+            input.clear();
+            let mut oversized = false;
+            let mut end_of_input = false;
+            loop {
+                let mut byte = [0u8; 1];
+                let count = self
+                    .standard
+                    .input()
+                    .read(&mut byte)
+                    .await
+                    .map_err(Error::FailedToReadFile)?;
+                if count == 0 {
+                    end_of_input = true;
+                    break;
+                }
+                if byte[0] == b'\n' {
+                    break;
+                }
+                if input.len() == tokenizer::MAX_INPUT_BYTES {
+                    oversized = true;
+                }
+                if !oversized {
+                    input.push(byte[0]);
+                }
+            }
+            if oversized {
+                self.last_status = 2;
+                self.diagnostic(xila::internationalization::translate!(
+                    "Command line is too long"
+                ))
+                .await;
                 continue;
             }
-
-            let input = input_string.split(" ");
-
-            // A command failure is its exit status; the interactive shell keeps running.
-            let _ = self.parse_input(input, paths).await;
+            match core::str::from_utf8(&input) {
+                Ok(source) => {
+                    if let Err(error) = self.execute_line(source).await {
+                        self.last_status = 2;
+                        self.diagnostic(error).await;
+                    }
+                }
+                Err(_) => {
+                    self.last_status = 2;
+                    self.diagnostic(xila::internationalization::translate!(
+                        "Invalid UTF-8 input"
+                    ))
+                    .await;
+                }
+            }
+            if end_of_input {
+                self.running = false;
+            }
         }
-
         Ok(())
     }
-
     pub async fn main(&mut self, arguments: Vec<String>) -> core::result::Result<(), NonZeroUsize> {
-        let task_manager = &self.context.task_manager;
-        let task = task_manager.get_current_task_identifier().await;
-
-        let user = match task_manager.get_environment_variable(task, "User").await {
+        let manager = self.context.task_manager;
+        self.user = match manager.get_environment_variable(self.task, "User").await {
             Ok(user) => user.get_value().to_string(),
+            Err(_) if !arguments.is_empty() => self
+                .context
+                .users_manager
+                .get_user_name(
+                    manager
+                        .get_user(self.task)
+                        .await
+                        .map_err(Error::FailedToSetTaskUser)?,
+                )
+                .await
+                .map_err(|_| Error::FailedToGetTaskIdentifier)?,
             Err(_) => loop {
                 match self.authenticate().await {
                     Ok(user) => break user,
-                    Err(error) => {
-                        let _ = writeln!(self.standard.standard_error, "{}", error);
-                    }
+                    Err(error) => self.diagnostic(error).await,
                 }
             },
         };
-
-        self.user = user;
-
-        let paths = task_manager
-            .get_environment_variable(task, "Paths")
+        self.host = manager
+            .get_environment_variable(self.task, "Host")
             .await
-            .map_err(|_| Error::FailedToGetPath)?;
-
-        let paths = paths
+            .map_err(|_| Error::FailedToGetPath)?
             .get_value()
-            .split(':')
-            .map(Path::from_str)
-            .collect::<Vec<&Path>>();
-
-        let host = task_manager
-            .get_environment_variable(task, "Host")
-            .await
-            .map_err(|_| Error::FailedToGetPath)?;
-        self.host = host.get_value().to_string();
-
+            .to_string();
         if arguments.is_empty() {
-            self.main_interactive(&paths).await?;
+            self.main_interactive().await?;
+        } else if arguments[0] == "-c" {
+            if arguments.len() != 2 {
+                self.diagnostic(xila::internationalization::translate!(
+                    "Usage: shell -c COMMAND"
+                ))
+                .await;
+                self.last_status = 2;
+            } else if let Err(error) = self.execute_line(&arguments[1]).await {
+                self.last_status = 2;
+                self.diagnostic(error).await;
+            }
         } else {
-            let arguments = arguments.iter().map(|s| s.as_str());
-            self.parse_input(arguments, &paths).await?;
+            // Already separated arguments remain literal; do not parse caller-provided data as shell syntax.
+            self.last_status = self.run_arguments(&arguments).await;
         }
-
-        Ok(())
+        // Keep task/stream ownership explicit; an interactive prompt is free while jobs run.
+        for job in self.background_jobs.drain(..) {
+            job.join().await;
+        }
+        if self.standard.out().flush().await.is_err()
+            || self.standard.error().flush().await.is_err()
+        {
+            self.last_status = 1;
+        }
+        match NonZeroUsize::new(self.last_status) {
+            Some(status) => Err(status),
+            None => Ok(()),
+        }
     }
 }

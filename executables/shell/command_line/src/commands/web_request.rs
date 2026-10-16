@@ -196,14 +196,16 @@ where
         .read(&mut buffer)
         .await
         .map_err(crate::error::Error::FailedToOpenFile)?;
-    context.write_out(&buffer[..header_bytes]).await;
+    context.write_out(&buffer[..header_bytes]).await?;
 
     buffer.fill(0);
     let body_bytes = file
         .read(&mut buffer)
         .await
         .map_err(crate::error::Error::FailedToOpenFile)?;
-    context.write_out_line(&buffer[..body_bytes.min(128)]).await;
+    context
+        .write_out_line(&buffer[..body_bytes.min(128)])
+        .await?;
 
     file.close(virtual_file_system)
         .await

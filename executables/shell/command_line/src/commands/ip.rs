@@ -63,10 +63,12 @@ async fn show_routes_interface<C: CommandContext>(
             .as_synchronous_file_mut()
             .control(GET_ROUTE, &index)
             .map_err(Error::FailedToOpenFile)?;
-        context.write_out_fmt(format_args!(
-            "{} via {} device {}\n",
-            route.cidr, route.via_router, interface
-        ))?;
+        context
+            .write_out_fmt(format_args!(
+                "{} via {} device {}\n",
+                route.cidr, route.via_router, interface
+            ))
+            .await?;
     }
 
     Ok(())
@@ -111,7 +113,9 @@ async fn show_address_interface<C: CommandContext>(
             .as_synchronous_file_mut()
             .control(GET_IP_ADDRESS, &index)
             .map_err(Error::FailedToOpenFile)?;
-        context.write_out_fmt(format_args!("   {} \n", address))?;
+        context
+            .write_out_fmt(format_args!("   {} \n", address))
+            .await?;
     }
 
     Ok(())
@@ -163,19 +167,23 @@ async fn show_address<C: CommandContext>(
             .await
             .map_err(Error::FailedToOpenFile)?;
 
-        context.write_out_fmt(format_args!(
-            "{}. {} [{}, {}, MTU: {}]\n",
-            index, entry.name, state, status, maximum_transmission_unit
-        ))?;
-        context.write_out_fmt(format_args!(
-            "   Hardware Address: {:x}:{:x}:{:x}:{:x}:{:x}:{:x}\n",
-            hardware_address[0],
-            hardware_address[1],
-            hardware_address[2],
-            hardware_address[3],
-            hardware_address[4],
-            hardware_address[5]
-        ))?;
+        context
+            .write_out_fmt(format_args!(
+                "{}. {} [{}, {}, MTU: {}]\n",
+                index, entry.name, state, status, maximum_transmission_unit
+            ))
+            .await?;
+        context
+            .write_out_fmt(format_args!(
+                "   Hardware Address: {:x}:{:x}:{:x}:{:x}:{:x}:{:x}\n",
+                hardware_address[0],
+                hardware_address[1],
+                hardware_address[2],
+                hardware_address[3],
+                hardware_address[4],
+                hardware_address[5]
+            ))
+            .await?;
 
         show_address_interface(context, &mut file).await?;
 

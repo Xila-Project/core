@@ -1,0 +1,519 @@
+use super::*;
+use alloc::{format, vec};
+use core::num::NonZeroUsize;
+use xila::executable::{ExecutableTrait, MainFuture, mount_executables};
+
+async fn shell() -> Shell {
+    let mut standard = testing::initialize(false, false).await;
+    let context = standard.context;
+    let task = context.task_manager.get_current_task_identifier().await;
+    standard.standard_in = File::open(
+        context.virtual_file_system,
+        task,
+        "/devices/null",
+        AccessFlags::Read.into(),
+    )
+    .await
+    .unwrap();
+    standard.standard_out = File::open(
+        context.virtual_file_system,
+        task,
+        "/shell-output",
+        Flags::new(
+            AccessFlags::READ_WRITE,
+            Some(CreateFlags::CREATE_TRUNCATE),
+            None,
+        ),
+    )
+    .await
+    .unwrap();
+    standard.standard_error = File::open(
+        context.virtual_file_system,
+        task,
+        "/shell-errors",
+        Flags::new(
+            AccessFlags::READ_WRITE,
+            Some(CreateFlags::CREATE_TRUNCATE),
+            None,
+        ),
+    )
+    .await
+    .unwrap();
+    Shell::new(standard).await
+}
+async fn contents(shell: &Shell, path: &str) -> String {
+    let mut output = Vec::new();
+    File::read_from_path(
+        shell.context.virtual_file_system,
+        shell.task,
+        path,
+        &mut output,
+    )
+    .await
+    .unwrap();
+    String::from_utf8(output).unwrap()
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn quoting_expansion_and_short_circuit_keep_shell_state() {
+    let mut shell = shell().await;
+    assert_eq!(shell.execute_line("export NAME='hello world'; echo \"$NAME\" '$NAME' \\$NAME; false && echo wrong || echo fallback; true || echo wrong; echo $?").await.unwrap(), 0);
+    assert_eq!(
+        contents(&shell, "/shell-output").await,
+        "hello world $NAME $NAME\nfallback\n0\n"
+    );
+    assert_eq!(
+        shell
+            .execute_line("cd /temporary && pwd; cd / | cat; pwd")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        contents(&shell, "/shell-output")
+            .await
+            .ends_with("/temporary\n/temporary\n")
+    );
+    assert_eq!(shell.execute_line("false").await.unwrap(), 1);
+    assert_eq!(shell.execute_line("missing-command").await.unwrap(), 127);
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn redirection_appends_truncates_and_reads_without_extra_newlines() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("echo first>/one; echo second>>/one; cat</one>/copy")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/copy").await, "first\nsecond\n");
+    assert_eq!(
+        shell.execute_line("echo x>/one; cat /one").await.unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/one").await, "x\n");
+    assert_eq!(contents(&shell, "/shell-output").await, "x\n");
+    assert_eq!(
+        shell
+            .execute_line("cat /missing 2>/errors || echo recovered")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(!contents(&shell, "/errors").await.is_empty());
+    assert!(
+        contents(&shell, "/shell-output")
+            .await
+            .ends_with("recovered\n")
+    );
+}
+
+struct ReadOne;
+impl ExecutableTrait for ReadOne {
+    fn main(mut standard: Standard<'static>, _: Vec<String>) -> MainFuture {
+        alloc::boxed::Box::pin(async move {
+            standard.input().read(&mut [0; 1]).await.unwrap();
+            Ok(())
+        })
+    }
+}
+struct Fail;
+impl ExecutableTrait for Fail {
+    fn main(_: Standard<'static>, _: Vec<String>) -> MainFuture {
+        alloc::boxed::Box::pin(async { Err(NonZeroUsize::new(7).unwrap()) })
+    }
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn bounded_pipelines_stream_large_output_and_close_early_consumers() {
+    let mut shell = shell().await;
+    let context = shell.context;
+    let task = shell.task;
+    let virtual_file_system = context.virtual_file_system;
+    mount_executables!(
+        context,
+        virtual_file_system,
+        task,
+        &[(&"/binaries/read-one", ReadOne), (&"/binaries/fail", Fail)]
+    )
+    .await
+    .unwrap();
+    let payload = "x".repeat(3000);
+    assert_eq!(
+        shell
+            .execute_line(&format!("echo '{payload}'|cat|wc -c>/count"))
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/count").await.trim(), "3001");
+    assert_eq!(
+        shell
+            .execute_line(&format!("echo '{payload}'|/binaries/read-one"))
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        shell
+            .execute_line("/binaries/fail && echo wrong || echo correct")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        contents(&shell, "/shell-output")
+            .await
+            .ends_with("correct\n")
+    );
+    assert_eq!(shell.execute_line("true|/binaries/fail").await.unwrap(), 7);
+    assert_eq!(shell.execute_line("/binaries/fail|true").await.unwrap(), 0);
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn malformed_source_does_not_execute_a_valid_prefix() {
+    let mut shell = shell().await;
+    assert!(
+        shell
+            .execute_line("echo changed>/must-not-exist; echo 'unfinished")
+            .await
+            .is_err()
+    );
+    assert!(
+        File::open(
+            shell.context.virtual_file_system,
+            shell.task,
+            "/must-not-exist",
+            AccessFlags::Read.into()
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(shell.execute_line("exit; echo wrong").await.unwrap(), 0);
+    assert_eq!(contents(&shell, "/shell-output").await, "");
+}
+
+struct Delayed;
+impl ExecutableTrait for Delayed {
+    fn main(mut standard: Standard<'static>, _: Vec<String>) -> MainFuture {
+        alloc::boxed::Box::pin(async move {
+            assert_eq!(standard.input().read(&mut [0; 1]).await.unwrap(), 0);
+            xila::task::sleep(core::time::Duration::from_millis(20)).await;
+            write_all(standard.out(), b"background\n").await.unwrap();
+            Ok(())
+        })
+    }
+}
+#[xila::task::test(task_path = xila::task)]
+async fn background_jobs_release_the_prompt_and_have_independent_input() {
+    let mut shell = shell().await;
+    let context = shell.context;
+    let task = shell.task;
+    let virtual_file_system = context.virtual_file_system;
+    mount_executables!(
+        context,
+        virtual_file_system,
+        task,
+        &[(&"/binaries/delayed", Delayed)]
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("/binaries/delayed >/background & echo foreground>/foreground")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(!shell.background_jobs[0].is_finished());
+    assert_eq!(contents(&shell, "/foreground").await, "foreground\n");
+    for job in shell.background_jobs.drain(..) {
+        assert_eq!(job.join().await, 0);
+    }
+    assert_eq!(contents(&shell, "/background").await, "background\n");
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn literal_arguments_are_not_reparsed_and_command_mode_returns_failure() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .run_arguments(&["echo".into(), "$literal; not syntax".into()])
+            .await,
+        0
+    );
+    shell.standard.out().flush().await.unwrap();
+    assert_eq!(
+        contents(&shell, "/shell-output").await,
+        "$literal; not syntax\n"
+    );
+    assert_eq!(
+        shell
+            .main(vec!["-c".into(), "false".into()])
+            .await
+            .unwrap_err()
+            .get(),
+        1
+    );
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn redirection_checks_existing_file_permissions_before_truncating() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("echo original>/protected")
+            .await
+            .unwrap(),
+        0
+    );
+    let mut file = File::open(
+        shell.context.virtual_file_system,
+        shell.task,
+        "/protected",
+        AccessFlags::Read.into(),
+    )
+    .await
+    .unwrap();
+    file.set_permissions(xila::file_system::Permissions::from_octal(0o444).unwrap())
+        .await
+        .unwrap();
+    drop(file);
+    let administrator = shell
+        .context
+        .users_manager
+        .get_user_identifier("administrator")
+        .await
+        .unwrap();
+    shell
+        .context
+        .task_manager
+        .set_user(shell.task, administrator)
+        .await
+        .unwrap();
+    assert_eq!(
+        shell.execute_line("echo changed>/protected").await.unwrap(),
+        1
+    );
+    assert_eq!(contents(&shell, "/protected").await, "original\n");
+    assert_eq!(
+        shell
+            .execute_line("echo changed>/forbidden-new-file")
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        File::open(
+            shell.context.virtual_file_system,
+            shell.task,
+            "/forbidden-new-file",
+            AccessFlags::Read.into()
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn duplicated_pipe_writers_must_all_close_before_eof() {
+    let shell = shell().await;
+    let (reader, writer) = File::create_unnamed_pipe(
+        shell.context.virtual_file_system,
+        8,
+        StateFlags::from_bits_truncate(0),
+    )
+    .await
+    .unwrap();
+    let mut reader = reader;
+    let duplicate = writer.duplicate().await.unwrap();
+    writer
+        .close(shell.context.virtual_file_system)
+        .await
+        .unwrap();
+    duplicate
+        .close(shell.context.virtual_file_system)
+        .await
+        .unwrap();
+    assert_eq!(reader.read(&mut [0; 1]).await.unwrap(), 0);
+    reader
+        .close(shell.context.virtual_file_system)
+        .await
+        .unwrap();
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn duplicated_regular_streams_share_their_position() {
+    let mut shell = shell().await;
+    let mut duplicate = shell.standard.out().duplicate().await.unwrap();
+    write_all(shell.standard.out(), b"a").await.unwrap();
+    write_all(&mut duplicate, b"b").await.unwrap();
+    write_all(shell.standard.out(), b"c").await.unwrap();
+    duplicate.flush().await.unwrap();
+    drop(duplicate);
+    assert_eq!(contents(&shell, "/shell-output").await, "abc");
+}
+
+struct FailingFlush;
+impl xila::file_system::DirectBaseOperations for FailingFlush {
+    fn read(&self, _: &mut [u8], _: xila::file_system::Size) -> xila::file_system::Result<usize> {
+        Ok(0)
+    }
+    fn write(&self, bytes: &[u8], _: xila::file_system::Size) -> xila::file_system::Result<usize> {
+        Ok(bytes.len())
+    }
+    fn flush(&self) -> xila::file_system::Result<()> {
+        Err(xila::file_system::Error::InputOutput)
+    }
+}
+impl xila::file_system::MountOperations for FailingFlush {}
+impl xila::file_system::CharacterDevice for FailingFlush {}
+
+#[xila::task::test(task_path = xila::task)]
+async fn pipeline_flush_failures_control_conditional_execution() {
+    let mut shell = shell().await;
+    shell
+        .context
+        .virtual_file_system
+        .mount_character_device(shell.task, "/devices/failing-flush", FailingFlush)
+        .await
+        .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("echo value|cat>/devices/failing-flush && echo wrong")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(contents(&shell, "/shell-output").await, "");
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn expansion_is_bounded_and_does_not_reinterpret_variable_contents() {
+    let mut shell = shell().await;
+    shell
+        .context
+        .task_manager
+        .set_environment_variable(shell.task, "VALUE", "one two; echo wrong")
+        .await
+        .unwrap();
+    assert_eq!(
+        shell
+            .execute_line("echo ${VALUE} '$VALUE' \"$MISSING\"")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        contents(&shell, "/shell-output").await,
+        "one two; echo wrong $VALUE \n"
+    );
+    shell
+        .context
+        .task_manager
+        .set_environment_variable(shell.task, "VALUE", &"x".repeat(MAX_EXPANDED_BYTES))
+        .await
+        .unwrap();
+    assert_eq!(shell.execute_line("echo $VALUE").await.unwrap(), 1);
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn duplicated_device_keeps_its_mount_busy() {
+    let shell = shell().await;
+    let filesystem = shell.context.virtual_file_system;
+    filesystem
+        .mount_character_device(shell.task, "/devices/duplicate", drivers_core::NullDevice)
+        .await
+        .unwrap();
+    let original = File::open(
+        filesystem,
+        shell.task,
+        "/devices/duplicate",
+        AccessFlags::Read.into(),
+    )
+    .await
+    .unwrap();
+    let duplicate = original.duplicate().await.unwrap();
+    drop(original);
+    assert_eq!(
+        filesystem.unmount(&"/devices/duplicate", false).await,
+        Err(xila::virtual_file_system::Error::RessourceBusy)
+    );
+    drop(duplicate);
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn interactive_eof_executes_the_final_line_once() {
+    let mut shell = shell().await;
+    shell
+        .context
+        .task_manager
+        .set_environment_variable(shell.task, "User", "root")
+        .await
+        .unwrap();
+    // Create input directly so EOF, rather than a trailing newline, ends the command.
+    let mut input = File::open(
+        shell.context.virtual_file_system,
+        shell.task,
+        "/shell-input",
+        Flags::new(
+            AccessFlags::READ_WRITE,
+            Some(CreateFlags::CREATE_TRUNCATE),
+            None,
+        ),
+    )
+    .await
+    .unwrap();
+    write_all(&mut input, b"echo final").await.unwrap();
+    input
+        .set_position(&xila::file_system::Position::Start(0))
+        .await
+        .unwrap();
+    shell.standard.standard_in = input;
+    shell.main(Vec::new()).await.unwrap();
+    let output = contents(&shell, "/shell-output").await;
+    assert_eq!(output.matches("final\n").count(), 1);
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn utility_commands_compose_with_streaming_and_redirection() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("sleep 0 && help sleep | cat > /sleep-help")
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        contents(&shell, "/sleep-help")
+            .await
+            .contains("Usage: sleep")
+    );
+    assert_eq!(shell.execute_line("mkdir /utility-tree; echo saved > /utility-tree/file; chmod 600 /utility-tree/file; tree -L 1 /utility-tree | cat > /tree-output").await.unwrap(), 0);
+    assert_eq!(
+        contents(&shell, "/tree-output").await,
+        "/utility-tree\n|-- file\n"
+    );
+    assert_eq!(
+        shell
+            .context
+            .virtual_file_system
+            .get_statistics(&"/utility-tree/file")
+            .await
+            .unwrap()
+            .permissions
+            .as_u16(),
+        0o600
+    );
+    assert_eq!(
+        shell
+            .execute_line("false 2> /false-errors || true")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/false-errors").await, "");
+}

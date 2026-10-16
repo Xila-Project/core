@@ -16,7 +16,12 @@ fn map_error(error: crate::Error) -> Error {
 
 impl DirectBaseOperations for Terminal {
     fn read(&self, buffer: &mut [u8], _: Size) -> Result<usize> {
-        self.read_input(buffer).map_err(map_error)
+        let count = self.read_input(buffer).map_err(map_error)?;
+        if count == 0 && !buffer.is_empty() {
+            Err(Error::RessourceBusy)
+        } else {
+            Ok(count)
+        }
     }
 
     fn write(&self, buffer: &[u8], _: Size) -> Result<usize> {

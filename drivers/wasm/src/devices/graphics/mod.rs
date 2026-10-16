@@ -23,7 +23,7 @@ pub async fn new() -> Result<GraphicsDevices, String> {
 
     let screen_device = CanvasScreenDevice::new(canvas.clone()).await?;
 
-    let keyboard_device = KeyboardDevice::new()?;
+    let keyboard_device = KeyboardDevice::new(&canvas)?;
 
     let mouse_device = MouseDevice::new(&canvas)?;
 

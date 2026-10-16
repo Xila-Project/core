@@ -21,4 +21,9 @@ impl<T> JoinHandle<T> {
     pub async fn join(self) -> T {
         self.0.wait().await
     }
+
+    /// Observe completion without consuming the result or waiting.
+    pub fn is_finished(&self) -> bool {
+        self.0.signaled()
+    }
 }

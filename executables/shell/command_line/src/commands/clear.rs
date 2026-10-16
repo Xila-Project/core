@@ -18,7 +18,7 @@ impl UserCommand for ClearCommand {
         I: Iterator<Item = &'a str>,
         C: CommandContext,
     {
-        execute_clear(context, options)
+        execute_clear(context, options).await
     }
 }
 
@@ -26,7 +26,7 @@ impl UserCommand for ClearCommand {
 #[command(name = "clear", about = "Clear the terminal.")]
 pub(super) struct ClearArguments {}
 
-fn execute_clear<'a, I, C>(
+async fn execute_clear<'a, I, C>(
     context: &mut C,
     options: &mut Options<&'a str, I>,
 ) -> Result<(), crate::Error<'a>>
@@ -36,8 +36,8 @@ where
 {
     let _ = ClearArguments::parse(options)?;
 
-    context.write_out_fmt(format_args!("\x1B[2J"))?;
-    context.write_out_fmt(format_args!("\x1B[H"))?;
+    context.write_out_fmt(format_args!("\x1B[2J")).await?;
+    context.write_out_fmt(format_args!("\x1B[H")).await?;
 
     Ok(())
 }

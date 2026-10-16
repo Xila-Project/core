@@ -6,6 +6,7 @@ use exported_file_system::{
 };
 
 use crate::pipe::Pipe;
+use synchronization::Arc;
 
 #[derive(Clone)]
 pub enum ItemStatic {
@@ -14,7 +15,7 @@ pub enum ItemStatic {
     Directory(&'static dyn FileSystemOperations),
     BlockDevice(&'static dyn BlockDevice),
     CharacterDevice(&'static dyn CharacterDevice),
-    Pipe(&'static Pipe),
+    Pipe(Arc<Pipe>),
 }
 
 impl Debug for ItemStatic {
@@ -36,7 +37,7 @@ impl ItemStatic {
             ItemStatic::File(file_system) => Some(*file_system),
             ItemStatic::BlockDevice(device) => Some(*device),
             ItemStatic::CharacterDevice(device) => Some(*device),
-            ItemStatic::Pipe(pipe) => Some(*pipe),
+            ItemStatic::Pipe(pipe) => Some(&**pipe),
             _ => None,
         }
     }
@@ -54,7 +55,7 @@ impl ItemStatic {
             ItemStatic::FileSystem(fs) => Some(*fs),
             ItemStatic::BlockDevice(device) => Some(*device),
             ItemStatic::CharacterDevice(device) => Some(*device),
-            ItemStatic::Pipe(pipe) => Some(*pipe),
+            ItemStatic::Pipe(pipe) => Some(&**pipe),
             _ => None,
         }
     }
