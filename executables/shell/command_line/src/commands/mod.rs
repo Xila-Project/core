@@ -18,6 +18,7 @@ mod print_working_directory;
 mod sleep;
 mod statistics;
 mod tail;
+mod tree;
 mod web_request;
 mod which;
 mod word_count;
@@ -53,6 +54,7 @@ use self::{
     sleep::SleepCommand,
     statistics::StatisticsCommand,
     tail::TailCommand,
+    tree::TreeCommand,
     web_request::WebRequestCommand,
     which::WhichCommand,
     word_count::WordCountCommand,
@@ -112,6 +114,7 @@ pub enum UserCommandKind {
     Tail,
     Sleep,
     Help,
+    Tree,
 }
 
 /// Names and help text shared by command resolution and `help`.
@@ -196,6 +199,7 @@ const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
     ("head", UserCommandKind::Head, head::HeadArguments::HELP),
     ("tail", UserCommandKind::Tail, tail::TailArguments::HELP),
     ("help", UserCommandKind::Help, help::HelpArguments::HELP),
+    ("tree", UserCommandKind::Tree, tree::TreeArguments::HELP),
     ("sleep", UserCommandKind::Sleep, sleep::SleepArguments::HELP),
     ("chmod", UserCommandKind::Chmod, chmod::ChmodArguments::HELP),
 ];
@@ -271,6 +275,7 @@ where
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
         UserCommandKind::Sleep => SleepCommand.execute(context, options, paths).await,
         UserCommandKind::Help => help::HelpCommand.execute(context, options, paths).await,
+        UserCommandKind::Tree => TreeCommand.execute(context, options, paths).await,
     };
 
     match result {
@@ -349,6 +354,7 @@ mod tests {
                 "sleep",
                 resolve_user_command("sleep").expect("sleep builtin"),
             ),
+            ("tree", UserCommandKind::Tree),
             ("exit", UserCommandKind::Exit),
             ("ping", UserCommandKind::Ping),
             ("ls", UserCommandKind::List),
@@ -714,6 +720,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("chmod"),
             Some(UserCommandKind::Chmod)
+        ));
+        assert!(matches!(
+            resolve_user_command("tree"),
+            Some(UserCommandKind::Tree)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }
