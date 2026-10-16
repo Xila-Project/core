@@ -6,6 +6,10 @@ inputs:
     description: "Setup profile: 'full' (default) or 'minimal' for lightweight jobs (format only)."
     required: false
     default: full
+  cache-workspaces:
+    description: "Cargo workspace -> target directory mappings for the job's Rust cache."
+    required: false
+    default: ". -> target"
 
 runs:
   using: "composite"
@@ -91,6 +95,7 @@ runs:
     - name: Setup | Rust cache
       uses: Swatinem/rust-cache@v2
       with:
+        workspaces: ${{ inputs.cache-workspaces }}
         key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
 
     - name: Setup | Validate lockfiles
