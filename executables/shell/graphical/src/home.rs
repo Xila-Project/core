@@ -38,9 +38,6 @@ impl Home {
                 lvgl::lv_obj_set_align(button, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_y(button, -5);
 
-                lvgl::lv_obj_set_style_pad_all(button, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_border_width(button, 0, lvgl::LV_STATE_DEFAULT);
-
                 lvgl::lv_obj_remove_flag(button, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_GESTURE_BUBBLE);
 
                 lvgl::lv_obj_add_event_cb(

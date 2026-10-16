@@ -254,10 +254,6 @@ impl Layout {
 
                 lvgl::lv_obj_set_size(window, lvgl::lv_pct(100), lvgl::lv_pct(100));
                 lvgl::lv_obj_set_flex_flow(window, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
-                lvgl::lv_obj_set_style_pad_all(window, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_pad_row(window, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_border_width(window, 0, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_radius(window, 0, lvgl::LV_STATE_DEFAULT);
 
                 window
             };
@@ -269,11 +265,14 @@ impl Layout {
                 if header.is_null() {
                     return Err(Error::FailedToCreateObject);
                 }
-                lvgl::lv_obj_set_size(header, lvgl::lv_pct(100), 32);
-                lvgl::lv_obj_set_style_border_width(header, 0, lvgl::LV_STATE_DEFAULT); // Remove the default border
-                lvgl::lv_obj_set_style_pad_all(header, 8, lvgl::LV_STATE_DEFAULT); // Remove the default padding
+                lvgl::lv_obj_set_size(header, lvgl::lv_pct(100), lvgl::LV_SIZE_CONTENT);
+                // Flat status-bar chrome: keep the theme surface but drop the
+                // card padding, border and radius so the height stays slim.
+                lvgl::lv_obj_set_style_pad_ver(header, 4, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_pad_hor(header, 8, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_border_width(header, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_radius(header, 0, lvgl::LV_STATE_DEFAULT);
                 theme::set_surface(header, theme::Surface::Muted);
-                lvgl::lv_obj_set_style_radius(header, 0, lvgl::LV_STATE_DEFAULT); // Remove the default radius
 
                 header
             };
@@ -302,10 +301,9 @@ impl Layout {
 
                     lvgl::lv_obj_set_size(tray, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);
                     lvgl::lv_obj_set_flex_flow(tray, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
-                    lvgl::lv_obj_set_style_pad_row(tray, 4, lvgl::LV_STATE_DEFAULT);
-                    lvgl::lv_obj_set_style_pad_column(tray, 8, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_set_style_pad_all(tray, 0, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_set_style_border_width(tray, 0, lvgl::LV_STATE_DEFAULT);
+                    lvgl::lv_obj_set_style_radius(tray, 0, lvgl::LV_STATE_DEFAULT);
                     lvgl::lv_obj_align(tray, lvgl::lv_align_t_LV_ALIGN_RIGHT_MID, 0, 0);
                     lvgl::lv_obj_set_style_bg_opa(
                         tray,
@@ -358,8 +356,11 @@ impl Layout {
                 lvgl::lv_obj_add_flag(body, lvgl::lv_obj_flag_t_LV_OBJ_FLAG_EVENT_BUBBLE);
                 lvgl::lv_obj_set_width(body, lvgl::lv_pct(100));
                 lvgl::lv_obj_set_flex_grow(body, 1);
+                // Edge-to-edge window area: the theme container would inset every
+                // child window with card padding, border and radius.
                 lvgl::lv_obj_set_style_pad_all(body, 0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_style_border_width(body, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_radius(body, 0, lvgl::LV_STATE_DEFAULT);
 
                 body
             };
