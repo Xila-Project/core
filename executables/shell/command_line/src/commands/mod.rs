@@ -339,13 +339,11 @@ fn check_no_more_options<'a, I>(options: &mut getargs::Options<&'a str, I>) -> c
 where
     I: Iterator<Item = &'a str>,
 {
-    match options.next_opt() {
-        Ok(None) => Ok(()),
-        Err(error) if error.is_help() || error.is_version() => {
-            Err(crate::Error::ArgumentParsing(error))
-        }
-        _ => Err(crate::Error::InvalidOption),
+    if Ok(None) != options.next_opt() {
+        return Err(crate::Error::InvalidOption);
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ use xila::{
     virtual_file_system::File,
 };
 
-use super::{CommandContext, UserCommand, check_no_more_options, directory::resolve_path};
+use super::{CommandContext, UserCommand, directory::resolve_path};
 
 const HELP: &str =
     "Usage: touch FILE...\nCreate missing files and update access and modification times.";
@@ -61,6 +61,7 @@ impl UserCommand for TouchCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::check_no_more_options;
 
     #[test]
     fn accepts_multiple_positional_paths_and_rejects_missing_paths_or_options() {
