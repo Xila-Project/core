@@ -233,6 +233,12 @@ jobs:
       - name: Check | Clippy (Host - Wasmi)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
 
+      - name: Check | Audio
+        run: |
+          cargo +${XILA_RUST_TOOLCHAIN} test -p audio
+          cargo +${XILA_RUST_TOOLCHAIN} clippy -p audio -p drivers_native --features drivers_native/audio --all-targets -- -D warnings
+          SDL_AUDIODRIVER=dummy cargo +${XILA_RUST_TOOLCHAIN} test -p drivers_native --features audio --lib devices::audio::tests -- --include-ignored
+
       - name: Check | Documentation (Host)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
 
@@ -269,6 +275,9 @@ jobs:
 
       - name: Check | Clippy (Guest)
         run: cargo make clippy-guest
+
+      - name: Check | Portable audio (WASM)
+        run: cargo +${XILA_RUST_TOOLCHAIN} check -p audio --target wasm32-unknown-unknown
 
       - name: Check | Documentation (Guest)
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
