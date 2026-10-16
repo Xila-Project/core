@@ -21,7 +21,6 @@ pub struct Configuration {
     compact_threshold: Option<usize>,
     metadata_maxium: Option<usize>,
     inline_maximum: Option<usize>,
-    flags: u32,
 }
 
 impl Configuration {
@@ -47,7 +46,6 @@ impl Configuration {
         compact_thresh: 0,
         metadata_max: 0,
         inline_max: 0,
-        flags: 0,
     };
 
     pub fn new(
@@ -80,7 +78,6 @@ impl Configuration {
             compact_threshold: None,
             metadata_maxium: None,
             inline_maximum: None,
-            flags: 0,
         })
     }
 
@@ -174,7 +171,6 @@ impl TryFrom<Configuration> for littlefs::lfs_config {
             compact_thresh: configuration.compact_threshold.unwrap_or(0) as u32, // Default value : 0 (LFS_COMPACT_THRESH)
             metadata_max: configuration.metadata_maxium.unwrap_or(0) as u32, // Default value : 0 (LFS_METADATA_MAX)
             inline_max: configuration.inline_maximum.unwrap_or(0) as u32, // Default value : 0 (LFS_INLINE_MAX)
-            flags: configuration.flags,
         };
 
         Ok(lfs_configuration)
