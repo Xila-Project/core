@@ -200,4 +200,4 @@ members = [
 ]
 
 [patch.crates-io]
-littlefs2-sys = { git = "https://github.com/AlixANNERAUD/littlefs2-sys.git", branch = "main" }
+littlefs2-sys = { git = "https://github.com/AlixANNERAUD/littlefs2-sys.git", branch = "xila" }
