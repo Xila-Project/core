@@ -1,11 +1,14 @@
 use crate::{Error, Result};
 use getargs::Options;
+use getargs_derive::Error as ArgumentError;
 use xila::{
     file_system::{AccessFlags, CreateFlags, Flags, Path},
     virtual_file_system::File,
 };
 
 use super::{CommandContext, UserCommand, check_no_more_options, directory::resolve_path};
+
+const HELP: &str = "Usage: touch FILE...\nCreate missing files and update access and modification times.";
 
 pub struct TouchCommand;
 
@@ -20,7 +23,13 @@ impl UserCommand for TouchCommand {
         I: Iterator<Item = &'a str>,
         C: CommandContext,
     {
-        check_no_more_options(options)?;
+        match options.next_opt() {
+            Ok(None) => {}
+            Ok(Some(getargs::Opt::Long("help"))) | Ok(Some(getargs::Opt::Short('h'))) => {
+                return Err(Error::ArgumentParsing(ArgumentError::Help(HELP)));
+            }
+            _ => return Err(Error::InvalidOption),
+        }
 
         let mut supplied_path = false;
         while let Some(argument) = options.next_positional() {
