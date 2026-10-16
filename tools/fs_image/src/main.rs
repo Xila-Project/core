@@ -41,15 +41,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     let output = output.canonicalize_parent()?;
 
-    {
-        // FileDriveDevice's constructor sets length but does not truncate existing files itself.
-        std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&output)?
-            .set_len(size)?;
-    }
+    create_output_file(&output, size)?;
 
     {
         let drive = Box::leak(Box::new(FileDriveDevice::new(
@@ -97,6 +89,15 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn create_output_file(path: &std::path::Path, size: u64) -> std::io::Result<()> {
+    // Exclusive creation prevents accidental replacement of an existing image.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?
+        .set_len(size)
+}
+
 trait CanonicalizeParent {
     fn canonicalize_parent(&self) -> Result<PathBuf, Box<dyn Error>>;
 }
@@ -109,5 +110,32 @@ impl CanonicalizeParent for PathBuf {
             .unwrap_or(std::path::Path::new("."));
         let parent = parent.canonicalize()?;
         Ok(parent.join(self.file_name().ok_or("output path must name a file")?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::create_output_file;
+    use std::{fs, io::Write};
+
+    #[test]
+    fn refuses_existing_output_without_modifying_it() {
+        let path = std::env::temp_dir().join(format!(
+            "fs-image-existing-{}-{}.img",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut existing = fs::File::create(&path).unwrap();
+        existing.write_all(b"keep this installation").unwrap();
+        drop(existing);
+
+        let result = create_output_file(&path, 16 * 1024 * 1024);
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"keep this installation");
+        fs::remove_file(path).unwrap();
     }
 }
