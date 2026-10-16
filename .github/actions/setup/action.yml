@@ -101,7 +101,7 @@ runs:
       if: inputs.profile == 'minimal'
       shell: bash
       run: |
-        cargo binstall --no-confirm taplo-cli@0.10.0
+        cargo binstall --no-confirm cargo-make@0.37.24 taplo-cli@0.10.0
         npm ci
 
     - name: Setup | Native tools and npm dependencies
