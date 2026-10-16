@@ -1,6 +1,6 @@
 {
-  "Argument parsing error: {}": "Argument parsing error: {}",
   "Accessed": "Accessed",
+  "Argument parsing error: {}": "Argument parsing error: {}",
   "Authentication failed: {}": "Authentication failed: {}",
   "Cannot resolve {}: Unknown host": "Cannot resolve {}: Unknown host",
   "Command not found": "Command not found",
@@ -34,6 +34,7 @@
   "Invalid number of arguments": "Invalid number of arguments",
   "Invalid option": "Invalid option",
   "Invalid path": "Invalid path",
+  "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)": "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)",
   "Kind": "Kind",
   "Links": "Links",
   "Missing command": "Missing command",

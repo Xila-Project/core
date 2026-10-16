@@ -13,6 +13,7 @@ mod ip;
 mod list;
 mod ping;
 mod print_working_directory;
+mod sleep;
 mod statistics;
 mod tail;
 mod web_request;
@@ -46,6 +47,7 @@ use self::{
     list::ListCommand,
     ping::PingCommand,
     print_working_directory::PrintWorkingDirectoryCommand,
+    sleep::SleepCommand,
     statistics::StatisticsCommand,
     tail::TailCommand,
     web_request::WebRequestCommand,
@@ -104,6 +106,7 @@ pub enum UserCommandKind {
     WordCount,
     Head,
     Tail,
+    Sleep,
 }
 
 pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
@@ -130,6 +133,7 @@ pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
         "wc" => Some(UserCommandKind::WordCount),
         "head" => Some(UserCommandKind::Head),
         "tail" => Some(UserCommandKind::Tail),
+        "sleep" => Some(UserCommandKind::Sleep),
         _ => None,
     }
 }
@@ -195,6 +199,7 @@ where
         UserCommandKind::WordCount => WordCountCommand.execute(context, options, paths).await,
         UserCommandKind::Head => HeadCommand.execute(context, options, paths).await,
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
+        UserCommandKind::Sleep => SleepCommand.execute(context, options, paths).await,
     };
 
     match result {
@@ -265,6 +270,10 @@ mod tests {
 
         for (name, kind) in [
             ("head", UserCommandKind::Head),
+            (
+                "sleep",
+                resolve_user_command("sleep").expect("sleep builtin"),
+            ),
             ("exit", UserCommandKind::Exit),
             ("ping", UserCommandKind::Ping),
             ("ls", UserCommandKind::List),
@@ -302,6 +311,73 @@ mod tests {
             }
             assert!(context.output.contains(&alloc::format!("Usage: {name}")));
         }
+    }
+
+    #[xila::task::test(task_path = xila::task)]
+    async fn sleep_yields_then_completes_without_accessing_os_services() {
+        use core::{
+            future::{Future, poll_fn},
+            task::Poll,
+        };
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+        };
+        let mut options = getargs::Options::new(["5ms"].into_iter());
+        let mut future = core::pin::pin!(super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[]
+        ));
+        let start = std::time::Instant::now();
+        poll_fn(|task_context| {
+            assert!(matches!(future.as_mut().poll(task_context), Poll::Pending));
+            Poll::Ready(())
+        })
+        .await;
+        future.await.unwrap();
+        // Embassy truncates its clock to microseconds; allow for that rounding.
+        assert!(start.elapsed() >= core::time::Duration::from_millis(4));
+    }
+
+    #[xila::task::test(task_path = xila::task)]
+    async fn sleep_zero_completes_without_output() {
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+        };
+        let mut options = getargs::Options::new(["0"].into_iter());
+        super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[],
+        )
+        .await
+        .unwrap();
+        assert!(context.output.is_empty());
+    }
+
+    #[test]
+    fn sleep_rejects_invalid_duration_before_waiting() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+        let mut context = HelpContext {
+            output: alloc::string::String::new(),
+        };
+        let mut options = getargs::Options::new(["1.5s"].into_iter());
+        let mut future = core::pin::pin!(super::dispatch_user_command(
+            resolve_user_command("sleep").unwrap(),
+            &mut context,
+            &mut options,
+            &[]
+        ));
+        let mut task_context = Context::from_waker(Waker::noop());
+        assert!(matches!(
+            future.as_mut().poll(&mut task_context),
+            Poll::Ready(Err(crate::Error::InvalidSleepDuration))
+        ));
     }
 
     #[test]

@@ -44,6 +44,7 @@ pub enum Error<'a> {
     FailedToResolve(network::Error),
     FailedToCreateSocket(network::Error),
     Format,
+    InvalidSleepDuration,
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -197,6 +198,14 @@ impl Display for Error<'_> {
             }
             Error::ArgumentParsing(error) => {
                 write!(formatter, translate!("Argument parsing error: {}"), error)
+            }
+            Error::InvalidSleepDuration => {
+                write!(
+                    formatter,
+                    translate!(
+                        "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)"
+                    )
+                )
             }
             Error::Format => {
                 write!(formatter, translate!("Format error"))

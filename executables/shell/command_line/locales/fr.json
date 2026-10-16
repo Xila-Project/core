@@ -1,6 +1,6 @@
 {
-  "Argument parsing error: {}": "Erreur d'analyse des arguments: {}",
   "Accessed": "Accédé",
+  "Argument parsing error: {}": "Erreur d'analyse des arguments: {}",
   "Authentication failed: {}": "Échec de l'authentification: {}",
   "Cannot resolve {}: Unknown host": "Impossible de résoudre {}: Hôte inconnu",
   "Command not found": "Commande introuvable",
@@ -34,6 +34,7 @@
   "Invalid number of arguments": "Nombre d'arguments invalide",
   "Invalid option": "Option invalide",
   "Invalid path": "Chemin invalide",
+  "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)": "Durée de pause invalide : utilisez un entier positif ou nul avec ms, s, m ou h (maximum 18446744073709551615 nanosecondes)",
   "Kind": "Type",
   "Links": "Liens",
   "Missing command": "Commande manquante",
