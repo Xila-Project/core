@@ -579,3 +579,33 @@ async fn utility_commands_compose_with_streaming_and_redirection() {
     );
     assert_eq!(contents(&shell, "/false-errors").await, "");
 }
+
+#[xila::task::test(task_path = xila::task)]
+async fn realpath_resolves_relative_and_multiple_existing_operands() {
+    let mut shell = shell().await;
+    assert_eq!(
+        shell
+            .execute_line("mkdir /realpath; echo value > /realpath/file; cd /realpath; realpath . file /realpath/../realpath/file")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        contents(&shell, "/shell-output").await,
+        "/realpath\n/realpath/file\n/realpath/file\n"
+    );
+
+    assert_eq!(shell.execute_line("help realpath").await.unwrap(), 0);
+    assert!(
+        contents(&shell, "/shell-output")
+            .await
+            .contains("Usage: realpath PATH...")
+    );
+}
+
+#[xila::task::test(task_path = xila::task)]
+async fn realpath_rejects_missing_operands() {
+    let mut shell = shell().await;
+    assert_eq!(shell.execute_line("realpath /missing").await.unwrap(), 1);
+    assert_eq!(contents(&shell, "/shell-output").await, "");
+}

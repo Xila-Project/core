@@ -16,6 +16,7 @@ mod ip;
 mod list;
 mod ping;
 mod print_working_directory;
+mod realpath;
 mod sleep;
 mod statistics;
 mod tail;
@@ -111,6 +112,7 @@ pub enum UserCommandKind {
     Ping,
     Ip,
     PrintWorkingDirectory,
+    Realpath,
     PrintEnvironmentVariable,
     Which,
     WordCount,
@@ -205,6 +207,11 @@ const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
         "Usage: pwd\nPrint the current directory.",
     ),
     (
+        "realpath",
+        UserCommandKind::Realpath,
+        realpath::RealpathArguments::HELP,
+    ),
+    (
         "printenv",
         UserCommandKind::PrintEnvironmentVariable,
         environment_variables::GetEnvironmentVariableArguments::HELP,
@@ -283,6 +290,11 @@ where
         UserCommandKind::Ip => IpCommand.execute(context, options, paths).await,
         UserCommandKind::PrintWorkingDirectory => {
             PrintWorkingDirectoryCommand
+                .execute(context, options, paths)
+                .await
+        }
+        UserCommandKind::Realpath => {
+            realpath::RealpathCommand
                 .execute(context, options, paths)
                 .await
         }
@@ -388,6 +400,7 @@ mod tests {
             ("cd", UserCommandKind::ChangeDirectory),
             ("clear", UserCommandKind::Clear),
             ("chmod", UserCommandKind::Chmod),
+            ("realpath", UserCommandKind::Realpath),
             ("mkdir", UserCommandKind::CreateDirectory),
             ("rm", UserCommandKind::RemoveFile),
             ("rmdir", UserCommandKind::RemoveDirectory),
@@ -788,6 +801,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("tree"),
             Some(UserCommandKind::Tree)
+        ));
+        assert!(matches!(
+            resolve_user_command("realpath"),
+            Some(UserCommandKind::Realpath)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }
