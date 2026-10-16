@@ -42,6 +42,7 @@
   "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)": "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)",
   "Kind": "Kind",
   "Links": "Links",
+  "Line too long": "Line too long",
   "Missing command": "Missing command",
   "Missing file name after redirect in": "Missing file name after redirect in",
   "Missing file name after redirect out": "Missing file name after redirect out",

@@ -50,6 +50,7 @@ pub enum Error<'a> {
     ExitStatus(NonZeroUsize),
     Syntax(crate::tokenizer::SyntaxError),
     FailedToWriteFile(virtual_file_system::Error),
+    LineTooLong,
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -92,6 +93,7 @@ impl Display for Error<'_> {
             Error::FailedToWriteFile(error) => {
                 write!(formatter, translate!("Failed to write file: {}"), error)
             }
+            Error::LineTooLong => write!(formatter, translate!("Line too long")),
             Error::AuthenticationFailed(error) => {
                 write!(formatter, translate!("Authentication failed: {}"), error)
             }

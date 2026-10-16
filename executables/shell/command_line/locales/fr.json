@@ -42,6 +42,7 @@
   "Invalid sleep duration: use a nonnegative integer with ms, s, m, or h (maximum 18446744073709551615 nanoseconds)": "Durée de pause invalide : utilisez un entier positif ou nul avec ms, s, m ou h (maximum 18446744073709551615 nanosecondes)",
   "Kind": "Type",
   "Links": "Liens",
+  "Line too long": "Ligne trop longue",
   "Missing command": "Commande manquante",
   "Missing file name after redirect in": "Nom de fichier manquant après la redirection d'entrée",
   "Missing file name after redirect out": "Nom de fichier manquant après la redirection de sortie",
