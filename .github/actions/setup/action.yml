@@ -31,11 +31,13 @@ runs:
     - name: Setup | Export native build env
       shell: bash
       run: |
+        if [ "${{ inputs.profile }}" = 'minimal' ]; then
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          exit 0
+        fi
         echo "CC=clang" >> "$GITHUB_ENV"
         echo "CXX=clang++" >> "$GITHUB_ENV"
-        if [ "${{ inputs.profile }}" = 'minimal' ]; then
-          echo "LIBCLANG_PATH=" >> "$GITHUB_ENV"
-        elif LIBDIR="$(llvm-config --libdir 2>/dev/null)"; then
+        if LIBDIR="$(llvm-config --libdir 2>/dev/null)"; then
           echo "LIBCLANG_PATH=$LIBDIR" >> "$GITHUB_ENV"
         else
           CANDIDATE="/usr/lib/llvm-$(clang -dumpversion | cut -d. -f1)/lib"
