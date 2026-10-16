@@ -66,5 +66,5 @@ runs:
     - name: Setup | Native tools and npm dependencies
       shell: bash
       run: |
-        cargo binstall --no-confirm cargo-make trunk
+        cargo binstall --no-confirm cargo-make trunk taplo-cli cargo-llvm-cov
         npm ci
