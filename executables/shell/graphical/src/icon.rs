@@ -21,11 +21,6 @@ pub unsafe fn create_icon(
         }
 
         lvgl::lv_obj_set_size(icon, size.get_x().into(), size.get_y().into());
-        lvgl::lv_obj_set_style_pad_all(icon, 0, lvgl::LV_STATE_DEFAULT);
-
-        let radius: i32 = size.get_x() as i32 / 3;
-
-        lvgl::lv_obj_set_style_radius(icon, radius, lvgl::LV_STATE_DEFAULT);
 
         lvgl::lv_obj_set_style_bg_color(icon, icon_color.into_lvgl_color(), lvgl::LV_STATE_DEFAULT);
         lvgl::lv_obj_set_style_text_color(

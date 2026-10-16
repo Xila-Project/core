@@ -90,8 +90,6 @@ impl Desk {
             window.set_icon("De", Color::BLACK);
 
             unsafe {
-                lvgl::lv_obj_set_style_pad_all(window.as_mut(), 0, lvgl::LV_STATE_DEFAULT);
-
                 lvgl::lv_obj_add_event_cb(
                     windows_parent,
                     Some(event_handler),
@@ -158,8 +156,6 @@ impl Desk {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_pad_all(desk, 20, lvgl::LV_STATE_DEFAULT);
-
                 desk
             };
 
@@ -171,9 +167,6 @@ impl Desk {
                     return Err(Error::FailedToCreateObject);
                 }
 
-                lvgl::lv_obj_set_style_pad_top(drawer, 40, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_pad_bottom(drawer, 40, lvgl::LV_STATE_DEFAULT);
-                lvgl::lv_obj_set_style_pad_left(drawer, 40, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_flex_flow(drawer, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW_WRAP);
 
                 drawer
@@ -191,10 +184,7 @@ impl Desk {
 
                 lvgl::lv_obj_set_align(dock, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_size(dock, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);
-                lvgl::lv_obj_set_style_border_width(dock, 0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_flex_flow(dock, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
-
-                lvgl::lv_obj_set_style_pad_all(dock, 12, lvgl::LV_STATE_DEFAULT);
 
                 dock
             };
@@ -242,11 +232,9 @@ impl Desk {
         let icon = unsafe {
             let container = lvgl::lv_obj_create(drawer);
 
-            lvgl::lv_obj_set_size(container, 12 * 8, 11 * 8);
+            lvgl::lv_obj_set_size(container, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);
             lvgl::lv_obj_set_style_bg_opa(container, lvgl::LV_OPA_0, lvgl::LV_STATE_DEFAULT);
-            lvgl::lv_obj_set_style_border_width(container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_flex_flow(container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
-            lvgl::lv_obj_set_style_pad_all(container, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_flex_align(
                 container,
                 lvgl::lv_flex_align_t_LV_FLEX_ALIGN_SPACE_EVENLY,
@@ -376,11 +364,9 @@ impl Desk {
                 _dock_icon,
                 lvgl::lv_align_t_LV_ALIGN_OUT_TOP_MID,
                 0,
-                -128,
+                0,
             );
             lvgl::lv_obj_set_scrollbar_mode(menu, lvgl::lv_scrollbar_mode_t_LV_SCROLLBAR_MODE_OFF);
-            lvgl::lv_obj_set_style_pad_all(menu, 6, lvgl::LV_STATE_DEFAULT);
-            lvgl::lv_obj_set_style_pad_row(menu, 4, lvgl::LV_STATE_DEFAULT);
 
             let maximize_button =
                 lvgl::lv_list_add_button(menu, symbol::UP.as_ptr() as _, c"Maximize".as_ptr());
