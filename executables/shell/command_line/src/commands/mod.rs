@@ -385,7 +385,6 @@ mod tests {
             ("ls", UserCommandKind::List),
             ("tail", UserCommandKind::Tail),
             ("wc", UserCommandKind::WordCount),
-            ("grep", UserCommandKind::Grep),
             ("cd", UserCommandKind::ChangeDirectory),
             ("clear", UserCommandKind::Clear),
             ("chmod", UserCommandKind::Chmod),

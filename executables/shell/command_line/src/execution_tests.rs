@@ -110,6 +110,68 @@ async fn redirection_appends_truncates_and_reads_without_extra_newlines() {
     );
 }
 
+#[xila::task::test(task_path = xila::task)]
+async fn grep_streams_matching_lines_and_reports_status_and_line_errors() {
+    let mut shell = shell().await;
+    File::write_to_path(
+        shell.context.virtual_file_system,
+        shell.task,
+        "/grep-input",
+        b"miss\nhit one\nno match\nhit eof",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        shell
+            .execute_line("grep hit /grep-input > /grep-output")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/grep-output").await, "hit one\nhit eof");
+    assert_eq!(
+        shell.execute_line("grep absent /grep-input").await.unwrap(),
+        1
+    );
+
+    assert_eq!(
+        shell
+            .execute_line("echo 'pipeline hit'|grep hit|cat>/grep-pipe")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/grep-pipe").await, "pipeline hit\n");
+    assert_eq!(
+        shell
+            .execute_line("echo 'dash hit'|grep hit -|cat>/grep-dash")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(contents(&shell, "/grep-dash").await, "dash hit\n");
+
+    let long_line = vec![b'x'; 257];
+    File::write_to_path(
+        shell.context.virtual_file_system,
+        shell.task,
+        "/grep-long-line",
+        &long_line,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        shell.execute_line("grep x /grep-long-line").await.unwrap(),
+        1
+    );
+    assert!(
+        contents(&shell, "/shell-errors")
+            .await
+            .contains("Line too long")
+    );
+}
+
 struct ReadOne;
 impl ExecutableTrait for ReadOne {
     fn main(mut standard: Standard<'static>, _: Vec<String>) -> MainFuture {
