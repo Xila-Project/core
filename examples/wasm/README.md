@@ -147,3 +147,39 @@ cargo test -p drivers_wasm --target wasm32-unknown-unknown --test opfs
 For a non-default browser binary, set `WASM_BINDGEN_TEST_WEBDRIVER_JSON` to a JSON
 file containing `{"goog:chromeOptions":{"binary":"/path/to/chromium"}}`.
 These tests use real OPFS files, including MBR/LittleFS save/reopen coverage.
+
+## Canvas presentation experiment
+
+Canvas2D keeps synchronized presentation by default. For issue #362, reload
+with `?canvas_desynchronized=true` to request the browser's low-latency hint,
+or `?canvas_desynchronized=false` for the baseline. Append with `&` if the
+URL already has query parameters. A full reload creates a fresh context;
+changing the URL after startup does not change an existing context.
+
+Startup logs the requested mode and the actual context attributes returned by
+`getContextAttributes()`. An ignored hint can return `desynchronized: false`;
+missing or throwing attribute APIs are reported as unavailable. Context creation
+retries with only `alpha: false` if the options request fails. The hint is not a
+guarantee of lower latency, and successful context creation does not prove that
+it was honored. The driver also exposes `new_with_desynchronized(canvas, bool)`
+for explicit callers and browser tests.
+
+Compare both URLs with the same build, browser version, hardware, display refresh
+rate, viewport, saved filesystem, and application state. Use fresh foreground
+runs at 800×600 and 1280×720, with at least three repetitions per mode. Record
+requested/actual attributes alongside each result. Exercise window dragging,
+clicks, animation, terminal scrolling, and an active guest, both with clean
+storage and while OPFS autosave is active. Capture browser Performance traces
+and CPU usage; compare frame interval median/p95, long frames, and canvas upload
+time with the profiling baseline in #355 once available. JavaScript upload
+duration alone does not measure compositor presentation latency. Measure visible
+pointer/click response with a high-speed recording or equivalent end-to-end
+measurement, and inspect moving partial updates for tearing or mixed frames.
+Repeat on Chromium, Firefox, and Safari/WebKit where available; report omitted
+browsers and unsupported attributes explicitly.
+
+No end-to-end latency, frame-pacing, CPU, or visual-artifact improvement has been
+established for this option. Keep the default unchanged until those measurements
+support a decision; #362 remains open for that evaluation. The browser input test
+checks dirty-rectangle pixel preservation in both requested modes, which does
+not establish visible presentation or tearing behavior.

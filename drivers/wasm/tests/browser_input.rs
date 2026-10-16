@@ -251,3 +251,55 @@ async fn changed_viewport_updates_resolution_and_requests_redraw() {
     assert!(!resized);
     canvas.remove();
 }
+
+#[wasm_bindgen_test]
+async fn canvas_context_modes_preserve_partial_updates() {
+    use graphics::{Area, Point, RenderingColor, SET_DRAWING_AREA};
+    use wasm_bindgen::Clamped;
+    use web_sys::{CanvasRenderingContext2d, ImageData};
+
+    for desynchronized in [false, true] {
+        let canvas = canvas();
+        canvas.set_width(4);
+        canvas.set_height(4);
+        let device = CanvasScreenDevice::new_with_desynchronized(canvas.clone(), desynchronized)
+            .await
+            .unwrap();
+        let context: CanvasRenderingContext2d = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        let background = [10u8, 20, 30, 255].repeat(16);
+        let image =
+            ImageData::new_with_u8_clamped_array_and_sh(Clamped(&background), 4, 4).unwrap();
+        context.put_image_data(&image, 0.0, 0.0).unwrap();
+        let area = Area::new(Point::new(1, 1), Point::new(2, 2));
+        device
+            .control(
+                SET_DRAWING_AREA::IDENTIFIER,
+                AnyByLayout::from(&area),
+                AnyByLayout::NONE,
+            )
+            .unwrap();
+        let pixels = [RenderingColor::new(255, 100, 110, 120); 4];
+        let bytes = unsafe {
+            core::slice::from_raw_parts(pixels.as_ptr().cast::<u8>(), size_of_val(&pixels))
+        };
+        device.write(bytes, 0).unwrap();
+        let actual = context.get_image_data(0.0, 0.0, 4.0, 4.0).unwrap().data();
+        for y in 0..4 {
+            for x in 0..4 {
+                let offset = (y * 4 + x) * 4;
+                let expected = if (1..=2).contains(&x) && (1..=2).contains(&y) {
+                    &[100, 110, 120, 255]
+                } else {
+                    &[10, 20, 30, 255]
+                };
+                assert_eq!(&actual[offset..offset + 4], expected);
+            }
+        }
+        canvas.remove();
+    }
+}
