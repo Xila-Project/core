@@ -90,6 +90,10 @@ impl Desk {
             window.set_icon("De", Color::BLACK);
 
             unsafe {
+                // Edge-to-edge window content: the shared window class already
+                // flattens border and radius, only the container padding remains.
+                lvgl::lv_obj_set_style_pad_all(window.as_mut(), 0, lvgl::LV_STATE_DEFAULT);
+
                 lvgl::lv_obj_add_event_cb(
                     windows_parent,
                     Some(event_handler),
@@ -185,6 +189,11 @@ impl Desk {
                 lvgl::lv_obj_set_align(dock, lvgl::lv_align_t_LV_ALIGN_BOTTOM_MID);
                 lvgl::lv_obj_set_size(dock, lvgl::LV_SIZE_CONTENT, lvgl::LV_SIZE_CONTENT);
                 lvgl::lv_obj_set_flex_flow(dock, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
+                // Flat dock bar chrome: keep the theme surface but drop the
+                // card padding, border and radius around the themed icons.
+                lvgl::lv_obj_set_style_pad_all(dock, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_border_width(dock, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_radius(dock, 0, lvgl::LV_STATE_DEFAULT);
 
                 dock
             };
