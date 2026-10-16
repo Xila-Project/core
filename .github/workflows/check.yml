@@ -86,6 +86,7 @@ jobs:
               - 'examples/wasm/**'
             localization:
               - *shared
+              - '**/*.rs'
               - '**/*.ftl'
               - '**/locales/**/*.json'
               - '**/locale/**'
@@ -97,9 +98,9 @@ jobs:
   localization:
     name: Localization checks (${{ matrix.locale }})
     needs: [changes]
-    # Always runs: a new translation key added in a .rs-only PR must still
-    # be checked with EMBEDDED_I18N_STRICT=1 (correctness over minutes).
-    if: ${{ !cancelled() }}
+    # Rust-only changes can introduce translation keys; docs-only PRs skip
+    # these builds. Main/manual runs and filter failures still run both locales.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.localization == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -198,10 +199,10 @@ jobs:
           profile: minimal
 
       - name: Check | Formatting (TOML)
-        run: cargo make format-toml --check
+        run: cargo make --skip-init-end-tasks format-toml --check
 
       - name: Check | Formatting (Rust)
-        run: cargo make format-rust -- --check
+        run: cargo make --skip-init-end-tasks format-rust -- --check
 
       - name: Check | Formatting (JSON)
         run: npm exec prettier -- --check "**/*.json"

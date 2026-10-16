@@ -93,6 +93,14 @@ runs:
       with:
         key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
 
+    - name: Setup | Validate lockfiles
+      if: inputs.profile != 'minimal'
+      shell: bash
+      run: |
+        for manifest in Cargo.toml executables/wasm/tests/translation/Cargo.toml tools/profiling/Cargo.toml; do
+          cargo metadata --locked --format-version 1 --manifest-path "$manifest" > /dev/null
+        done
+
     - name: Setup | cargo-binstall
       shell: bash
       run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/v1.25.3/install-from-binstall-release.sh | bash
