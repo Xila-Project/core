@@ -1,8 +1,6 @@
 name: Check
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
@@ -11,6 +9,10 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -93,7 +95,9 @@ jobs:
   localization:
     name: Translation coverage (${{ matrix.locale }})
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.localization == 'true') }}
+    # Always runs: a new translation key added in a .rs-only PR must still
+    # be checked with EMBEDDED_I18N_STRICT=1 (correctness over minutes).
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -112,9 +116,9 @@ jobs:
       - name: Check | Strict host and guest translations
         run: cargo make check-localization
 
-  # Job-level skips satisfy required checks. Main/manual runs and
-  # filter failures run the full suite; !cancelled() permits runs after a
-  # skipped dependency.
+  # Job-level skips satisfy required checks. PR runs are path-filtered and
+  # manual runs and filter failures run the full suite; !cancelled() permits
+  # runs after a skipped dependency. main is covered by Deploy, not Check.
   wasm-translation:
     name: WASM translation (${{ matrix.memory }})
     needs: [changes]
@@ -131,11 +135,6 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
-
-      - name: Setup | Coverage and Miri components
-        run: |
-          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
-          rustup component add --toolchain "$XILA_NIGHTLY_TOOLCHAIN" miri rust-src
 
       - name: Check | Translation coverage
         run: >-
@@ -185,6 +184,8 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          profile: minimal
 
       - name: Check | Formatting (TOML)
         run: cargo make format-toml --check
@@ -202,7 +203,7 @@ jobs:
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check | Translation coverage gate
         if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
@@ -229,7 +230,7 @@ jobs:
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: ci-full
     steps:
       - name: Check | Translation coverage gate
@@ -257,7 +258,6 @@ jobs:
 
       - name: Run | Test
         run: |
-          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
           cargo make coverage --lcov --output-path lcov.info
 
       - name: Upload | Coverage to Codecov
@@ -275,7 +275,7 @@ jobs:
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check | Translation coverage gate
         if: needs.localization.result != 'success' && needs.localization.result != 'skipped'

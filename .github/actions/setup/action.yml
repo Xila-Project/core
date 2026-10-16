@@ -1,6 +1,12 @@
 name: "Setup"
 description: "Native Rust/Node setup for Xila checks and builds (no Devbox)"
 
+inputs:
+  profile:
+    description: "Setup profile: 'full' (default) or 'minimal' for lightweight jobs (format only)."
+    required: false
+    default: full
+
 runs:
   using: "composite"
   steps:
@@ -16,6 +22,7 @@ runs:
         echo "RUSTUP_TOOLCHAIN=$XILA_RUST_TOOLCHAIN" >> "$GITHUB_ENV"
 
     - name: Setup | System packages
+      if: inputs.profile != 'minimal'
       shell: bash
       run: |
         sudo apt-get update
@@ -26,7 +33,19 @@ runs:
       run: |
         echo "CC=clang" >> "$GITHUB_ENV"
         echo "CXX=clang++" >> "$GITHUB_ENV"
-        echo "LIBCLANG_PATH=$(dirname "$(readlink -f "$(find /usr/lib -name 'libclang.so*' | head -n 1)")")" >> "$GITHUB_ENV"
+        if [ "${{ inputs.profile }}" = 'minimal' ]; then
+          echo "LIBCLANG_PATH=" >> "$GITHUB_ENV"
+        elif LIBDIR="$(llvm-config --libdir 2>/dev/null)"; then
+          echo "LIBCLANG_PATH=$LIBDIR" >> "$GITHUB_ENV"
+        else
+          CANDIDATE="/usr/lib/llvm-$(clang -dumpversion | cut -d. -f1)/lib"
+          if [ -e "$CANDIDATE"/libclang.so ]; then
+            echo "LIBCLANG_PATH=$CANDIDATE" >> "$GITHUB_ENV"
+          else
+            echo "::error::Could not resolve LIBCLANG_PATH (llvm-config missing, no libclang in $CANDIDATE)."
+            exit 1
+          fi
+        fi
         echo "CC_wasm32_unknown_unknown=$(clang -print-prog-name=clang)" >> "$GITHUB_ENV"
         echo "CXX_wasm32_unknown_unknown=$(clang -print-prog-name=clang++)" >> "$GITHUB_ENV"
         echo "CC_wasm32_wasip1=$(clang -print-prog-name=clang)" >> "$GITHUB_ENV"
@@ -41,6 +60,7 @@ runs:
         components: rustfmt, clippy, llvm-tools-preview
 
     - name: Setup | Rust nightly toolchain
+      if: inputs.profile != 'minimal'
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ steps.toolchains.outputs.nightly }}
@@ -48,9 +68,11 @@ runs:
         components: rust-src, miri
 
     - name: Setup | sccache
+      if: inputs.profile != 'minimal'
       uses: mozilla-actions/sccache-action@v0.0.9
 
     - name: Setup | Export sccache env
+      if: inputs.profile != 'minimal'
       shell: bash
       run: |
         echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
@@ -67,15 +89,22 @@ runs:
     - name: Setup | Rust cache
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: xila
         key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
 
     - name: Setup | cargo-binstall
       shell: bash
-      run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+      run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/v1.25.3/install-from-binstall-release.sh | bash
 
-    - name: Setup | Native tools and npm dependencies
+    - name: Setup | Native tools (minimal)
+      if: inputs.profile == 'minimal'
       shell: bash
       run: |
-        cargo binstall --no-confirm cargo-make trunk taplo-cli cargo-llvm-cov
+        cargo binstall --no-confirm taplo-cli@0.10.0
+        npm ci
+
+    - name: Setup | Native tools and npm dependencies
+      if: inputs.profile != 'minimal'
+      shell: bash
+      run: |
+        cargo binstall --no-confirm cargo-make@0.37.24 trunk@0.21.14 taplo-cli@0.10.0 cargo-llvm-cov@0.9.1
         npm ci
