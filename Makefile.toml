@@ -138,6 +138,8 @@ args = [
   "weather",
   "--package",
   "clock",
+  "--package",
+  "pixel_painter",
 ]
 
 [tasks.check-localization]
@@ -225,6 +227,8 @@ args = [
   "weather",
   "--package",
   "clock",
+  "--package",
+  "pixel_painter",
   "--target",
   "wasm32-wasip1",
   "--profile",

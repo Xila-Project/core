@@ -4,7 +4,7 @@ use super::{
     marshal::{ButtonMap, read_c_string},
     objects::Kind,
 };
-use crate::host::translation::{GuestMemory, GuestPointer, WasmUsize};
+use crate::host::translation::{GuestMemory, GuestPointer, GuestSlice, WasmUsize};
 use core::ptr::NonNull;
 use xila::graphics::{Color, Window, lvgl};
 
@@ -44,13 +44,27 @@ pub fn dispatch(
     state.reap_deleted_maps();
     let [a, b, c, ..] = call.arguments;
     match function {
+        Function::ObjectSetPadding => {
+            let object = state.object(a, None)?;
+            let padding = i32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?;
+            if !(0..=64).contains(&padding) {
+                return Err(GraphicsError::InvalidValue);
+            }
+            unsafe {
+                lvgl::lv_obj_set_style_pad_all(object, padding, 0);
+                lvgl::lv_obj_set_style_pad_row(object, padding, 0);
+                lvgl::lv_obj_set_style_pad_column(object, padding, 0);
+            }
+        }
         Function::WindowCreate
         | Function::ObjectCreate
         | Function::LabelCreate
         | Function::ButtonCreate
         | Function::CheckboxCreate
         | Function::TabviewCreate
-        | Function::ButtonmatrixCreate => {
+        | Function::ButtonmatrixCreate
+        | Function::TextareaCreate
+        | Function::KeyboardCreate => {
             state.ensure_capacity()?;
             let (pointer, kind, parent) = if function == Function::WindowCreate {
                 let window = xila::task::block_on(manager.create_window())
@@ -62,6 +76,12 @@ pub fn dispatch(
                 let (pointer, kind) = unsafe {
                     match function {
                         Function::ObjectCreate => (lvgl::lv_obj_create(parent), Kind::Object),
+                        Function::TextareaCreate => {
+                            (lvgl::lv_textarea_create(parent), Kind::Textarea)
+                        }
+                        Function::KeyboardCreate => {
+                            (lvgl::lv_keyboard_create(parent), Kind::Keyboard)
+                        }
                         Function::LabelCreate => (lvgl::lv_label_create(parent), Kind::Label),
                         Function::ButtonCreate => (lvgl::lv_button_create(parent), Kind::Object),
                         Function::CheckboxCreate => {
@@ -115,7 +135,7 @@ pub fn dispatch(
                     .set_icon(text, Color::from_lvgl_color(color))
             };
         }
-        Function::WindowPopEvent => {
+        Function::WindowPopEvent | Function::WindowPopPointerEvent => {
             let pointer = state.object(a, Some(Kind::Window))?;
             memory
                 .validate_pointer(GuestPointer::<u32>::new(b))
@@ -123,9 +143,30 @@ pub fn dispatch(
             memory
                 .validate_pointer(GuestPointer::<WasmUsize>::new(c))
                 .ok_or(GraphicsError::InvalidMemory)?;
+            if function == Function::WindowPopPointerEvent {
+                for &offset in &call.arguments[3..7] {
+                    memory
+                        .validate_pointer(GuestPointer::<i32>::new(offset))
+                        .ok_or(GraphicsError::InvalidMemory)?;
+                }
+            }
             let mut window =
                 unsafe { Window::from_raw(pointer) }.ok_or(GraphicsError::InvalidHandle)?;
-            let (code, target) = unsafe { window.as_mut().pop_event() }.map_or((0, 0), |event| {
+            let event = unsafe { window.as_mut().pop_event() };
+            if function == Function::WindowPopPointerEvent {
+                let point = event.as_ref().and_then(|event| event.pointer).unwrap_or([
+                    i32::MIN,
+                    i32::MIN,
+                    0,
+                    0,
+                ]);
+                for (&offset, value) in call.arguments[3..7].iter().zip(point) {
+                    memory
+                        .write(GuestPointer::new(offset), value)
+                        .expect("validated pointer output");
+                }
+            }
+            let (code, target) = event.map_or((0, 0), |event| {
                 (
                     super::events::guest_code(event.code),
                     state.handle_for(event.target),
@@ -138,6 +179,89 @@ pub fn dispatch(
                 .write(GuestPointer::new(c), target)
                 .expect("validated event target");
         }
+        Function::IndexedCanvasCreate => {
+            state.ensure_capacity()?;
+            let parent = state.object(a, None)?;
+            let width = u16::try_from(b).map_err(|_| GraphicsError::InvalidValue)?;
+            let height = u16::try_from(c).map_err(|_| GraphicsError::InvalidValue)?;
+            let canvas = super::canvas::IndexedCanvas::new(width as usize, height as usize)?;
+            let object = unsafe { lvgl::lv_obj_create(parent) };
+            let handle = state.insert(object, Kind::IndexedCanvas, Some(a))?;
+            if let Err(error) = state.install_canvas(handle, canvas) {
+                unsafe {
+                    lvgl::lv_obj_delete(object);
+                }
+                state.reap_deleted_maps();
+                return Err(error);
+            }
+            memory
+                .write(GuestPointer::new(call.result), handle)
+                .expect("validated result");
+        }
+        Function::IndexedCanvasSetPixels => {
+            let object = state.object(a, Some(Kind::IndexedCanvas))?;
+            let colors = call.arguments[4];
+            if colors == 0 || colors > 256 {
+                return Err(GraphicsError::InvalidValue);
+            }
+            let pixels = memory
+                .bytes(GuestSlice::new(b, c))
+                .ok_or(GraphicsError::InvalidMemory)?;
+            let palette = memory
+                .values(GuestSlice::<u32>::new(call.arguments[3], colors))
+                .ok_or(GraphicsError::InvalidMemory)?;
+            state.canvas_mut(a).upload(pixels, palette)?;
+            unsafe {
+                lvgl::lv_obj_invalidate(object);
+            }
+        }
+        Function::TextareaSetOneLine | Function::TextareaSetMaxLength => {
+            let object = state.object(a, Some(Kind::Textarea))?;
+            unsafe {
+                if function == Function::TextareaSetOneLine {
+                    if b > 1 {
+                        return Err(GraphicsError::InvalidValue);
+                    }
+                    lvgl::lv_textarea_set_one_line(object, b != 0);
+                } else {
+                    let length = u32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?;
+                    if length > 4096 {
+                        return Err(GraphicsError::ResourceLimit);
+                    }
+                    lvgl::lv_textarea_set_max_length(object, length);
+                }
+            }
+        }
+        Function::TextareaGetText | Function::TextareaGetTextLength => {
+            let object = state.object(a, Some(Kind::Textarea))?;
+            let text = unsafe { core::ffi::CStr::from_ptr(lvgl::lv_textarea_get_text(object)) };
+            let bytes = text.to_bytes_with_nul();
+            let length =
+                i32::try_from(bytes.len() - 1).map_err(|_| GraphicsError::ResourceLimit)?;
+            if function == Function::TextareaGetText {
+                if c < bytes.len() as WasmUsize {
+                    return Err(GraphicsError::InvalidValue);
+                }
+                let output = memory
+                    .bytes_mut(GuestSlice::new(b, c))
+                    .ok_or(GraphicsError::InvalidMemory)?;
+                output[..bytes.len()].copy_from_slice(bytes);
+            }
+            memory
+                .write(GuestPointer::new(call.result), length)
+                .expect("validated result");
+        }
+        Function::KeyboardSetTextarea => {
+            let keyboard = state.object(a, Some(Kind::Keyboard))?;
+            let textarea = if b == 0 {
+                core::ptr::null_mut()
+            } else {
+                state.object(b, Some(Kind::Textarea))?
+            };
+            unsafe {
+                lvgl::lv_keyboard_set_textarea(keyboard, textarea);
+            }
+        }
         Function::Percentage => {
             memory
                 .write(GuestPointer::new(call.result), unsafe {
@@ -145,11 +269,13 @@ pub fn dispatch(
                 })
                 .expect("validated result");
         }
-        Function::LabelSetText | Function::CheckboxSetText => {
+        Function::LabelSetText | Function::CheckboxSetText | Function::TextareaSetText => {
             let kind = if function == Function::LabelSetText {
                 Kind::Label
-            } else {
+            } else if function == Function::CheckboxSetText {
                 Kind::Checkbox
+            } else {
+                Kind::Textarea
             };
             let pointer = state.object(a, Some(kind))?;
             let text = read_c_string(memory, b)?;
@@ -157,8 +283,10 @@ pub fn dispatch(
             unsafe {
                 if function == Function::LabelSetText {
                     lvgl::lv_label_set_text(pointer, text.as_ptr());
-                } else {
+                } else if function == Function::CheckboxSetText {
                     lvgl::lv_checkbox_set_text(pointer, text.as_ptr());
+                } else {
+                    lvgl::lv_textarea_set_text(pointer, text.as_ptr());
                 }
             }
         }
@@ -197,7 +325,8 @@ pub fn dispatch(
         | Function::ObjectSetHeight
         | Function::ObjectSetWidth
         | Function::ObjectAddState
-        | Function::ObjectAddFlag => {
+        | Function::ObjectAddFlag
+        | Function::ObjectRemoveFlag => {
             let pointer = state.object(a, None)?;
             unsafe {
                 match function {
@@ -220,6 +349,10 @@ pub fn dispatch(
                         }
                         lvgl::lv_obj_add_state(pointer, state);
                     }
+                    Function::ObjectRemoveFlag => lvgl::lv_obj_remove_flag(
+                        pointer,
+                        u32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?,
+                    ),
                     Function::ObjectAddFlag => lvgl::lv_obj_add_flag(
                         pointer,
                         u32::try_from(b).map_err(|_| GraphicsError::InvalidValue)?,

@@ -368,6 +368,16 @@ async fn main(task_manager: &'static xila::task::Manager) {
     .await
     .unwrap();
 
+    let pixel_painter_binary_path = application_binary("pixel_painter").unwrap();
+    load_to_virtual_file_system(
+        task_manager,
+        virtual_file_system,
+        &pixel_painter_binary_path,
+        "/binaries/pixel_painter",
+    )
+    .await
+    .unwrap();
+
     let _ = executable::execute(
         executable_context,
         "/binaries/wasm",
@@ -399,6 +409,21 @@ async fn main(task_manager: &'static xila::task::Manager) {
         executable_context,
         "/binaries/wasm",
         vec!["--install".to_string(), "/binaries/clock".to_string()],
+        standard.duplicate().await.unwrap(),
+        None,
+    )
+    .await
+    .unwrap()
+    .join()
+    .await;
+
+    let _ = executable::execute(
+        executable_context,
+        "/binaries/wasm",
+        vec![
+            "--install".to_string(),
+            "/binaries/pixel_painter".to_string(),
+        ],
         standard,
         None,
     )
@@ -446,6 +471,22 @@ async fn main(task_manager: &'static xila::task::Manager) {
         .set_ownership(
             task,
             "/configuration/shared/clock",
+            Some(administrator),
+            Some(group_identifier),
+        )
+        .await
+        .unwrap();
+
+    virtual_file_system::ignore_already_exists_error(
+        virtual_file_system
+            .create_directory(task, &"/configuration/shared/pixel_painter")
+            .await,
+    )
+    .unwrap();
+    virtual_file_system
+        .set_ownership(
+            task,
+            "/configuration/shared/pixel_painter",
             Some(administrator),
             Some(group_identifier),
         )
