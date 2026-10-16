@@ -130,9 +130,30 @@ unsafe extern "C" fn window_event_callback(
             _ => (code, None),
         };
 
-        (*window)
-            .event_queue
-            .push_back(Event::new(EventKind::from_lvgl_code(code), target, key));
+        let mut queued = Event::new(EventKind::from_lvgl_code(code), target, key);
+        if matches!(
+            code,
+            lvgl::lv_event_code_t_LV_EVENT_PRESSED
+                | lvgl::lv_event_code_t_LV_EVENT_PRESSING
+                | lvgl::lv_event_code_t_LV_EVENT_RELEASED
+        ) {
+            let input = lvgl::lv_event_get_indev(event);
+            if !input.is_null()
+                && lvgl::lv_indev_get_type(input) == lvgl::lv_indev_type_t_LV_INDEV_TYPE_POINTER
+            {
+                let mut point = lvgl::lv_point_t::default();
+                let mut area = lvgl::lv_area_t::default();
+                lvgl::lv_indev_get_point(input, &mut point);
+                lvgl::lv_obj_get_content_coords(target, &mut area);
+                queued.pointer = Some([
+                    point.x - area.x1,
+                    point.y - area.y1,
+                    area.x2 - area.x1 + 1,
+                    area.y2 - area.y1 + 1,
+                ]);
+            }
+        }
+        (*window).event_queue.push_back(queued);
         (*window).waker.wake();
     }
 }

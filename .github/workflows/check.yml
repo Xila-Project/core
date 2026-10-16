@@ -348,10 +348,13 @@ jobs:
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
       - name: Build | Bundled applications (WASI)
-        run: cargo +${XILA_RUST_TOOLCHAIN} build -p calculator -p clock --target wasm32-wasip1 --release
+        run: cargo +${XILA_RUST_TOOLCHAIN} build -p calculator -p clock -p pixel_painter --target wasm32-wasip1 --release
 
       - name: Check | Clock (WASI)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p clock --all-targets --target wasm32-wasip1 -- -D warnings
+
+      - name: Check | Pixel Painter (WASI)
+        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p pixel_painter --all-targets --target wasm32-wasip1 -- -D warnings
 
       - name: Cache | Trunk tools and dist
         if: github.event_name != 'pull_request'

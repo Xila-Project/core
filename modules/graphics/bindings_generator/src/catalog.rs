@@ -3,6 +3,20 @@ use quote::ToTokens;
 use std::{collections::BTreeSet, fmt};
 use syn::{FnArg, Pat, ReturnType, Signature, Type};
 
+// Append-only IDs for new Xila helpers. Inserting these into the legacy
+// alphabetical table would renumber existing guest calls, including Calculator.
+fn extension_id(name: &str) -> Option<u16> {
+    Some(match name {
+        "indexed_canvas_create" => 0xf000,
+        "indexed_canvas_set_pixels" => 0xf001,
+        "window_pop_pointer_event" => 0xf002,
+        "keyboard_create" => 0xf003,
+        "keyboard_set_textarea" => 0xf004,
+        "object_set_padding" => 0xf005,
+        _ => return None,
+    })
+}
+
 #[derive(Debug)]
 pub struct GeneratorError(String);
 
@@ -127,12 +141,25 @@ impl CallCatalog {
     }
 
     pub fn from_signatures(mut signatures: Vec<Signature>) -> Result<Self, GeneratorError> {
-        signatures.sort_by_key(|sig| sig.ident.to_string().to_lowercase());
+        signatures.sort_by_key(|sig| {
+            let name = sig.ident.to_string();
+            (extension_id(&name).is_some(), name.to_lowercase())
+        });
         let mut names = BTreeSet::new();
+        let mut legacy_id = 0u16;
         let calls = signatures
             .into_iter()
-            .enumerate()
-            .map(|(id, signature)| {
+            .map(|signature| {
+                let id = if let Some(id) = extension_id(&signature.ident.to_string()) {
+                    id
+                } else {
+                    if legacy_id >= 0xf000 {
+                        return Err(GeneratorError("too many legacy call IDs".into()));
+                    }
+                    let id = legacy_id;
+                    legacy_id += 1;
+                    id
+                };
                 let name = get_function_identifier("", &signature.ident).to_string();
                 if !names.insert(name.clone()) {
                     return Err(GeneratorError(format!("duplicate guest call {name}")));
@@ -159,8 +186,7 @@ impl CallCatalog {
                     )));
                 }
                 Ok(Call {
-                    id: u16::try_from(id)
-                        .map_err(|_| GeneratorError("too many call IDs".into()))?,
+                    id,
                     name,
                     signature,
                     argument_count,

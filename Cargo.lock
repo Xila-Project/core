@@ -3218,6 +3218,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
 
 [[package]]
+name = "pixel_painter"
+version = "0.1.0"
+dependencies = [
+ "embedded-i18n",
+ "wasm",
+]
+
+[[package]]
 name = "pixels"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

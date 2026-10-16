@@ -148,13 +148,38 @@ fn actual_lvgl_catalog_matches_discovered_numbering() {
     legacy.set_function_filtering(None);
     legacy.visit_file(&syn::parse2(graphics_bindgen::additional::get()).unwrap());
     let mut signatures = legacy.get_signatures();
+    let extensions = [
+        "indexed_canvas_create",
+        "indexed_canvas_set_pixels",
+        "window_pop_pointer_event",
+        "keyboard_create",
+        "keyboard_set_textarea",
+        "object_set_padding",
+    ];
+    signatures.retain(|signature| !extensions.contains(&signature.ident.to_string().as_str()));
     signatures.sort_by_key(|s| s.ident.to_string().to_lowercase());
-    assert_eq!(signatures.len(), catalog.calls().len());
-    for (id, (old, call)) in signatures.iter().zip(catalog.calls()).enumerate() {
+    let old_calls: Vec<_> = catalog
+        .calls()
+        .iter()
+        .filter(|call| call.id < 0xf000)
+        .collect();
+    assert_eq!(signatures.len(), old_calls.len());
+    for (id, (old, call)) in signatures.iter().zip(old_calls).enumerate() {
         assert_eq!(call.id as usize, id);
         assert_eq!(
             call.signature.to_token_stream().to_string(),
             old.to_token_stream().to_string()
+        );
+    }
+    for (index, name) in extensions.iter().enumerate() {
+        assert_eq!(
+            catalog
+                .calls()
+                .iter()
+                .find(|call| call.name == *name)
+                .unwrap()
+                .id,
+            0xf000 + index as u16
         );
     }
     for name in [

@@ -1,3 +1,4 @@
+use super::canvas::{IndexedCanvas, MAX_CANVAS_PIXELS};
 use super::{
     error::{GraphicsError, Result},
     marshal::ButtonMap,
@@ -39,12 +40,16 @@ pub(crate) enum Kind {
     ButtonMatrix,
     Checkbox,
     TabView,
+    IndexedCanvas,
+    Textarea,
+    Keyboard,
 }
 
 struct Entry {
     notification: Rc<Notification>,
     kind: Kind,
     map: Option<ButtonMap>,
+    canvas: Option<Vec<IndexedCanvas>>,
 }
 
 pub struct GraphicsState {
@@ -75,6 +80,7 @@ impl GraphicsState {
         for entry in &mut self.entries {
             if entry.notification.live.get().is_null() {
                 entry.map = None;
+                entry.canvas = None;
             }
         }
     }
@@ -169,6 +175,7 @@ impl GraphicsState {
             notification,
             kind,
             map: None,
+            canvas: None,
         });
         Ok(self.entries.len() as WasmUsize)
     }
@@ -178,6 +185,35 @@ impl GraphicsState {
         let entry = &mut self.entries[handle as usize - 1];
         unsafe { lvgl::lv_buttonmatrix_set_map(entry.notification.live.get(), map.as_ptr()) };
         entry.map = Some(map);
+    }
+
+    pub(crate) fn install_canvas(
+        &mut self,
+        handle: WasmUsize,
+        mut canvas: Vec<IndexedCanvas>,
+    ) -> Result<()> {
+        let used: usize = self
+            .entries
+            .iter()
+            .filter_map(|entry| entry.canvas.as_ref())
+            .map(|canvas| canvas[0].pixels.len())
+            .sum();
+        if used + canvas[0].pixels.len() > MAX_CANVAS_PIXELS {
+            return Err(GraphicsError::ResourceLimit);
+        }
+        let entry = &mut self.entries[handle as usize - 1];
+        unsafe {
+            IndexedCanvas::attach(canvas.as_mut_ptr(), entry.notification.live.get())?;
+        }
+        entry.canvas = Some(canvas);
+        Ok(())
+    }
+
+    pub(crate) fn canvas_mut(&mut self, handle: WasmUsize) -> &mut IndexedCanvas {
+        &mut self.entries[handle as usize - 1]
+            .canvas
+            .as_mut()
+            .expect("canvas kind checked")[0]
     }
 }
 
