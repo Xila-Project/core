@@ -304,7 +304,9 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
         with:
-          cache-workspaces: ". -> target/llvm-cov-target"
+          # Profiling builds into target/, coverage into its llvm-cov-target child.
+          # Cache the parent once; the job-specific key isolates it from plain tests.
+          cache-workspaces: ". -> target"
 
       - name: Setup | Generate fonts
         run: cargo make generate-fonts

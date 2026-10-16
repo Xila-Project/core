@@ -82,6 +82,7 @@ runs:
       shell: bash
       run: |
         echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_RW_MODE=${{ github.ref == 'refs/heads/main' && 'READ_WRITE' || 'READ_ONLY' }}" >> "$GITHUB_ENV"
         echo 'RUSTC_WRAPPER=sccache' >> "$GITHUB_ENV"
         echo 'CMAKE_C_COMPILER_LAUNCHER=sccache' >> "$GITHUB_ENV"
         echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache' >> "$GITHUB_ENV"
@@ -97,6 +98,8 @@ runs:
       with:
         workspaces: ${{ inputs.cache-workspaces }}
         key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
+        # PRs restore main's caches without filling the quota with PR copies.
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Setup | Validate lockfiles
       if: inputs.profile != 'minimal'
