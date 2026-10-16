@@ -37,6 +37,13 @@ jobs:
           mkdir -p ./pages/guest/
           cp -r ./target/wasm32-unknown-unknown/doc/* ./pages/guest/
 
+      # NOTE: en/fr must build separately. EMBEDDED_I18N_LOCALE is baked in
+      # at compile time by the embedded-i18n proc macro (calculator/clock
+      # strings), embedded into the trunk bundle via include_bytes!, and
+      # selects per-locale font subsets in generate-fonts. A single build
+      # copied to both dirs would serve wrong-locale strings and miss
+      # French glyphs. Shared setup (checkout, toolchains, docs) runs once
+      # above; only the locale-dependent steps repeat per locale.
       - name: Build | WASM demonstration (en)
         env:
           EMBEDDED_I18N_LOCALE: en

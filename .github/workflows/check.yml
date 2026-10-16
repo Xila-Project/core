@@ -120,7 +120,9 @@ jobs:
   wasm-translation:
     name: WASM translation (${{ matrix.memory }})
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
+    # memory_64 runs only in the merge queue and on main; PRs run memory_32
+    # only. Job-level skips satisfy required checks (see note above).
+    if: ${{ !cancelled() && (matrix.memory == 'memory_32' || github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -336,6 +338,20 @@ jobs:
 
       - name: Check | Clock (WASI)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p clock --all-targets --target wasm32-wasip1 -- -D warnings
+
+      - name: Cache | Trunk tools and dist
+        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
+        uses: actions/cache@v4
+        with:
+          # Trunk downloads wasm-bindgen/wasm-opt into its ProjectDirs cache
+          # (~/.cache/trunk/<tool>-<version>/); a version drift self-heals by
+          # re-downloading the missing directory.
+          path: |
+            ~/.cache/trunk
+            examples/wasm/dist
+          key: trunk-tools-${{ runner.os }}
+          restore-keys: |
+            trunk-tools-
 
       - name: Build | Example (WASM)
         if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
