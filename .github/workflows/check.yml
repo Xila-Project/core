@@ -295,6 +295,9 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
+      - name: Setup | Generate fonts
+        run: cargo make generate-fonts
+
       - name: Check | Audio
         run: |
           cargo +${XILA_RUST_TOOLCHAIN} test -p audio
