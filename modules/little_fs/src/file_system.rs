@@ -476,4 +476,42 @@ mod tests {
     }
 
     implement_file_system_tests!(initialize());
+
+    #[test]
+    fn filesystem_contents_survive_unmount_and_remount() {
+        let device = Box::leak(Box::new(MemoryDevice::<512>::new(2048 * 512)));
+        FileSystem::format(device, CACHE_SIZE).unwrap();
+
+        let file_system = FileSystem::new(device, CACHE_SIZE).unwrap();
+        let directory = Path::new("/persistent");
+        let file = Path::new("/persistent/data");
+        FileSystemOperations::create_directory(&file_system, directory).unwrap();
+        FileSystemOperations::create_file(&file_system, file).unwrap();
+
+        let mut context = Context::new_empty();
+        file_system
+            .lookup_file(&mut context, file, file_system::AccessFlags::Write.into())
+            .unwrap();
+        let expected = b"littlefs remount";
+        assert_eq!(
+            file_system.write(&mut context, expected, 0).unwrap(),
+            expected.len()
+        );
+        BaseOperations::close(&file_system, &mut context).unwrap();
+
+        drop(file_system);
+
+        let file_system = FileSystem::new(device, CACHE_SIZE).unwrap();
+        let mut context = Context::new_empty();
+        file_system
+            .lookup_file(&mut context, file, file_system::AccessFlags::Read.into())
+            .unwrap();
+        let mut actual = [0; 16];
+        assert_eq!(
+            BaseOperations::read(&file_system, &mut context, &mut actual, 0).unwrap(),
+            expected.len()
+        );
+        assert_eq!(&actual, expected);
+        BaseOperations::close(&file_system, &mut context).unwrap();
+    }
 }

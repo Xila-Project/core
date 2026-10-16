@@ -12,7 +12,7 @@ file_system = { workspace = true }
 task = { workspace = true }
 users = { workspace = true }
 time = { workspace = true }
-littlefs2-sys = { version = "0.3.1", features = ["malloc"] }
+littlefs2-sys = { version = "0.4", features = ["malloc", "tinyrlibc"] }
 synchronization = { workspace = true }
 
 log = { workspace = true }
