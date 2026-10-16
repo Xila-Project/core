@@ -47,6 +47,7 @@ pub enum Error<'a> {
     InvalidSleepDuration,
     FailedToSetPermissions(virtual_file_system::Error),
     FailedToGetTaskUser(task::Error),
+    ExitStatus(NonZeroUsize),
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -80,6 +81,7 @@ impl From<fmt::Error> for Error<'_> {
 impl Display for Error<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
+            Error::ExitStatus(status) => write!(formatter, "{status}"),
             Error::AuthenticationFailed(error) => {
                 write!(formatter, translate!("Authentication failed: {}"), error)
             }
@@ -235,7 +237,10 @@ impl Display for Error<'_> {
 
 impl From<Error<'_>> for NonZeroUsize {
     fn from(error: Error<'_>) -> Self {
-        error.get_discriminant().into()
+        match error {
+            Error::ExitStatus(status) => status,
+            error => error.get_discriminant().into(),
+        }
     }
 }
 

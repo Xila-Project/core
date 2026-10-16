@@ -121,7 +121,11 @@ impl Shell {
         }
     }
 
-    async fn parse_input<'a, I>(&mut self, input: I, paths: &[&Path]) -> Result<()>
+    async fn parse_input<'a, I>(
+        &mut self,
+        input: I,
+        paths: &[&Path],
+    ) -> core::result::Result<(), NonZeroUsize>
     where
         I: IntoIterator<Item = &'a str> + Clone,
     {
@@ -140,11 +144,13 @@ impl Shell {
             None => self.execute(input, paths).await,
         };
 
-        if let Err(error) = result {
-            writeln!(self.standard.standard_error, "{}", error)?;
+        if let Err(error) = &result {
+            if !matches!(error, Error::ExitStatus(_)) {
+                writeln!(self.standard.standard_error, "{}", error).map_err(Error::from)?;
+            }
         }
 
-        Ok(())
+        result.map_err(Into::into)
     }
 
     async fn main_interactive(&mut self, paths: &[&Path]) -> Result<()> {
@@ -171,11 +177,8 @@ impl Shell {
 
             let input = input_string.split(" ");
 
-            let result = self.parse_input(input, paths).await;
-
-            if let Err(error) = result {
-                let _ = writeln!(self.standard.standard_error, "{}", error);
-            }
+            // A command failure is its exit status; the interactive shell keeps running.
+            let _ = self.parse_input(input, paths).await;
         }
 
         Ok(())

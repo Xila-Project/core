@@ -89,6 +89,8 @@ pub trait UserCommand {
 
 #[derive(Clone, Copy)]
 pub enum UserCommandKind {
+    True,
+    False,
     Exit,
     ChangeDirectory,
     Echo,
@@ -120,6 +122,16 @@ pub enum UserCommandKind {
 /// Names and help text shared by command resolution and `help`.
 /// Register new built-ins here so they are discoverable in the shell.
 const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
+    (
+        "true",
+        UserCommandKind::True,
+        "Usage: true\nReturn success without output.",
+    ),
+    (
+        "false",
+        UserCommandKind::False,
+        "Usage: false\nReturn status 1 without output.",
+    ),
     ("exit", UserCommandKind::Exit, exit::ExitArguments::HELP),
     (
         "cd",
@@ -222,6 +234,8 @@ where
     C: CommandContext,
 {
     let result = match kind {
+        UserCommandKind::True => Ok(()),
+        UserCommandKind::False => Err(crate::Error::ExitStatus(core::num::NonZeroUsize::MIN)),
         UserCommandKind::Exit => ExitCommand.execute(context, options, paths).await,
         UserCommandKind::ChangeDirectory => {
             ChangeDirectoryCommand
@@ -624,6 +638,40 @@ mod tests {
                 .await,
                 Err(crate::Error::CommandNotFound)
             ));
+        }
+    }
+
+    #[test]
+    fn boolean_commands_resolve_without_os_services_or_output() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+
+        for (name, succeeds) in [("true", true), ("false", false)] {
+            let kind = resolve_user_command(name).expect("boolean command must be a builtin");
+            let mut context = HelpContext {
+                output: alloc::string::String::new(),
+            };
+            // Both commands ignore operands and options, as POSIX specifies.
+            let mut options = getargs::Options::new(["--ignored", "operand"].into_iter());
+            {
+                let mut future = core::pin::pin!(super::dispatch_user_command(
+                    kind,
+                    &mut context,
+                    &mut options,
+                    &[]
+                ));
+                let mut task_context = Context::from_waker(Waker::noop());
+                let Poll::Ready(result) = future.as_mut().poll(&mut task_context) else {
+                    panic!("boolean commands must complete immediately");
+                };
+                assert_eq!(result.is_ok(), succeeds);
+                if let Err(error) = result {
+                    assert_eq!(core::num::NonZeroUsize::from(error).get(), 1);
+                }
+            }
+            assert!(context.output.is_empty());
         }
     }
 
