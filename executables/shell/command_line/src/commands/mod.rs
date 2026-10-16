@@ -9,6 +9,7 @@ mod echo;
 mod environment_variables;
 mod execute;
 mod exit;
+mod grep;
 mod head;
 mod help;
 mod ip;
@@ -98,6 +99,7 @@ pub enum UserCommandKind {
     Clear,
     Chmod,
     Concatenate,
+    Grep,
     Statistics,
     CreateDirectory,
     SetEnvironmentVariable,
@@ -149,6 +151,11 @@ const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
         "cat",
         UserCommandKind::Concatenate,
         "Usage: cat [FILE]...\nPrint file contents.",
+    ),
+    (
+        "grep",
+        UserCommandKind::Grep,
+        "Usage: grep PATTERN [FILE]...\nPrint lines containing the literal pattern; read standard input when no file is given or FILE is -.",
     ),
     (
         "stat",
@@ -247,6 +254,7 @@ where
         UserCommandKind::Clear => ClearCommand.execute(context, options, paths).await,
         UserCommandKind::Chmod => ChmodCommand.execute(context, options, paths).await,
         UserCommandKind::Concatenate => ConcatenateCommand.execute(context, options, paths).await,
+        UserCommandKind::Grep => grep::GrepCommand.execute(context, options, paths).await,
         UserCommandKind::Statistics => StatisticsCommand.execute(context, options, paths).await,
         UserCommandKind::CreateDirectory => {
             CreateDirectoryCommand
@@ -377,6 +385,7 @@ mod tests {
             ("ls", UserCommandKind::List),
             ("tail", UserCommandKind::Tail),
             ("wc", UserCommandKind::WordCount),
+            ("grep", UserCommandKind::Grep),
             ("cd", UserCommandKind::ChangeDirectory),
             ("clear", UserCommandKind::Clear),
             ("chmod", UserCommandKind::Chmod),
@@ -520,7 +529,7 @@ mod tests {
             }
             assert!(context.output.contains(expected), "{}", context.output);
             if expected == "Built-in commands:" {
-                for name in ["help", "exit", "ls", "wc", "tail"] {
+                for name in ["help", "exit", "ls", "wc", "tail", "grep"] {
                     assert!(context.output.lines().any(|line| line == name));
                 }
             }
@@ -704,6 +713,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("cat"),
             Some(UserCommandKind::Concatenate)
+        ));
+        assert!(matches!(
+            resolve_user_command("grep"),
+            Some(UserCommandKind::Grep)
         ));
         assert!(matches!(
             resolve_user_command("stat"),
