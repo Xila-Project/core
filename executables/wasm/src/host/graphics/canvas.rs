@@ -119,12 +119,24 @@ unsafe extern "C" fn draw(event: *mut lvgl::lv_event_t) {
 
 // LVGL dimensions can be large even when the retained image is small.
 fn scale(index: usize, length: i32, total: usize) -> i32 {
-    (index as i64 * i64::from(length) / total as i64) as i32
+    // Ceil the boundary to match floor-based pointer mapping, including downscaling.
+    ((index as i64 * i64::from(length) + total as i64 - 1) / total as i64) as i32
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rendered_boundaries_match_pointer_mapping_at_fractional_scales() {
+        for width in [80, 217, 480] {
+            for screen_x in 0..width {
+                let pixel = screen_x * 160 / width;
+                assert!(scale(pixel as usize, width, 160) <= screen_x);
+                assert!(screen_x < scale(pixel as usize + 1, width, 160));
+            }
+        }
+    }
 
     #[test]
     fn uploads_copy_input_and_reject_invalid_images_without_mutation() {
