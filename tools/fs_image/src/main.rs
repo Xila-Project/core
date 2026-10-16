@@ -40,14 +40,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Err("disk size must be a multiple of 512 bytes and at least 1048576 bytes".into());
     }
     let output = output.canonicalize_parent()?;
+    let output_string = output
+        .to_str()
+        .ok_or("output image path must be valid UTF-8")?;
 
     create_output_file(&output, size)?;
 
     {
-        let drive = Box::leak(Box::new(FileDriveDevice::new(
-            &output.to_string_lossy().as_ref(),
-            size,
-        )));
+        let drive = Box::leak(Box::new(FileDriveDevice::new(&output_string, size)));
         let partition = Mbr::format_disk_with_signature_and_partition(
             drive,
             XILA_DISK_SIGNATURE,
@@ -60,10 +60,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 
     {
-        let drive = Box::leak(Box::new(FileDriveDevice::new(
-            &output.to_string_lossy().as_ref(),
-            size,
-        )));
+        let drive = Box::leak(Box::new(FileDriveDevice::new(&output_string, size)));
         let mbr = Mbr::read_from_device(drive)?;
         mbr.validate()?;
         if mbr.get_disk_signature() != XILA_DISK_SIGNATURE {
@@ -90,6 +87,12 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 fn create_output_file(path: &std::path::Path, size: u64) -> std::io::Result<()> {
+    if path.to_str().is_none() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "output image path must be valid UTF-8",
+        ));
+    }
     // Exclusive creation prevents accidental replacement of an existing image.
     std::fs::OpenOptions::new()
         .write(true)
@@ -117,6 +120,31 @@ impl CanonicalizeParent for PathBuf {
 mod tests {
     use super::create_output_file;
     use std::{fs, io::Write};
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_non_utf8_output_before_creating_file() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let mut name = format!(
+            "fs-image-invalid-{}-{}.img",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )
+        .into_bytes();
+        name.push(0xff);
+        let path = std::env::temp_dir().join(std::ffi::OsString::from_vec(name));
+
+        let result = create_output_file(&path, 16 * 1024 * 1024);
+
+        let error = result.unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("valid UTF-8"));
+        assert!(!path.exists());
+    }
 
     #[test]
     fn refuses_existing_output_without_modifying_it() {
