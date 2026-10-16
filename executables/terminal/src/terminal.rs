@@ -40,6 +40,13 @@ impl Terminal {
                     window.as_object_mutable(),
                     lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN,
                 );
+                // Edge-to-edge window chrome: the shared window class already
+                // flattens border and radius, only the container padding remains.
+                lvgl::lv_obj_set_style_pad_all(
+                    window.as_object_mutable(),
+                    0,
+                    lvgl::LV_STATE_DEFAULT,
+                );
             }
 
             let container = unsafe {
@@ -47,6 +54,13 @@ impl Terminal {
 
                 lvgl::lv_obj_set_width(container, lvgl::lv_pct(100));
                 lvgl::lv_obj_set_flex_grow(container, 1);
+                lvgl::lv_obj_set_flex_flow(container, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_COLUMN);
+                // Flat container chrome: keep the theme gap (space_md) between
+                // the display and the input, but drop the card padding, border
+                // and radius around the output.
+                lvgl::lv_obj_set_style_pad_all(container, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_border_width(container, 0, lvgl::LV_STATE_DEFAULT);
+                lvgl::lv_obj_set_style_radius(container, 0, lvgl::LV_STATE_DEFAULT);
                 lvgl::lv_obj_set_scroll_snap_y(
                     container,
                     lvgl::lv_scroll_snap_t_LV_SCROLL_SNAP_END,
