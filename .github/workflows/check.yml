@@ -197,14 +197,14 @@ jobs:
       - name: Check | Formatting (JSON)
         run: npm exec prettier -- --check "**/*.json"
 
-  host:
-    name: Host checks
+  host-clippy:
+    name: Host clippy checks
     needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
           (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Check | Translation coverage gate
         if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
@@ -221,6 +221,30 @@ jobs:
       - name: Check | Clippy (Host)
         run: cargo make clippy-host
 
+      - name: Check | Clippy (Host - Wasmi)
+        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
+
+  host-test:
+    name: Host test checks
+    needs: [changes, format, localization]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check | Translation coverage gate
+        if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
+        run: |
+          echo "::error::Strict translation coverage did not pass."
+          exit 1
+
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
       - name: Check | Profiling runner
         run: |
           cargo fmt --manifest-path tools/profiling/Cargo.toml -- --check
@@ -232,22 +256,6 @@ jobs:
         run: |
           cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
           cargo test -p native_example --bin native_example --features profiling,heaptrack
-
-      - name: Check | Clippy (Host - Wasmi)
-        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
-
-      - name: Check | Audio
-        run: |
-          cargo +${XILA_RUST_TOOLCHAIN} test -p audio
-          cargo +${XILA_RUST_TOOLCHAIN} clippy -p audio -p drivers_native --features drivers_native/audio --all-targets -- -D warnings
-          SDL_AUDIODRIVER=dummy cargo +${XILA_RUST_TOOLCHAIN} test -p drivers_native --features audio --lib devices::audio::tests -- --include-ignored
-
-      - name: Check | Documentation (Host)
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
-        run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
-
-      - name: Build | Example (Native)
-        run: cargo make build -p native_example
 
       - name: Run | Test
         if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
@@ -263,6 +271,40 @@ jobs:
           slug: Xila-Project/Core
           files: lcov.info
           fail_ci_if_error: true
+
+  host-audio-docs:
+    name: Host audio and docs checks
+    needs: [changes, format, localization]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check | Translation coverage gate
+        if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
+        run: |
+          echo "::error::Strict translation coverage did not pass."
+          exit 1
+
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check | Audio
+        run: |
+          cargo +${XILA_RUST_TOOLCHAIN} test -p audio
+          cargo +${XILA_RUST_TOOLCHAIN} clippy -p audio -p drivers_native --features drivers_native/audio --all-targets -- -D warnings
+          SDL_AUDIODRIVER=dummy cargo +${XILA_RUST_TOOLCHAIN} test -p drivers_native --features audio --lib devices::audio::tests -- --include-ignored
+
+      - name: Check | Documentation (Host)
+        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
+        run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
+
+      - name: Build | Example (Native)
+        run: cargo make build -p native_example
 
   guest:
     name: Guest checks
