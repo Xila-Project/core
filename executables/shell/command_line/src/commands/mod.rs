@@ -59,9 +59,9 @@ pub trait CommandContext {
     fn current_directory(&self) -> &Path;
     fn set_current_directory(&mut self, directory: PathOwned);
     fn stop(&mut self);
-    fn write_out_fmt(&mut self, arguments: fmt::Arguments<'_>) -> Result<()>;
-    async fn write_out(&mut self, buffer: &[u8]);
-    async fn write_out_line(&mut self, buffer: &[u8]);
+    async fn write_out_fmt(&mut self, arguments: fmt::Arguments<'_>) -> Result<()>;
+    async fn write_out(&mut self, buffer: &[u8]) -> Result<()>;
+    async fn write_out_line(&mut self, buffer: &[u8]) -> Result<()>;
     fn standard(&mut self) -> &mut Standard<'static>;
     fn current_directory_owned(&self) -> PathOwned {
         self.current_directory().to_owned()
@@ -199,7 +199,7 @@ where
 
     match result {
         Err(crate::Error::ArgumentParsing(error)) if error.is_help() || error.is_version() => {
-            context.write_out_fmt(format_args!("{error}\n"))?;
+            context.write_out_fmt(format_args!("{error}\n")).await?;
             Ok(())
         }
         result => result,
@@ -241,14 +241,17 @@ mod tests {
         fn stop(&mut self) {
             panic!("exit --help must not stop the shell")
         }
-        fn write_out_fmt(&mut self, arguments: core::fmt::Arguments<'_>) -> crate::Result<()> {
+        async fn write_out_fmt(
+            &mut self,
+            arguments: core::fmt::Arguments<'_>,
+        ) -> crate::Result<()> {
             use core::fmt::Write;
             self.output.write_fmt(arguments).map_err(Into::into)
         }
-        async fn write_out(&mut self, _: &[u8]) {
+        async fn write_out(&mut self, _: &[u8]) -> crate::Result<()> {
             panic!("unexpected byte output")
         }
-        async fn write_out_line(&mut self, _: &[u8]) {
+        async fn write_out_line(&mut self, _: &[u8]) -> crate::Result<()> {
             panic!("unexpected line output")
         }
         fn standard(&mut self) -> &mut xila::executable::Standard<'static> {

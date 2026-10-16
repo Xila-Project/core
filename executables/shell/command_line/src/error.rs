@@ -44,6 +44,8 @@ pub enum Error<'a> {
     FailedToResolve(network::Error),
     FailedToCreateSocket(network::Error),
     Format,
+    Syntax(crate::tokenizer::SyntaxError),
+    FailedToWriteFile(virtual_file_system::Error),
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -77,6 +79,14 @@ impl From<fmt::Error> for Error<'_> {
 impl Display for Error<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
+            Error::Syntax(error) => write!(
+                formatter,
+                translate!("Syntax error at byte {}: {}"),
+                error.position, error.message
+            ),
+            Error::FailedToWriteFile(error) => {
+                write!(formatter, translate!("Failed to write file: {}"), error)
+            }
             Error::AuthenticationFailed(error) => {
                 write!(formatter, translate!("Authentication failed: {}"), error)
             }

@@ -45,13 +45,15 @@ async fn write_ping_line<C: CommandContext>(
     target: &str,
     resolved_target: &xila::network::IpAddress,
 ) -> crate::Result<()> {
-    context.write_out_fmt(format_args!(
-        "{}\n",
-        format_args!(
-            translate!("PING {} ({}): {} data bytes"),
-            target, resolved_target, 56
-        )
-    ))
+    context
+        .write_out_fmt(format_args!(
+            "{}\n",
+            format_args!(
+                translate!("PING {} ({}): {} data bytes"),
+                target, resolved_target, 56
+            )
+        ))
+        .await
 }
 
 async fn ping_loop<C: CommandContext>(
@@ -84,28 +86,34 @@ async fn ping_loop<C: CommandContext>(
             .await
         {
             Ok(duration) => {
-                context.write_out_fmt(format_args!(
-                    "{}\n",
-                    format_args!(
-                        translate!("{} bytes from {}: icmp_seq={} time={:.2} ms"),
-                        payload_size,
-                        resolved_target,
-                        i,
-                        duration.as_milliseconds()
-                    )
-                ))?;
+                context
+                    .write_out_fmt(format_args!(
+                        "{}\n",
+                        format_args!(
+                            translate!("{} bytes from {}: icmp_seq={} time={:.2} ms"),
+                            payload_size,
+                            resolved_target,
+                            i,
+                            duration.as_milliseconds()
+                        )
+                    ))
+                    .await?;
             }
             Err(network::Error::TimedOut) => {
-                context.write_out_fmt(format_args!(
-                    "{}\n",
-                    format_args!(translate!("Request timeout for icmp_seq {}"), i)
-                ))?;
+                context
+                    .write_out_fmt(format_args!(
+                        "{}\n",
+                        format_args!(translate!("Request timeout for icmp_seq {}"), i)
+                    ))
+                    .await?;
             }
             Err(e) => {
-                context.write_out_fmt(format_args!(
-                    "{}\n",
-                    format_args!(translate!("Error: {}"), e)
-                ))?;
+                context
+                    .write_out_fmt(format_args!(
+                        "{}\n",
+                        format_args!(translate!("Error: {}"), e)
+                    ))
+                    .await?;
             }
         }
     }
@@ -143,10 +151,12 @@ where
     let resolved_target = match resolved_target {
         Some(ip) => ip,
         None => {
-            context.write_out_fmt(format_args!(
-                "{}\n",
-                format_args!(translate!("Cannot resolve {}: Unknown host"), target)
-            ))?;
+            context
+                .write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(translate!("Cannot resolve {}: Unknown host"), target)
+                ))
+                .await?;
             return Ok(());
         }
     };

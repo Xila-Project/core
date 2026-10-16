@@ -10,7 +10,7 @@ use alloc::{
 use xila::{executable::execute, file_system::Path};
 
 impl Shell {
-    pub async fn execute<'a, I>(&mut self, input: I, paths: &[&Path]) -> Result<()>
+    pub async fn execute<'a, I>(&mut self, input: I, paths: &[&Path]) -> Result<usize>
     where
         I: IntoIterator<Item = &'a str>,
     {
@@ -29,9 +29,9 @@ impl Shell {
 
         let path = Path::from_str(arguments.next().ok_or(Error::MissingCommand)?);
 
-        if path.is_valid() {
+        if path.as_str().contains('/') {
             if path.is_absolute() {
-                self.run(path, arguments).await?;
+                self.run(path, arguments).await
             } else {
                 let path = self
                     .current_directory
@@ -39,31 +39,33 @@ impl Shell {
                     .join(path)
                     .ok_or(Error::FailedToJoinPath)?;
 
-                self.run(&path, arguments).await?;
+                self.run(&path, arguments).await
             }
         } else {
             let path = resolve(self.context, path.as_str(), paths).await?;
 
-            self.run(&path, arguments).await?;
+            self.run(&path, arguments).await
         }
-
-        Ok(())
     }
 
-    async fn run<'a, I>(&mut self, path: &Path, arguments: I) -> Result<()>
+    async fn run<'a, I>(&mut self, path: &Path, arguments: I) -> Result<usize>
     where
         I: Iterator<Item = &'a str>,
     {
-        let standard = self.standard.duplicate().await.unwrap();
+        let standard = self
+            .standard
+            .duplicate()
+            .await
+            .map_err(Error::FailedToOpenFile)?;
 
         let arguments: Vec<String> = arguments.into_iter().map(|s| s.to_string()).collect();
 
-        let _ = execute(self.context, path, arguments, standard, None)
+        let status = execute(self.context, path, arguments, standard, None)
             .await
             .map_err(|_| Error::FailedToExecuteCommand)?
             .join()
             .await;
 
-        Ok(())
+        Ok(status.unsigned_abs().min(255))
     }
 }

@@ -12,7 +12,10 @@ use file_system::{
     DirectoryOperations, Entry, Error, FileOperations, FileSystemOperations, Flags, Kind,
     MountOperations, Path, Position, Result, Size, mount::MutexMountWrapper,
 };
-use synchronization::blocking_mutex::raw::CriticalSectionRawMutex;
+use synchronization::{Arc, blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+
+// Duplicate contexts share a stable handle rather than copying native C caches.
+type SharedContext<T> = Arc<Mutex<CriticalSectionRawMutex, Box<T>>>;
 
 pub struct FileSystem {
     file_system: MutexMountWrapper<CriticalSectionRawMutex, littlefs::lfs_t>,
@@ -135,10 +138,10 @@ impl FileSystem {
         let mut file_system = self.file_system.try_get()?;
 
         let file = context
-            .get_private_data_mutable_of_type::<I>()
+            .get_private_data_of_type::<SharedContext<I>>()
             .ok_or(Error::InvalidParameter)?;
-
-        operation(&mut file_system, file)
+        let mut file = file.try_lock().map_err(|_| Error::RessourceBusy)?;
+        operation(&mut file_system, &mut file)
     }
 }
 
@@ -188,7 +191,9 @@ impl FileSystemOperations for FileSystem {
     fn lookup_directory(&self, context: &mut Context, path: &Path) -> Result<()> {
         self.operation(|file_system| {
             let directory = Directory::lookup(file_system, path)?;
-            context.set_private_data(directory);
+            context.set_private_data(Box::new(Arc::new(
+                Mutex::<CriticalSectionRawMutex, _>::new(directory),
+            )));
             Ok(())
         })
     }
@@ -196,7 +201,9 @@ impl FileSystemOperations for FileSystem {
     fn lookup_file(&self, context: &mut Context, path: &Path, flags: Flags) -> Result<()> {
         self.operation(|file_system| {
             let file = File::lookup(file_system, path, flags)?;
-            context.set_private_data(file);
+            context.set_private_data(Box::new(Arc::new(
+                Mutex::<CriticalSectionRawMutex, _>::new(file),
+            )));
             Ok(())
         })
     }
@@ -276,20 +283,34 @@ impl FileSystemOperations for FileSystem {
 
 impl AttributeOperations for FileSystem {
     fn get_attributes(&self, context: &mut Context, attributes: &mut Attributes) -> Result<()> {
-        if let Some(file) = context.get_private_data_mutable_of_type::<File>() {
-            file.get_attributes(attributes)
-        } else if let Some(directory) = context.get_private_data_mutable_of_type::<Directory>() {
-            directory.get_attributes(attributes)
+        if let Some(file) = context.get_private_data_of_type::<SharedContext<File>>() {
+            file.try_lock()
+                .map_err(|_| Error::RessourceBusy)?
+                .get_attributes(attributes)
+        } else if let Some(directory) =
+            context.get_private_data_of_type::<SharedContext<Directory>>()
+        {
+            directory
+                .try_lock()
+                .map_err(|_| Error::RessourceBusy)?
+                .get_attributes(attributes)
         } else {
             Err(Error::InvalidParameter)
         }
     }
 
     fn set_attributes(&self, context: &mut Context, attributes: &Attributes) -> Result<()> {
-        if let Some(file) = context.get_private_data_mutable_of_type::<File>() {
-            file.set_attributes(attributes)
-        } else if let Some(directory) = context.get_private_data_mutable_of_type::<Directory>() {
-            directory.set_attributes(attributes)
+        if let Some(file) = context.get_private_data_of_type::<SharedContext<File>>() {
+            file.try_lock()
+                .map_err(|_| Error::RessourceBusy)?
+                .set_attributes(attributes)
+        } else if let Some(directory) =
+            context.get_private_data_of_type::<SharedContext<Directory>>()
+        {
+            directory
+                .try_lock()
+                .map_err(|_| Error::RessourceBusy)?
+                .set_attributes(attributes)
         } else {
             Err(Error::InvalidParameter)
         }
@@ -337,9 +358,11 @@ impl BaseOperations for FileSystem {
     }
 
     fn clone_context(&self, context: &Context) -> Result<Context> {
-        if let Some(file) = context.get_private_data_of_type::<File>() {
+        if let Some(file) = context.get_private_data_of_type::<SharedContext<File>>() {
             Ok(Context::new(Some(file.clone())))
-        } else if let Some(directory) = context.get_private_data_of_type::<Directory>() {
+        } else if let Some(directory) =
+            context.get_private_data_of_type::<SharedContext<Directory>>()
+        {
             Ok(Context::new(Some(directory.clone())))
         } else {
             Err(Error::InvalidParameter)
@@ -348,11 +371,15 @@ impl BaseOperations for FileSystem {
 
     fn close(&self, context: &mut Context) -> Result<()> {
         self.operation(|file_system| {
-            let mut file = context
-                .take_private_data_of_type::<File>()
+            let file = context
+                .get_private_data_of_type::<SharedContext<File>>()
                 .ok_or(Error::InvalidParameter)?;
-
-            file.close(file_system)?;
+            if Arc::strong_count(file) == 1 {
+                file.try_lock()
+                    .map_err(|_| Error::RessourceBusy)?
+                    .close(file_system)?;
+            }
+            context.take_private_data_of_type::<SharedContext<File>>();
 
             Ok(())
         })
@@ -388,11 +415,16 @@ impl DirectoryOperations for FileSystem {
 
     fn close(&self, context: &mut Context) -> Result<()> {
         self.operation(|file_system| {
-            let mut directory = context
-                .take_private_data_of_type::<Directory>()
+            let directory = context
+                .get_private_data_of_type::<SharedContext<Directory>>()
                 .ok_or(Error::InvalidParameter)?;
-
-            directory.close(file_system)?;
+            if Arc::strong_count(directory) == 1 {
+                directory
+                    .try_lock()
+                    .map_err(|_| Error::RessourceBusy)?
+                    .close(file_system)?;
+            }
+            context.take_private_data_of_type::<SharedContext<Directory>>();
 
             Ok(())
         })

@@ -24,8 +24,7 @@ pub(super) struct InternalCharacterDevice {
 }
 
 pub(super) struct InternalPipe {
-    pub reference_count: usize,
-    pub pipe: &'static Pipe,
+    pub pipe: synchronization::Arc<Pipe>,
 }
 
 pub(super) type FileSystemsArray = Vec<InternalFileSystem>;

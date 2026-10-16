@@ -61,38 +61,46 @@ async fn resolve_record<C: CommandContext>(
 ) -> Result<()> {
     match network_manager.resolve(domain, kind, true, None).await {
         Ok(ip) => {
-            context.write_out_fmt(format_args!(
-                "{}\n",
-                format_args!(
-                    translate!("{} record(s) for domain '{}':"),
-                    format_kind(kind),
-                    domain
-                )
-            ))?;
+            context
+                .write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(
+                        translate!("{} record(s) for domain '{}':"),
+                        format_kind(kind),
+                        domain
+                    )
+                ))
+                .await?;
             for address in &ip {
-                context.write_out_fmt(format_args!(" - {}\n", address))?;
+                context
+                    .write_out_fmt(format_args!(" - {}\n", address))
+                    .await?;
             }
         }
         Err(network::Error::Failed) => {
-            context.write_out_fmt(format_args!(
-                "{}\n",
-                format_args!(
-                    translate!("No {} records found for domain '{}'"),
-                    format_kind(kind),
-                    domain
-                )
-            ))?;
+            context
+                .write_out_fmt(format_args!(
+                    "{}\n",
+                    format_args!(
+                        translate!("No {} records found for domain '{}'"),
+                        format_kind(kind),
+                        domain
+                    )
+                ))
+                .await?;
         }
         Err(e) => {
-            context.write_out_fmt(format_args!(
-                "{}",
-                format_args!(
-                    translate!("Failed to resolve domain '{}' for {} records: {}"),
-                    domain,
-                    format_kind(kind),
-                    e
-                )
-            ))?;
+            context
+                .write_out_fmt(format_args!(
+                    "{}",
+                    format_args!(
+                        translate!("Failed to resolve domain '{}' for {} records: {}"),
+                        domain,
+                        format_kind(kind),
+                        e
+                    )
+                ))
+                .await?;
         }
     }
 

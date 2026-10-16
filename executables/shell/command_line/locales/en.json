@@ -53,5 +53,11 @@
   "User": "User",
   "User name: ": "User name: ",
   "{} bytes from {}: icmp_seq={} time={:.2} ms": "{} bytes from {}: icmp_seq={} time={:.2} ms",
-  "{} record(s) for domain '{}':": "{} record(s) for domain '{}':"
+  "{} record(s) for domain '{}':": "{} record(s) for domain '{}':",
+  "Syntax error at byte {}: {}": "Syntax error at byte {}: {}",
+  "Failed to write file: {}": "Failed to write file: {}",
+  "Command line is too long": "Command line is too long",
+  "Invalid UTF-8 input": "Invalid UTF-8 input",
+  "Usage: shell -c COMMAND": "Usage: shell -c COMMAND",
+  "Too many background jobs": "Too many background jobs"
 }

@@ -217,13 +217,17 @@ mod tests {
 
         fn stop(&mut self) {}
 
-        fn write_out_fmt(&mut self, _arguments: fmt::Arguments<'_>) -> Result<()> {
+        async fn write_out_fmt(&mut self, _arguments: fmt::Arguments<'_>) -> Result<()> {
             Ok(())
         }
 
-        async fn write_out(&mut self, _buffer: &[u8]) {}
+        async fn write_out(&mut self, _buffer: &[u8]) -> Result<()> {
+            Ok(())
+        }
 
-        async fn write_out_line(&mut self, _buffer: &[u8]) {}
+        async fn write_out_line(&mut self, _buffer: &[u8]) -> Result<()> {
+            Ok(())
+        }
 
         fn executable_context(&self) -> &'static xila::executable::ExecutableContext {
             panic!("executable context not needed in this test")

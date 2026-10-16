@@ -6,9 +6,7 @@ use alloc::borrow::ToOwned;
 use alloc::vec;
 use alloc::{boxed::Box, collections::BTreeMap};
 use core::ptr;
-use exported_file_system::{
-    BaseOperations, BlockDevice, CharacterDevice, CreateFlags, Permission, Permissions,
-};
+use exported_file_system::{BlockDevice, CharacterDevice, CreateFlags, Permission, Permissions};
 use file_system::{
     AccessFlags, AttributeFlags, Attributes, Context, FileSystemOperations, Flags, Kind, Path,
     StateFlags, Statistics,
@@ -267,47 +265,26 @@ impl VirtualFileSystem {
         let (time, user, group) = self.get_time_user_group(task).await?;
         let (mode, open, _) = flags.split();
 
-        if open.contains(CreateFlags::Create) {
-            let (file_system, relative_path, _) =
-                Self::get_mutable_file_system_from_path(&mut file_systems, &path)?; // Get the file system identifier and the relative path
-
-            let result = poll(|| Ok(file_system.file_system.create_file(relative_path)?)).await;
-
-            match result {
-                Ok(()) => {
-                    self.check_permissions(
-                        file_system.file_system,
-                        path.go_parent().ok_or_else(|| {
-                            log::error!("Error getting parent path for {:?}", path);
-                            Error::InvalidPath
-                        })?,
-                        Permission::Write | Permission::Execute,
-                        user,
-                    )
-                    .await?;
-
-                    let attributes = Attributes::new()
-                        .set_user(user)
-                        .set_group(group)
-                        .set_creation(time)
-                        .set_modification(time)
-                        .set_status(time)
-                        .set_access(time)
-                        .set_permissions(Permissions::FILE_DEFAULT)
-                        .set_kind(Kind::File);
-                    Self::set_attributes(file_system.file_system, relative_path, &attributes)
-                        .await?;
-                }
-                Err(Error::FileSystem(file_system::Error::AlreadyExists)) => {
-                    if open.contains(CreateFlags::Exclusive) {
-                        return Err(Error::AlreadyExists);
-                    }
-                }
-                Err(e) => {
-                    return Err(e);
-                }
+        if (open.contains(CreateFlags::Truncate) || flags.get_state().contains(StateFlags::Append))
+            && !mode.contains(AccessFlags::Write)
+        {
+            return Err(Error::InvalidOpen);
+        }
+        let (file_system, relative_path, _) =
+            Self::get_file_system_from_path(&file_systems, &path)?;
+        let mut attributes = Attributes::new().set_mask(AttributeFlags::Kind);
+        let exists =
+            match Self::get_attributes(file_system.file_system, relative_path, &mut attributes)
+                .await
+            {
+                Ok(()) => true,
+                Err(Error::FileSystem(file_system::Error::NotFound)) => false,
+                Err(error) => return Err(error),
+            };
+        if exists {
+            if open.contains(CreateFlags::Create) && open.contains(CreateFlags::Exclusive) {
+                return Err(Error::AlreadyExists);
             }
-        } else {
             self.check_permissions_with_parent(
                 &file_systems,
                 path,
@@ -316,6 +293,28 @@ impl VirtualFileSystem {
                 user,
             )
             .await?;
+        } else if open.contains(CreateFlags::Create) {
+            // Authorize before mutating the filesystem, including failed redirections.
+            self.check_permissions(
+                file_system.file_system,
+                relative_path.go_parent().ok_or(Error::InvalidPath)?,
+                Permission::Write | Permission::Execute,
+                user,
+            )
+            .await?;
+            poll(|| Ok(file_system.file_system.create_file(relative_path)?)).await?;
+            let attributes = Attributes::new()
+                .set_user(user)
+                .set_group(group)
+                .set_creation(time)
+                .set_modification(time)
+                .set_status(time)
+                .set_access(time)
+                .set_permissions(Permissions::FILE_DEFAULT)
+                .set_kind(Kind::File);
+            Self::set_attributes(file_system.file_system, relative_path, &attributes).await?;
+        } else {
+            return Err(Error::FileSystem(file_system::Error::NotFound));
         }
 
         let (file_system, relative_path, _) =
@@ -367,17 +366,23 @@ impl VirtualFileSystem {
                 let mut pipes = self.pipes.write().await;
                 let pipe = pipes.get_mut(&inode).ok_or(Error::InvalidInode)?;
 
-                poll(|| Ok(pipe.pipe.open(&mut context)?)).await?;
-                pipe.reference_count += 1;
-
-                File::new(self, ItemStatic::Pipe(pipe.pipe), flags, context)
+                context = pipe.pipe.open_context(flags.get_access());
+                File::new(self, ItemStatic::Pipe(pipe.pipe.clone()), flags, context)
             }
             Kind::File => {
                 poll(|| {
                     Ok(file_system.file_system.lookup_file(
                         &mut context,
                         relative_path,
-                        Flags::new(flags.get_access(), None, None),
+                        Flags::new(
+                            flags.get_access(),
+                            Some(if flags.get_create().contains(CreateFlags::Truncate) {
+                                CreateFlags::Truncate
+                            } else {
+                                CreateFlags::from_bits_truncate(0)
+                            }),
+                            Some(flags.get_state()),
+                        ),
                     )?)
                 })
                 .await?;
@@ -459,16 +464,10 @@ impl VirtualFileSystem {
                 inode
             }
             ItemStatic::FileSystem(_) => 0,
-            ItemStatic::Pipe(pipe) => {
+            ItemStatic::Pipe(ref pipe) => {
                 let mut pipes = self.pipes.write().await;
                 let inode = Self::get_new_inode(&*pipes).ok_or(Error::TooManyInodes)?;
-                pipes.insert(
-                    inode,
-                    InternalPipe {
-                        reference_count: 1,
-                        pipe,
-                    },
-                );
+                pipes.insert(inode, InternalPipe { pipe: pipe.clone() });
                 inode
             }
             _ => {
@@ -555,7 +554,7 @@ impl VirtualFileSystem {
         self.mount_static(
             task,
             path,
-            ItemStatic::Pipe(Box::leak(Box::new(Pipe::new(size)))),
+            ItemStatic::Pipe(synchronization::Arc::new(Pipe::new(size))),
         )
         .await
     }
@@ -565,32 +564,23 @@ impl VirtualFileSystem {
         size: usize,
         status: StateFlags,
     ) -> Result<(File<'a>, File<'a>)> {
-        let mut pipes = self.pipes.write().await;
-
-        let inode = Self::get_new_inode(&*pipes).ok_or(Error::TooManyInodes)?;
-
-        let pipe = Box::leak(Box::new(Pipe::new(size)));
-
-        pipes.insert(
-            inode,
-            InternalPipe {
-                reference_count: 3,
-                pipe,
-            },
-        );
+        if size == 0 {
+            return Err(Error::FileSystem(file_system::Error::InvalidParameter));
+        }
+        let pipe = synchronization::Arc::new(Pipe::new(size));
 
         let writer = File::new(
             self,
-            ItemStatic::Pipe(pipe),
+            ItemStatic::Pipe(pipe.clone()),
             Flags::new(AccessFlags::Write, None, Some(status)),
-            Context::new_empty(),
+            pipe.open_context(AccessFlags::Write),
         );
 
         let reader = File::new(
             self,
-            ItemStatic::Pipe(pipe),
+            ItemStatic::Pipe(pipe.clone()),
             Flags::new(AccessFlags::Read, None, Some(status)),
-            Context::new_empty(),
+            pipe.open_context(AccessFlags::Read),
         );
 
         Ok((reader, writer))
@@ -717,6 +707,62 @@ impl VirtualFileSystem {
         Statistics::from_attributes(&attributes).ok_or(Error::MissingAttribute)
     }
 
+    pub(crate) async fn retain(&self, item: &ItemStatic) -> Result<()> {
+        match item {
+            ItemStatic::File(file_system) | ItemStatic::Directory(file_system) => {
+                self.file_systems
+                    .write()
+                    .await
+                    .iter_mut()
+                    .find_map(|fs| {
+                        if ptr::eq(fs.file_system, *file_system) {
+                            fs.reference_count += 1;
+                            Some(())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::InvalidIdentifier)?;
+            }
+            ItemStatic::Pipe(_) => {}
+            ItemStatic::BlockDevice(device) => {
+                self.block_device
+                    .write()
+                    .await
+                    .iter_mut()
+                    .find_map(|(_, d)| {
+                        if ptr::eq(d.device, *device) {
+                            d.reference_count += 1;
+                            Some(())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::InvalidIdentifier)?;
+            }
+            ItemStatic::CharacterDevice(device) => {
+                self.character_device
+                    .write()
+                    .await
+                    .iter_mut()
+                    .find_map(|(_, d)| {
+                        if ptr::eq(d.device, *device) {
+                            d.reference_count += 1;
+                            Some(())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::InvalidIdentifier)?;
+            }
+            _ => {
+                return Err(Error::InvalidIdentifier);
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn close(&self, item: &ItemStatic, context: &mut Context) -> Result<()> {
         match item {
             ItemStatic::File(file_system) | ItemStatic::Directory(file_system) => {
@@ -736,31 +782,7 @@ impl VirtualFileSystem {
                     })
                     .ok_or(Error::InvalidIdentifier)?;
             }
-            ItemStatic::Pipe(pipe) => {
-                let pipes = &mut self.pipes.write().await;
-
-                let key = pipes
-                    .iter_mut()
-                    .find_map(|(key, p)| {
-                        if ptr::eq(p.pipe, *pipe) {
-                            if p.reference_count > 0 {
-                                p.reference_count -= 1;
-                            }
-                            if p.reference_count == 1 {
-                                Some(Some(*key))
-                            } else {
-                                Some(None)
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                    .ok_or(Error::InvalidIdentifier)?;
-
-                if let Some(key) = key {
-                    pipes.remove(&key);
-                }
-            }
+            ItemStatic::Pipe(_) => {}
             ItemStatic::BlockDevice(device) => {
                 self.block_device
                     .write()

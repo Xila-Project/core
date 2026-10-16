@@ -4,7 +4,6 @@ use crate::{attributes::InternalAttributes, error::convert_result, littlefs};
 use alloc::{boxed::Box, ffi::CString, string::ToString};
 use file_system::{Attributes, Entry, Kind, Path, Result, Size};
 
-#[derive(Clone)]
 #[repr(transparent)]
 pub struct Directory {
     directory: littlefs::lfs_dir_t,

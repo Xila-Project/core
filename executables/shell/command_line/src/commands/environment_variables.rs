@@ -134,11 +134,13 @@ where
             .map_err(|_| crate::Error::FailedToGetTaskIdentifier)?;
 
         for environment_variable in environment_variables {
-            context.write_out_fmt(format_args!(
-                "{}={}\n",
-                environment_variable.get_name(),
-                environment_variable.get_value()
-            ))?;
+            context
+                .write_out_fmt(format_args!(
+                    "{}={}\n",
+                    environment_variable.get_name(),
+                    environment_variable.get_value()
+                ))
+                .await?;
         }
     } else {
         let environment_variable = task_manager
@@ -146,11 +148,13 @@ where
             .await
             .map_err(|_| crate::Error::FailedToGetTaskIdentifier)?;
 
-        context.write_out_fmt(format_args!(
-            "{}={}\n",
-            environment_variable.get_name(),
-            environment_variable.get_value()
-        ))?;
+        context
+            .write_out_fmt(format_args!(
+                "{}={}\n",
+                environment_variable.get_name(),
+                environment_variable.get_value()
+            ))
+            .await?;
     }
 
     Ok(())
