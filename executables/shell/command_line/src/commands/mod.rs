@@ -21,6 +21,7 @@ mod realpath;
 mod sleep;
 mod statistics;
 mod tail;
+mod touch;
 mod tree;
 mod web_request;
 mod which;
@@ -58,6 +59,7 @@ use self::{
     sleep::SleepCommand,
     statistics::StatisticsCommand,
     tail::TailCommand,
+    touch::TouchCommand,
     tree::TreeCommand,
     web_request::WebRequestCommand,
     which::WhichCommand,
@@ -120,6 +122,7 @@ pub enum UserCommandKind {
     WordCount,
     Head,
     Tail,
+    Touch,
     Sleep,
     Help,
     Tree,
@@ -232,6 +235,11 @@ const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
     ("mv", UserCommandKind::Move, mv::MoveArguments::HELP),
     ("sleep", UserCommandKind::Sleep, sleep::SleepArguments::HELP),
     ("chmod", UserCommandKind::Chmod, chmod::ChmodArguments::HELP),
+    (
+        "touch",
+        UserCommandKind::Touch,
+        "Usage: touch FILE...\nCreate missing files and update access and modification times.",
+    ),
 ];
 
 pub fn resolve_user_command(name: &str) -> Option<UserCommandKind> {
@@ -311,6 +319,7 @@ where
         UserCommandKind::WordCount => WordCountCommand.execute(context, options, paths).await,
         UserCommandKind::Head => HeadCommand.execute(context, options, paths).await,
         UserCommandKind::Tail => TailCommand.execute(context, options, paths).await,
+        UserCommandKind::Touch => TouchCommand.execute(context, options, paths).await,
         UserCommandKind::Sleep => SleepCommand.execute(context, options, paths).await,
         UserCommandKind::Help => help::HelpCommand.execute(context, options, paths).await,
         UserCommandKind::Tree => TreeCommand.execute(context, options, paths).await,
@@ -330,11 +339,13 @@ fn check_no_more_options<'a, I>(options: &mut getargs::Options<&'a str, I>) -> c
 where
     I: Iterator<Item = &'a str>,
 {
-    if Ok(None) != options.next_opt() {
-        return Err(crate::Error::InvalidOption);
+    match options.next_opt() {
+        Ok(None) => Ok(()),
+        Err(error) if error.is_help() || error.is_version() => {
+            Err(crate::Error::ArgumentParsing(error))
+        }
+        _ => Err(crate::Error::InvalidOption),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -407,6 +418,7 @@ mod tests {
             ("clear", UserCommandKind::Clear),
             ("chmod", UserCommandKind::Chmod),
             ("realpath", UserCommandKind::Realpath),
+            ("touch", UserCommandKind::Touch),
             ("mkdir", UserCommandKind::CreateDirectory),
             ("rm", UserCommandKind::RemoveFile),
             ("rmdir", UserCommandKind::RemoveDirectory),
@@ -803,6 +815,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("chmod"),
             Some(UserCommandKind::Chmod)
+        ));
+        assert!(matches!(
+            resolve_user_command("touch"),
+            Some(UserCommandKind::Touch)
         ));
         assert!(matches!(
             resolve_user_command("tree"),
