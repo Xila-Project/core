@@ -26,6 +26,11 @@ pub fn new() -> Result<HtmlCanvasElement, String> {
     body.append_child(&canvas)
         .map_err(|_| "Failed to append canvas to body")?;
 
+    // An inline canvas reserves a text baseline below its bitmap, making a
+    // viewport-sized screen overflow and allowing the page to scroll.
+    canvas
+        .set_attribute("style", "display: block")
+        .map_err(|_| "Failed to set canvas display style")?;
     canvas.set_id("canvas-screen");
     canvas.set_width(width);
     canvas.set_height(height);
