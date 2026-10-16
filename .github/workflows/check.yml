@@ -14,10 +14,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-defaults:
-  run:
-    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

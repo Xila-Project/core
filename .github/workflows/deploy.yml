@@ -15,10 +15,6 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
-defaults:
-  run:
-    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
-
 jobs:
   build:
     runs-on: ubuntu-latest

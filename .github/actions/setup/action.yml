@@ -1,41 +1,70 @@
 name: "Setup"
-description: "Use the shared Devbox environment for Xila checks and builds"
+description: "Native Rust/Node setup for Xila checks and builds (no Devbox)"
 
 runs:
   using: "composite"
   steps:
-    - name: Setup | Read Devbox version
-      id: devbox-version
-      shell: bash
-      run: echo "version=$(cat .devbox-version)" >> "$GITHUB_OUTPUT"
-
-    - name: Setup | Devbox
-      uses: jetify-com/devbox-install-action@v0.15.0
-      with:
-        devbox-version: ${{ steps.devbox-version.outputs.version }}
-        enable-cache: true
-
-    - name: Setup | Cache toolchains and downloads
-      uses: actions/cache@v4
-      with:
-        path: .dev-environment
-        key: ${{ runner.os }}-${{ runner.arch }}-xila-tools-${{ hashFiles('development/toolchains.env', 'devbox.lock', 'package-lock.json') }}
-
-    - name: Setup | Rust targets and npm dependencies
-      shell: bash
-      run: devbox run setup
-
-    - name: Setup | Configure Rust cache paths
+    - name: Setup | Read toolchain pins
+      id: toolchains
       shell: bash
       run: |
         source development/toolchains.env
-        echo "CARGO_HOME=$GITHUB_WORKSPACE/.dev-environment/cargo" >> "$GITHUB_ENV"
-        echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.dev-environment/rustup" >> "$GITHUB_ENV"
+        echo "stable=$XILA_RUST_TOOLCHAIN" >> "$GITHUB_OUTPUT"
+        echo "nightly=$XILA_NIGHTLY_TOOLCHAIN" >> "$GITHUB_OUTPUT"
+        echo "XILA_RUST_TOOLCHAIN=$XILA_RUST_TOOLCHAIN" >> "$GITHUB_ENV"
+        echo "XILA_NIGHTLY_TOOLCHAIN=$XILA_NIGHTLY_TOOLCHAIN" >> "$GITHUB_ENV"
         echo "RUSTUP_TOOLCHAIN=$XILA_RUST_TOOLCHAIN" >> "$GITHUB_ENV"
-        echo "$GITHUB_WORKSPACE/.devbox/nix/profile/default/bin" >> "$GITHUB_PATH"
-        echo "$GITHUB_WORKSPACE/.dev-environment/cargo/bin" >> "$GITHUB_PATH"
 
-    - name: Setup | Rust build cache
+    - name: Setup | System packages
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang mold pkg-config cmake ninja-build libclang-dev libwayland-dev libxkbcommon-dev libsdl2-dev libgl-dev
+
+    - name: Setup | Export native build env
+      shell: bash
+      run: |
+        echo "CC=clang" >> "$GITHUB_ENV"
+        echo "CXX=clang++" >> "$GITHUB_ENV"
+        echo "LIBCLANG_PATH=$(dirname "$(readlink -f "$(find /usr/lib -name 'libclang.so*' | head -n 1)")")" >> "$GITHUB_ENV"
+        echo "CC_wasm32_unknown_unknown=$(clang -print-prog-name=clang)" >> "$GITHUB_ENV"
+        echo "CXX_wasm32_unknown_unknown=$(clang -print-prog-name=clang++)" >> "$GITHUB_ENV"
+        echo "CC_wasm32_wasip1=$(clang -print-prog-name=clang)" >> "$GITHUB_ENV"
+        echo "CXX_wasm32_wasip1=$(clang -print-prog-name=clang++)" >> "$GITHUB_ENV"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+    - name: Setup | Rust stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ steps.toolchains.outputs.stable }}
+        targets: wasm32-unknown-unknown, wasm32-wasip1
+        components: rustfmt, clippy, llvm-tools-preview
+
+    - name: Setup | Rust nightly toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ steps.toolchains.outputs.nightly }}
+        targets: wasm32-unknown-unknown
+        components: rust-src, miri
+
+    - name: Setup | Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: npm
+
+    - name: Setup | Rust cache
       uses: Swatinem/rust-cache@v2
       with:
-        key: ${{ hashFiles('development/toolchains.env', 'devbox.json', 'devbox.lock') }}
+        shared-key: xila
+        key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
+
+    - name: Setup | cargo-binstall
+      shell: bash
+      run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+    - name: Setup | Native tools and npm dependencies
+      shell: bash
+      run: |
+        cargo binstall --no-confirm cargo-make trunk
+        npm ci
