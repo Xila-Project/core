@@ -25,7 +25,10 @@ use task::{JoinHandle, SpawnerIdentifier, TaskIdentifier};
 use users::UserIdentifier;
 use virtual_file_system::File;
 
-async fn is_execute_allowed(
+/// Check execute permissions for a user using the same owner, group and root
+/// rules as [`execute`]. This checks permissions only; it does not open the file
+/// or validate its executable format.
+pub async fn is_execute_allowed(
     users_manager: &users::Manager,
     statistics: &Statistics,
     user: UserIdentifier,

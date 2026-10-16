@@ -29,7 +29,7 @@ impl UserCommand for StatisticsCommand {
 
 #[derive(GetArgs)]
 #[command(name = "stat", about = "Show file metadata.")]
-struct StatisticsArguments<'a> {
+pub(super) struct StatisticsArguments<'a> {
     path: &'a str,
 }
 

@@ -24,7 +24,7 @@ impl UserCommand for ClearCommand {
 
 #[derive(GetArgs)]
 #[command(name = "clear", about = "Clear the terminal.")]
-struct ClearArguments {}
+pub(super) struct ClearArguments {}
 
 fn execute_clear<'a, I, C>(
     context: &mut C,

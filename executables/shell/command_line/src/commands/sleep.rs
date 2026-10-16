@@ -12,7 +12,7 @@ pub struct SleepCommand;
     name = "sleep",
     about = "Pause for a nonnegative integer duration. Suffixes: ms, s (default), m, h. Fractions and multiple durations are not supported."
 )]
-struct SleepArguments<'a> {
+pub(super) struct SleepArguments<'a> {
     duration: &'a str,
 }
 

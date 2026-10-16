@@ -46,6 +46,7 @@ pub enum Error<'a> {
     Format,
     InvalidSleepDuration,
     FailedToSetPermissions(virtual_file_system::Error),
+    FailedToGetTaskUser(task::Error),
 }
 
 impl<A: getargs::Argument> From<getargs::Error<A>> for Error<'_> {
@@ -106,6 +107,9 @@ impl Display for Error<'_> {
             }
             Error::MissingCommand => write!(formatter, translate!("Missing command")),
             Error::CommandNotFound => write!(formatter, translate!("Command not found")),
+            Error::FailedToGetTaskUser(error) => {
+                write!(formatter, translate!("Failed to get task user: {}"), error)
+            }
             Error::FailedToGetTaskIdentifier => {
                 write!(formatter, translate!("Failed to get task identifier"))
             }

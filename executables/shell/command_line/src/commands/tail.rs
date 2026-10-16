@@ -27,7 +27,7 @@ impl UserCommand for TailCommand {
 
 #[derive(GetArgs)]
 #[command(name = "tail", about = "Print the last lines of a file.")]
-struct TailArguments<'a> {
+pub(super) struct TailArguments<'a> {
     path: &'a str,
     #[arg(short = 'n', long = "lines", default_value_t = 10)]
     lines: usize,

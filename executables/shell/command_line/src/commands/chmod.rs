@@ -11,7 +11,7 @@ pub struct ChmodCommand;
     name = "chmod",
     about = "Change file or directory permissions. MODE is octal 000-777 (an optional leading zero is accepted). Symbolic modes, special bits and recursion are unsupported."
 )]
-struct ChmodArguments<'a> {
+pub(super) struct ChmodArguments<'a> {
     mode: &'a str,
     path: &'a str,
 }

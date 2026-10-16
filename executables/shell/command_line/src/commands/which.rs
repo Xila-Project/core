@@ -26,7 +26,7 @@ impl UserCommand for WhichCommand {
 
 #[derive(GetArgs)]
 #[command(name = "which", about = "Find an executable.")]
-struct WhichArguments<'a> {
+pub(super) struct WhichArguments<'a> {
     command: &'a str,
 }
 

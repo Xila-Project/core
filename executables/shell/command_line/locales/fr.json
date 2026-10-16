@@ -55,5 +55,6 @@
   "User": "Utilisateur",
   "User name: ": "Nom d'utilisateur: ",
   "{} bytes from {}: icmp_seq={} time={:.2} ms": "{} octets de {}: icmp_seq={} temps={:.2} ms",
-  "{} record(s) for domain '{}':": "Enregistrement(s) {} pour le domaine '{}':"
+  "{} record(s) for domain '{}':": "Enregistrement(s) {} pour le domaine '{}':",
+  "Failed to get task user: {}": "Échec de récupération de l’utilisateur de la tâche : {}"
 }

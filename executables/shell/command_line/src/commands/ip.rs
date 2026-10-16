@@ -28,7 +28,7 @@ impl UserCommand for IpCommand {
 
 #[derive(GetArgs)]
 #[command(name = "ip", about = "Show network addresses or routes.")]
-struct IpArguments<'a> {
+pub(super) struct IpArguments<'a> {
     command: &'a str,
 }
 

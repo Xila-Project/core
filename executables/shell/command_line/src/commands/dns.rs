@@ -28,7 +28,7 @@ impl UserCommand for DnsResolveCommand {
 
 #[derive(GetArgs)]
 #[command(name = "dns_resolve", about = "Resolve a DNS name.")]
-struct DnsResolveArguments<'a> {
+pub(super) struct DnsResolveArguments<'a> {
     domain: &'a str,
     #[arg(short = 'a', long = "a")]
     a_enabled: bool,

@@ -30,7 +30,7 @@ const ICMP_IDENTIFIER: u16 = 0x22b;
 
 #[derive(GetArgs)]
 #[command(name = "ping", about = "Send ICMP echo requests.")]
-struct PingArguments<'a> {
+pub(super) struct PingArguments<'a> {
     target: &'a str,
     #[arg(short = 'c', long = "count", default_value_t = 4)]
     count: u16,

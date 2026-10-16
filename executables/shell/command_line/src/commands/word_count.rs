@@ -27,7 +27,7 @@ impl UserCommand for WordCountCommand {
 
 #[derive(GetArgs)]
 #[command(name = "wc", about = "Count characters, words and lines.")]
-struct WordCountArguments<'a> {
+pub(super) struct WordCountArguments<'a> {
     #[arg(default_value = "")]
     path: &'a str,
     #[arg(short = 'c', long = "characters")]
