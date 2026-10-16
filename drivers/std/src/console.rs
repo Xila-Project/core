@@ -10,10 +10,7 @@ pub struct StandardInDevice;
 
 impl DirectBaseOperations for StandardInDevice {
     fn read(&self, buffer: &mut [u8], _: Size) -> file_system::Result<usize> {
-        #[allow(clippy::unused_io_amount)]
-        stdin().read(buffer).unwrap();
-
-        Ok(buffer.len() as _)
+        stdin().read(buffer).map_err(map_error)
     }
 
     fn write(&self, _: &[u8], _: Size) -> file_system::Result<usize> {

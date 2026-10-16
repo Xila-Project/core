@@ -72,7 +72,9 @@ fn kind_as_str(kind: Kind) -> &'static str {
 }
 
 async fn write_short_entry<C: CommandContext>(context: &mut C, entry_name: &str) -> Result<()> {
-    context.write_out_fmt(format_args!("{}\n", entry_name))
+    context
+        .write_out_fmt(format_args!("{}\n", entry_name))
+        .await
 }
 
 async fn write_long_entry<C: CommandContext>(
@@ -98,17 +100,19 @@ async fn write_long_entry<C: CommandContext>(
         .await
         .unwrap_or_else(|_| statistics.group.as_u16().to_string());
 
-    context.write_out_fmt(format_args!(
-        "{} {} {} {} {} {} {} {}\n",
-        kind_as_str(statistics.kind),
-        statistics.permissions,
-        statistics.links,
-        user,
-        group,
-        statistics.size,
-        statistics.modification,
-        entry.as_ref(),
-    ))
+    context
+        .write_out_fmt(format_args!(
+            "{} {} {} {} {} {} {} {}\n",
+            kind_as_str(statistics.kind),
+            statistics.permissions,
+            statistics.links,
+            user,
+            group,
+            statistics.size,
+            statistics.modification,
+            entry.as_ref(),
+        ))
+        .await
 }
 
 async fn execute_list<'a, I, C>(

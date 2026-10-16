@@ -1,7 +1,6 @@
 use super::VirtualFileSystem;
 use crate::{Error, ItemStatic, Result, SynchronousFile, poll};
 use alloc::{vec, vec::Vec};
-use core::mem::forget;
 use embedded_io_async::ErrorType;
 use exported_file_system::{AccessFlags, ControlCommand, CreateFlags, Permissions};
 use file_system::{Context, Flags, Path, Position, Size, StateFlags, Statistics};
@@ -227,13 +226,8 @@ impl<'a> File<'a> {
         Ok(self.0.flags.get_access())
     }
 
-    pub async fn close(mut self, virtual_file_system: &VirtualFileSystem) -> crate::Result<()> {
-        let result = virtual_file_system
-            .close(&self.0.item, &mut self.0.context)
-            .await;
-        forget(self);
-
-        result
+    pub async fn close(self, virtual_file_system: &VirtualFileSystem) -> crate::Result<()> {
+        self.0.close(virtual_file_system)
     }
 
     pub fn into_synchronous_file(self) -> SynchronousFile<'a> {

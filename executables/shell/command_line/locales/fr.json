@@ -53,5 +53,11 @@
   "User": "Utilisateur",
   "User name: ": "Nom d'utilisateur: ",
   "{} bytes from {}: icmp_seq={} time={:.2} ms": "{} octets de {}: icmp_seq={} temps={:.2} ms",
-  "{} record(s) for domain '{}':": "Enregistrement(s) {} pour le domaine '{}':"
+  "{} record(s) for domain '{}':": "Enregistrement(s) {} pour le domaine '{}':",
+  "Syntax error at byte {}: {}": "Erreur de syntaxe à l’octet {} : {}",
+  "Failed to write file: {}": "Échec de l’écriture du fichier : {}",
+  "Command line is too long": "La ligne de commande est trop longue",
+  "Invalid UTF-8 input": "Entrée UTF-8 invalide",
+  "Usage: shell -c COMMAND": "Utilisation : shell -c COMMANDE",
+  "Too many background jobs": "Trop de tâches en arrière-plan"
 }
