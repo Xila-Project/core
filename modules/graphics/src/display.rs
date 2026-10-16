@@ -5,11 +5,15 @@ use shared::AnyByLayout;
 use core::{ffi::c_void, ptr::null_mut, slice};
 
 use crate::{
-    Area, GET_RESOLUTION, Point, RenderingColor, Result, SET_DRAWING_AREA, WAS_RESIZED,
+    Area, Error, GET_RESOLUTION, Point, RenderingColor, Result, SET_DRAWING_AREA, WAS_RESIZED,
     draw_buffer::Buffer,
 };
 
 use super::lvgl;
+
+fn checked_buffer_size_bytes(pixel_count: usize, bytes_per_pixel: usize) -> Option<u32> {
+    u32::try_from(pixel_count.checked_mul(bytes_per_pixel)?).ok()
+}
 
 struct UserData {
     device: &'static dyn DirectCharacterDevice,
@@ -68,6 +72,10 @@ impl Display {
         buffer_size: usize,
         double_buffered: bool,
     ) -> Result<Self> {
+        let buffer_size_bytes =
+            checked_buffer_size_bytes(buffer_size, core::mem::size_of::<RenderingColor>())
+                .ok_or(Error::OutOfMemory)?;
+
         // Get the resolution from the device.
         let mut resolution = Point::new(0, 0);
         device
@@ -99,7 +107,7 @@ impl Display {
                 buffer_2
                     .as_ref()
                     .map_or(null_mut(), |buffer| buffer.as_ref().as_ptr() as *mut c_void),
-                buffer_size as u32,
+                buffer_size_bytes,
                 lvgl::lv_display_render_mode_t_LV_DISPLAY_RENDER_MODE_PARTIAL,
             )
         }
@@ -166,5 +174,22 @@ impl Display {
 
     pub fn get_object(&self) -> *mut lvgl::lv_obj_t {
         unsafe { lvgl::lv_display_get_screen_active(self.display) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checked_buffer_size_bytes;
+
+    #[test]
+    fn lvgl_buffer_size_is_in_bytes_for_supported_color_depths() {
+        assert_eq!(checked_buffer_size_bytes(800, 2), Some(1600));
+        assert_eq!(checked_buffer_size_bytes(800, 4), Some(3200));
+    }
+
+    #[test]
+    fn lvgl_buffer_size_rejects_overflow() {
+        assert_eq!(checked_buffer_size_bytes(usize::MAX, 4), None);
+        assert_eq!(checked_buffer_size_bytes(u32::MAX as usize, 2), None);
     }
 }
