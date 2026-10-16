@@ -89,7 +89,8 @@ jobs:
             localization:
               - *shared
               - '**/*.ftl'
-              - '**/*.json'
+              - '**/locales/**/*.json'
+              - '**/locale/**'
               - '**/i18n/**'
               - '**/localization/**'
               - 'executables/wasm/src/host/translation/**'
