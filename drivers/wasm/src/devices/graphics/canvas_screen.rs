@@ -23,16 +23,38 @@ struct Inner {
 }
 
 impl Inner {
-    fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
+    fn new(canvas: HtmlCanvasElement, desynchronized: bool) -> Result<Self, String> {
         let options = js_sys::Object::new();
-        js_sys::Reflect::set(&options, &"alpha".into(), &JsValue::FALSE).unwrap();
+        js_sys::Reflect::set(&options, &"alpha".into(), &JsValue::FALSE)
+            .map_err(|_| "Failed to set canvas alpha option")?;
+        js_sys::Reflect::set(&options, &"desynchronized".into(), &desynchronized.into())
+            .map_err(|_| "Failed to set canvas desynchronized option")?;
 
-        let context = canvas
-            .get_context_with_context_options("2d", &options)
-            .unwrap()
-            .ok_or("No 2D context found")?
-            .dyn_into::<CanvasRenderingContext2d>()
-            .map_err(|_| "Failed to cast to CanvasRenderingContext2d")?;
+        let result = canvas.get_context_with_context_options("2d", &options);
+        let context = match result {
+            Ok(Some(context)) => context,
+            _ => {
+                js_sys::Reflect::delete_property(&options, &"desynchronized".into())
+                    .map_err(|_| "Failed to reset canvas options")?;
+                canvas
+                    .get_context_with_context_options("2d", &options)
+                    .map_err(|_| "Failed to create 2D context")?
+                    .ok_or("No 2D context found")?
+            }
+        }
+        .dyn_into::<CanvasRenderingContext2d>()
+        .map_err(|_| "Failed to cast to CanvasRenderingContext2d")?;
+
+        log::information!("Canvas2D requested alpha=false, desynchronized={desynchronized}");
+        let attributes = js_sys::Reflect::get(&context, &"getContextAttributes".into())
+            .ok()
+            .and_then(|method| method.dyn_into::<js_sys::Function>().ok())
+            .and_then(|method| method.call0(&context).ok());
+        if let Some(attributes) = attributes {
+            web_sys::console::info_2(&"Canvas2D actual context attributes".into(), &attributes);
+        } else {
+            log::information!("Canvas2D actual context attributes unavailable");
+        }
 
         let canvas_screen = Self {
             canvas,
@@ -118,7 +140,22 @@ unsafe impl Send for CanvasScreenDevice {}
 
 impl CanvasScreenDevice {
     pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
-        let device = Self(Rc::new(RwLock::new(Inner::new(canvas.clone())?)));
+        let desynchronized = web_sys::window()
+            .and_then(|window| window.location().search().ok())
+            .and_then(|search| web_sys::UrlSearchParams::new_with_str(&search).ok())
+            .and_then(|parameters| parameters.get("canvas_desynchronized"))
+            .is_some_and(|value| value == "true");
+        Self::new_with_desynchronized(canvas, desynchronized).await
+    }
+
+    pub async fn new_with_desynchronized(
+        canvas: HtmlCanvasElement,
+        desynchronized: bool,
+    ) -> Result<Self, String> {
+        let device = Self(Rc::new(RwLock::new(Inner::new(
+            canvas.clone(),
+            desynchronized,
+        )?)));
 
         let window = web_sys::window().ok_or("Failed to get window")?;
         let device_clone = device.0.clone();
