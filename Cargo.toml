@@ -121,6 +121,7 @@ graphical_shell = { path = "executables/shell/graphical" }
 wasm = { path = "executables/wasm" }
 terminal = { path = "executables/terminal" }
 settings = { path = "executables/settings" }
+pixel_painter = { path = "executables/pixel_painter" }
 calculator = { path = "executables/calculator" }
 weather = { path = "executables/weather" }
 clock = { path = "executables/clock" }
@@ -175,6 +176,7 @@ members = [
   "executables/shell/graphical",
   "executables/terminal",
   "executables/settings",
+  "executables/pixel_painter",
   "modules/authentication",
   "modules/network",
   "modules/synchronization",

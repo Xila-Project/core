@@ -147,11 +147,99 @@ fn generate() {
             Some("u32"),
         ),
     ];
+    let extra: &[Adapter<'_>] = &[
+        (
+            "object_set_padding",
+            &["*mut lv_obj_t", "i32"],
+            "None",
+            None,
+        ),
+        (
+            "indexed_canvas_create",
+            &["*mut lv_obj_t", "u16", "u16"],
+            "Word",
+            Some("*mut lv_obj_t"),
+        ),
+        (
+            "indexed_canvas_set_pixels",
+            &["*mut lv_obj_t", "*const u8", "usize", "*const u32", "usize"],
+            "None",
+            None,
+        ),
+        (
+            "window_pop_pointer_event",
+            &[
+                "*mut lv_obj_t",
+                "*mut u32",
+                "*mut WasmPointer",
+                "*mut i32",
+                "*mut i32",
+                "*mut i32",
+                "*mut i32",
+            ],
+            "None",
+            None,
+        ),
+        (
+            "textarea_create",
+            &["*mut lv_obj_t"],
+            "Word",
+            Some("*mut lv_obj_t"),
+        ),
+        (
+            "textarea_set_one_line",
+            &["*mut lv_obj_t", "bool"],
+            "None",
+            None,
+        ),
+        (
+            "textarea_set_text",
+            &["*mut lv_obj_t", "*const core::ffi::c_char"],
+            "None",
+            None,
+        ),
+        (
+            "textarea_set_max_length",
+            &["*mut lv_obj_t", "u32"],
+            "None",
+            None,
+        ),
+        (
+            "textarea_get_text",
+            &["*mut lv_obj_t", "*mut i8", "usize"],
+            "I32",
+            Some("i32"),
+        ),
+        (
+            "textarea_get_text_length",
+            &["*mut lv_obj_t"],
+            "I32",
+            Some("i32"),
+        ),
+        (
+            "keyboard_create",
+            &["*mut lv_obj_t"],
+            "Word",
+            Some("*mut lv_obj_t"),
+        ),
+        (
+            "keyboard_set_textarea",
+            &["*mut lv_obj_t", "*mut lv_obj_t"],
+            "None",
+            None,
+        ),
+        (
+            "object_remove_flag",
+            &["*mut lv_obj_t", "lv_obj_flag_t"],
+            "None",
+            None,
+        ),
+    ];
     let mut variants = Vec::new();
     let mut lookup = Vec::new();
     let mut counts = Vec::new();
     let mut results = Vec::new();
-    for &(name, arguments, result, output) in supported {
+    for &(name, arguments, result, output) in supported.iter().chain(extra) {
         let call = catalog
             .calls()
             .iter()
