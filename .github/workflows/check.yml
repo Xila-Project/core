@@ -115,6 +115,8 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          cache-key: ${{ matrix.locale }}
 
       - name: Check | Strict host and guest translations
         run: cargo make check-localization
@@ -138,6 +140,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
         with:
+          cache-key: ${{ matrix.memory }}
           cache-workspaces: "executables/wasm/tests/translation -> target"
 
       # Keep main's plain dependency artifacts compatible with PR test builds.
@@ -156,7 +159,7 @@ jobs:
   wasm-extended:
     name: WASM ABI coverage and Miri (${{ matrix.memory }})
     needs: [wasm-translation]
-    if: github.event_name != 'pull_request'
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.wasm-translation.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -171,6 +174,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
         with:
+          cache-key: ${{ matrix.memory }}
           cache-workspaces: "executables/wasm/tests/translation -> target/llvm-cov-target"
 
       - name: Check | Translation coverage
@@ -292,7 +296,7 @@ jobs:
   host-coverage:
     name: Host coverage and profiling checks
     needs: [host-test]
-    if: github.event_name != 'pull_request'
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.host-test.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
