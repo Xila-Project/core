@@ -22,6 +22,7 @@
   "Failed to read environment variable: {}": "Échec de la lecture de la variable d'environnement: {}",
   "Failed to read file: {}": "Impossible de lire le fichier : {}",
   "Failed to remove directory: {}": "Échec de la suppression du répertoire: {}",
+  "Failed to rename path: {}": "Échec du renommage du chemin: {}",
   "Failed to remove environment variable: {}": "Échec de la suppression de la variable d'environnement: {}",
   "Failed to resolve domain '{}' for {} records: {}": "Échec de la résolution du domaine '{}' pour les enregistrements {}: {}",
   "Failed to resolve domain: {}": "Échec de la résolution du domaine: {}",

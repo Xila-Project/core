@@ -14,6 +14,7 @@ mod head;
 mod help;
 mod ip;
 mod list;
+mod mv;
 mod ping;
 mod print_working_directory;
 mod realpath;
@@ -51,6 +52,7 @@ use self::{
     head::HeadCommand,
     ip::IpCommand,
     list::ListCommand,
+    mv::MoveCommand,
     ping::PingCommand,
     print_working_directory::PrintWorkingDirectoryCommand,
     sleep::SleepCommand,
@@ -121,6 +123,7 @@ pub enum UserCommandKind {
     Sleep,
     Help,
     Tree,
+    Move,
 }
 
 /// Names and help text shared by command resolution and `help`.
@@ -226,6 +229,7 @@ const BUILTINS: &[(&str, UserCommandKind, &str)] = &[
     ("tail", UserCommandKind::Tail, tail::TailArguments::HELP),
     ("help", UserCommandKind::Help, help::HelpArguments::HELP),
     ("tree", UserCommandKind::Tree, tree::TreeArguments::HELP),
+    ("mv", UserCommandKind::Move, mv::MoveArguments::HELP),
     ("sleep", UserCommandKind::Sleep, sleep::SleepArguments::HELP),
     ("chmod", UserCommandKind::Chmod, chmod::ChmodArguments::HELP),
 ];
@@ -310,6 +314,7 @@ where
         UserCommandKind::Sleep => SleepCommand.execute(context, options, paths).await,
         UserCommandKind::Help => help::HelpCommand.execute(context, options, paths).await,
         UserCommandKind::Tree => TreeCommand.execute(context, options, paths).await,
+        UserCommandKind::Move => MoveCommand.execute(context, options, paths).await,
     };
 
     match result {
@@ -392,6 +397,7 @@ mod tests {
                 resolve_user_command("sleep").expect("sleep builtin"),
             ),
             ("tree", UserCommandKind::Tree),
+            ("mv", UserCommandKind::Move),
             ("exit", UserCommandKind::Exit),
             ("ping", UserCommandKind::Ping),
             ("ls", UserCommandKind::List),
@@ -805,6 +811,10 @@ mod tests {
         assert!(matches!(
             resolve_user_command("realpath"),
             Some(UserCommandKind::Realpath)
+        ));
+        assert!(matches!(
+            resolve_user_command("mv"),
+            Some(UserCommandKind::Move)
         ));
         assert!(resolve_user_command("unknown").is_none());
     }

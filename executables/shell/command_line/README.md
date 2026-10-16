@@ -86,3 +86,8 @@ filesystem order. `-L N` limits levels below the selected directory; `-L 0`
 prints only that directory. Default and maximum depth are 32, with paths bounded
 to 1024 bytes. Traversal stops and reports filesystem or output errors. It keeps
 one directory handle per active level rather than collecting sibling entries.
+
+`mv SOURCE DESTINATION` renames a file or directory to the exact destination
+path. Relative paths use the current directory. Both paths must belong to the
+same mounted filesystem; the command reports the filesystem's rename error if
+the source or destination cannot be renamed.
