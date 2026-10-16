@@ -5,7 +5,7 @@ use synchronization::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, channel::Sender,
 };
 use wasm_bindgen::{JsCast, prelude::Closure};
-use web_sys::{ClipboardEvent, KeyboardEvent};
+use web_sys::{ClipboardEvent, HtmlCanvasElement, KeyboardEvent};
 
 #[derive(Debug)]
 pub struct KeyboardDevice(Box<Channel<CriticalSectionRawMutex, (Key, State), 512>>);
@@ -53,35 +53,68 @@ impl KeyboardDevice {
         }
     }
 
-    pub fn new() -> Result<Self, String> {
-        let window = web_sys::window().ok_or("Failed to get window")?;
+    pub fn new(canvas: &HtmlCanvasElement) -> Result<Self, String> {
+        // A focusable canvas receives keyboard and clipboard input without
+        // intercepting the surrounding page's controls.
+        canvas.set_tab_index(0);
+        canvas.focus().map_err(|_| "Failed to focus canvas")?;
 
-        let document = window.document().ok_or("Failed to get document")?;
+        let focus_closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
+            if let Some(canvas) = event
+                .current_target()
+                .and_then(|target| target.dyn_into::<HtmlCanvasElement>().ok())
+            {
+                let _ = canvas.focus();
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        canvas
+            .add_event_listener_with_callback("pointerdown", focus_closure.as_ref().unchecked_ref())
+            .map_err(|_| "Failed to add canvas focus event listener")?;
+        focus_closure.forget();
 
         let inner = Self(Box::new(Channel::new()));
 
         let sender = inner.0.sender();
 
         let key_down_closure = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-            // Skip handling Ctrl+V to avoid registering 'V' (paste event will handle it)
-            if event.ctrl_key() {
+            // Keep browser/OS shortcuts and IME composition available. In
+            // particular Ctrl/Cmd+V must generate the separate paste event.
+            if !is_focused_canvas(event.as_ref())
+                || event.default_prevented()
+                || event.ctrl_key()
+                || event.meta_key()
+                || event.alt_key()
+                || event.is_composing()
+            {
                 return;
             }
 
-            Self::handle_key_press(sender, &event.key(), true);
-            Self::handle_key_press(sender, &event.key(), false);
+            let key = event.key();
+            if map_key(&key).is_none() {
+                return;
+            }
+
+            // Cancel quick-find, scrolling and navigation only for keys that
+            // Xila consumes. Unmapped keys (including Tab) retain their defaults.
+            event.prevent_default();
+            Self::handle_key_press(sender, &key, true);
+            Self::handle_key_press(sender, &key, false);
         }) as Box<dyn FnMut(KeyboardEvent)>);
 
-        document
+        canvas
             .add_event_listener_with_callback("keydown", key_down_closure.as_ref().unchecked_ref())
             .map_err(|_| "Failed to add keydown event listener")?;
 
         let sender = inner.0.sender();
 
         let paste_closure = Closure::wrap(Box::new(move |event: ClipboardEvent| {
+            if !is_focused_canvas(event.as_ref()) || event.default_prevented() {
+                return;
+            }
             if let Some(clipboard_data) = event.clipboard_data()
                 && let Ok(text) = clipboard_data.get_data("text")
             {
+                event.prevent_default();
                 for char in text.chars() {
                     Self::handle_key_press_char(sender, char, true);
                     Self::handle_key_press_char(sender, char, false);
@@ -89,7 +122,7 @@ impl KeyboardDevice {
             }
         }) as Box<dyn FnMut(ClipboardEvent)>);
 
-        window
+        canvas
             .add_event_listener_with_callback("paste", paste_closure.as_ref().unchecked_ref())
             .map_err(|_| "Failed to add paste event listener")?;
 
@@ -151,4 +184,17 @@ fn map_key(key: &str) -> Option<Key> {
     };
 
     Some(key)
+}
+
+fn is_focused_canvas(event: &web_sys::Event) -> bool {
+    let Some(canvas) = event
+        .current_target()
+        .and_then(|target| target.dyn_into::<HtmlCanvasElement>().ok())
+    else {
+        return false;
+    };
+    canvas
+        .owner_document()
+        .and_then(|document| document.active_element())
+        == Some(canvas.unchecked_into())
 }
