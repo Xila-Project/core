@@ -4,8 +4,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
@@ -16,11 +14,11 @@ env:
 
 defaults:
   run:
-    shell: devbox run -- bash --noprofile --norc -eo pipefail {0}
+    shell: bash
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -88,12 +86,20 @@ jobs:
               - 'examples/wasm/**'
             localization:
               - *shared
-              - 'src/**'
-              - 'executables/**'
+              - '**/*.rs'
+              - '**/*.ftl'
+              - '**/locales/**/*.json'
+              - '**/locale/**'
+              - '**/i18n/**'
+              - '**/localization/**'
+              - 'executables/wasm/src/host/translation/**'
+              - 'executables/wasm/tests/translation/**'
 
   localization:
-    name: Translation coverage (${{ matrix.locale }})
+    name: Localization checks (${{ matrix.locale }})
     needs: [changes]
+    # Rust-only changes can introduce translation keys; docs-only PRs skip
+    # these builds. Main/manual runs and filter failures still run both locales.
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.localization == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -113,33 +119,63 @@ jobs:
       - name: Check | Strict host and guest translations
         run: cargo make check-localization
 
-  # Job-level skips satisfy required checks. Main/manual/merge-group runs and
-  # filter failures run the full suite; !cancelled() permits runs after a
-  # skipped dependency.
+  # Job-level skips satisfy required checks. PR runs are path-filtered and
+  # main/manual runs and filter failures run the full suite; !cancelled()
+  # permits runs after a skipped dependency. Heavy steps run off PRs only.
   wasm-translation:
-    name: WASM translation (${{ matrix.memory }})
+    name: WASM ABI checks (${{ matrix.memory }})
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.translation == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       matrix:
-        memory: [memory_32, memory_64]
+        memory: ${{ fromJSON(github.event_name == 'pull_request' && '["memory_32"]' || '["memory_32", "memory_64"]') }}
     steps:
       - name: Setup | Checkout repository
         uses: actions/checkout@v7
 
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          cache-workspaces: "executables/wasm/tests/translation -> target"
 
-      - name: Setup | Coverage and Miri components
-        run: |
-          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
-          rustup component add --toolchain "$XILA_NIGHTLY_TOOLCHAIN" miri rust-src
+      # Keep main's plain dependency artifacts compatible with PR test builds.
+      - name: Check | Translation tests
+        run: >-
+          cargo +${XILA_RUST_TOOLCHAIN} test --locked
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
+          --no-default-features --features ${{ matrix.memory }}
+
+      - name: Check | Borrowing compile-fail doctests
+        run: >-
+          cargo +${XILA_RUST_TOOLCHAIN} test --locked --doc
+          --manifest-path executables/wasm/tests/translation/Cargo.toml
+          --no-default-features --features ${{ matrix.memory }}
+
+  wasm-extended:
+    name: WASM ABI coverage and Miri (${{ matrix.memory }})
+    needs: [wasm-translation]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        memory: [memory_32, memory_64]
+    env:
+      CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/executables/wasm/tests/translation/target/llvm-cov-target
+    steps:
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          cache-workspaces: "executables/wasm/tests/translation -> target/llvm-cov-target"
 
       - name: Check | Translation coverage
         run: >-
-          cargo +${XILA_RUST_TOOLCHAIN} llvm-cov
+          cargo +${XILA_RUST_TOOLCHAIN} llvm-cov --locked
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
           --ignore-filename-regex '(tests\.rs|tests/translation/src/lib\.rs)$'
@@ -147,20 +183,14 @@ jobs:
 
       - name: Check | Translation Miri
         run: >-
-          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
-          --manifest-path executables/wasm/tests/translation/Cargo.toml
-          --no-default-features --features ${{ matrix.memory }}
-
-      - name: Check | Borrowing compile-fail doctests
-        run: >-
-          cargo +${XILA_RUST_TOOLCHAIN} test --doc
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test --locked
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features ${{ matrix.memory }}
 
       - name: Check | 64-bit guest on 32-bit host (Miri)
         if: matrix.memory == 'memory_64'
         run: >-
-          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test --locked
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_64
           --target i686-unknown-linux-gnu
@@ -168,7 +198,7 @@ jobs:
       - name: Check | Little-endian ABI on big-endian host (Miri)
         if: matrix.memory == 'memory_32'
         run: >-
-          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test
+          cargo +${XILA_NIGHTLY_TOOLCHAIN} miri test --locked
           --manifest-path executables/wasm/tests/translation/Cargo.toml
           --no-default-features --features memory_32
           --target powerpc-unknown-linux-gnu
@@ -185,18 +215,121 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          profile: minimal
 
       - name: Check | Formatting (TOML)
-        run: cargo make format-toml --check
+        run: cargo make --skip-init-end-tasks format-toml --check
 
       - name: Check | Formatting (Rust)
-        run: cargo make format-rust -- --check
+        run: cargo make --skip-init-end-tasks format-rust -- --check
 
       - name: Check | Formatting (JSON)
         run: npm exec prettier -- --check "**/*.json"
 
-  host:
-    name: Host checks
+  host-clippy:
+    name: Host checks (Clippy)
+    needs: [changes, format, localization]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check | Translation coverage gate
+        if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
+        run: |
+          echo "::error::Strict translation coverage did not pass."
+          exit 1
+
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check | Clippy (Host)
+        run: cargo make clippy-host
+
+      - name: Check | Clippy (Host - Wasmi)
+        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
+
+  host-test:
+    name: Host checks (Tests)
+    needs: [changes, format, localization]
+    if: >-
+      ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
+          (needs.changes.result != 'success' || needs.changes.outputs.host == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check | Translation coverage gate
+        if: needs.localization.result != 'success' && needs.localization.result != 'skipped'
+        run: |
+          echo "::error::Strict translation coverage did not pass."
+          exit 1
+
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          cache-workspaces: |
+            . -> target
+            tools/profiling -> target
+
+      - name: Check | Profiling runner
+        run: |
+          cargo fmt --manifest-path tools/profiling/Cargo.toml -- --check
+          cargo clippy --manifest-path tools/profiling/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path tools/profiling/Cargo.toml
+
+      # Run the same plain tests on main and PRs so main saves a reusable cache.
+      - name: Run | Test
+        run: cargo make test
+
+  host-coverage:
+    name: Host coverage and profiling checks
+    needs: [host-test]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/target/llvm-cov-target
+    steps:
+      - name: Setup | Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          # Profiling builds into target/, coverage into its llvm-cov-target child.
+          # Cache the parent once; the job-specific key isolates it from plain tests.
+          cache-workspaces: ". -> target"
+
+      - name: Setup | Generate fonts
+        run: cargo make generate-fonts
+
+      - name: Check | Profiling instrumentation
+        run: |
+          cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
+          cargo test -p native_example --bin native_example --features profiling,heaptrack
+
+      - name: Run | Coverage
+        run: |
+          cargo make coverage --lcov --output-path lcov.info
+
+      - name: Upload | Coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
+          slug: Xila-Project/Core
+          files: lcov.info
+          fail_ci_if_error: true
+
+  host-audio-docs:
+    name: Host checks (Audio, docs, build)
     needs: [changes, format, localization]
     if: >-
       ${{ !cancelled() && (needs.format.result == 'success' || needs.format.result == 'skipped') &&
@@ -216,22 +349,8 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Check | Clippy (Host)
-        run: cargo make clippy-host
-
-      - name: Check | Profiling runner
-        run: |
-          cargo fmt --manifest-path tools/profiling/Cargo.toml -- --check
-          cargo clippy --manifest-path tools/profiling/Cargo.toml --all-targets -- -D warnings
-          cargo test --manifest-path tools/profiling/Cargo.toml
-
-      - name: Check | Profiling instrumentation
-        run: |
-          cargo test -p task -p drivers_std --lib --features task/test_harness,drivers_std/profiling,drivers_std/heaptrack
-          cargo test -p native_example --bin native_example --features profiling,heaptrack
-
-      - name: Check | Clippy (Host - Wasmi)
-        run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p wasm --features graphics,xila/graphics_rendering_xrgb8888 --target x86_64-unknown-linux-gnu
+      - name: Setup | Generate fonts
+        run: cargo make generate-fonts
 
       - name: Check | Audio
         run: |
@@ -240,23 +359,11 @@ jobs:
           SDL_AUDIODRIVER=dummy cargo +${XILA_RUST_TOOLCHAIN} test -p drivers_native --features audio --lib devices::audio::tests -- --include-ignored
 
       - name: Check | Documentation (Host)
+        if: github.event_name != 'pull_request'
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-host
 
       - name: Build | Example (Native)
         run: cargo make build -p native_example
-
-      - name: Run | Test
-        run: |
-          rustup component add --toolchain "$XILA_RUST_TOOLCHAIN" llvm-tools-preview
-          cargo make coverage --lcov --output-path lcov.info
-
-      - name: Upload | Coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
-          slug: Xila-Project/Core
-          files: lcov.info
-          fail_ci_if_error: true
 
   guest:
     name: Guest checks
@@ -280,6 +387,7 @@ jobs:
         run: cargo +${XILA_RUST_TOOLCHAIN} check -p audio --target wasm32-unknown-unknown
 
       - name: Check | Documentation (Guest)
+        if: github.event_name != 'pull_request'
         run: RUSTDOCFLAGS="--deny warnings" cargo make doc-guest
 
       - name: Build | Bundled applications (WASI)
@@ -291,5 +399,20 @@ jobs:
       - name: Check | Pixel Painter (WASI)
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p pixel_painter --all-targets --target wasm32-wasip1 -- -D warnings
 
+      - name: Cache | Trunk tools and dist
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v4
+        with:
+          # Trunk downloads wasm-bindgen/wasm-opt into its ProjectDirs cache
+          # (~/.cache/trunk/<tool>-<version>/); a version drift self-heals by
+          # re-downloading the missing directory. dist/ is build output and is
+          # rebuilt by `trunk build`, so it is intentionally not cached.
+          path: |
+            ~/.cache/trunk
+          key: trunk-tools-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
+          restore-keys: |
+            trunk-tools-
+
       - name: Build | Example (WASM)
+        if: github.event_name != 'pull_request'
         run: cd examples/wasm && RUSTUP_TOOLCHAIN="$XILA_NIGHTLY_TOOLCHAIN" trunk build

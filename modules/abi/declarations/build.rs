@@ -57,10 +57,13 @@ pub fn main() {
         ..Default::default()
     };
 
-    // temporarly enable nightly for macro expansion
-
+    // Macro expansion needs nightly options but emits stdout, not the metadata
+    // artifacts expected by compiler caches. Bypass the wrapper only in this
+    // build-script process; Cargo's normal compilations keep using it.
     unsafe {
         env::set_var("RUSTC_BOOTSTRAP", "1");
+        // Empty also overrides a wrapper configured in .cargo/config.toml.
+        env::set_var("RUSTC_WRAPPER", "");
     }
 
     cbindgen::Builder::new()
