@@ -4,8 +4,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
@@ -114,7 +112,7 @@ jobs:
       - name: Check | Strict host and guest translations
         run: cargo make check-localization
 
-  # Job-level skips satisfy required checks. Main/manual/merge-group runs and
+  # Job-level skips satisfy required checks. Main/manual runs and
   # filter failures run the full suite; !cancelled() permits runs after a
   # skipped dependency.
   wasm-translation:
@@ -335,7 +333,6 @@ jobs:
         run: cargo +${XILA_RUST_TOOLCHAIN} clippy -p clock --all-targets --target wasm32-wasip1 -- -D warnings
 
       - name: Cache | Trunk tools and dist
-        if: github.event_name == 'merge_group' || github.ref == 'refs/heads/main'
         uses: actions/cache@v4
         with:
           # Trunk downloads wasm-bindgen/wasm-opt into its ProjectDirs cache
