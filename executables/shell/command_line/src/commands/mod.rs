@@ -398,6 +398,7 @@ mod tests {
         };
         let mut context = HelpContext {
             output: alloc::string::String::new(),
+            ..Default::default()
         };
         let mut options = getargs::Options::new(["5ms"].into_iter());
         let mut future = core::pin::pin!(super::dispatch_user_command(
@@ -421,6 +422,7 @@ mod tests {
     async fn sleep_zero_completes_without_output() {
         let mut context = HelpContext {
             output: alloc::string::String::new(),
+            ..Default::default()
         };
         let mut options = getargs::Options::new(["0"].into_iter());
         super::dispatch_user_command(
@@ -442,6 +444,7 @@ mod tests {
         };
         let mut context = HelpContext {
             output: alloc::string::String::new(),
+            ..Default::default()
         };
         let mut options = getargs::Options::new(["1.5s"].into_iter());
         let mut future = core::pin::pin!(super::dispatch_user_command(
