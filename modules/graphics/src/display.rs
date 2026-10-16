@@ -72,11 +72,9 @@ impl Display {
         buffer_size: usize,
         double_buffered: bool,
     ) -> Result<Self> {
-        let buffer_size_bytes = checked_buffer_size_bytes(
-            buffer_size,
-            core::mem::size_of::<RenderingColor>(),
-        )
-        .ok_or(Error::OutOfMemory)?;
+        let buffer_size_bytes =
+            checked_buffer_size_bytes(buffer_size, core::mem::size_of::<RenderingColor>())
+                .ok_or(Error::OutOfMemory)?;
 
         // Get the resolution from the device.
         let mut resolution = Point::new(0, 0);
