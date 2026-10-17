@@ -146,12 +146,11 @@ impl FileManager {
                 return Err(Error::FailedToCreateObject);
             }
 
-            // Toolbar properties - fixed height at top
+            // Toolbar - content-height flex child of the window's column layout,
+            // flattened to match the window's edge-to-edge chrome
             lvgl::lv_obj_set_size(self.toolbar, lvgl::lv_pct(100), lvgl::LV_SIZE_CONTENT);
-            lvgl::lv_obj_align(self.toolbar, lvgl::lv_align_t_LV_ALIGN_TOP_MID, 0, 0);
-
             lvgl::lv_obj_set_style_border_width(self.toolbar, 0, lvgl::LV_STATE_DEFAULT);
-            lvgl::lv_obj_set_style_pad_all(self.toolbar, 10, lvgl::LV_STATE_DEFAULT);
+            lvgl::lv_obj_set_style_radius(self.toolbar, 0, lvgl::LV_STATE_DEFAULT);
             lvgl::lv_obj_set_layout(self.toolbar, lvgl::lv_layout_t_LV_LAYOUT_FLEX);
             lvgl::lv_obj_set_flex_flow(self.toolbar, lvgl::lv_flex_flow_t_LV_FLEX_FLOW_ROW);
             lvgl::lv_obj_set_flex_align(
@@ -213,7 +212,6 @@ impl FileManager {
             }
 
             lvgl::lv_obj_set_flex_grow(self.path_text_area, 1); // Take remaining space
-            lvgl::lv_obj_set_style_pad_left(self.path_text_area, 10, lvgl::LV_STATE_DEFAULT);
 
             // Configure text area properties
             lvgl::lv_textarea_set_one_line(self.path_text_area, true);
