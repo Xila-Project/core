@@ -14,12 +14,59 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 use crate::devices::graphics::get_window_size;
 
+#[cfg(feature = "profiling")]
+#[derive(Default)]
+struct FlushProfile {
+    start_ms: f64,
+    flushes: u64,
+    pixels: u64,
+    conversion_ms: f64,
+    image_data_ms: f64,
+    upload_ms: f64,
+    total_ms: f64,
+    max_flush_ms: f64,
+}
+
+#[cfg(feature = "profiling")]
+impl FlushProfile {
+    fn record(&mut self, pixels: usize, conversion: f64, image_data: f64, upload: f64, total: f64, now: f64) {
+        if self.start_ms == 0.0 {
+            self.start_ms = now;
+        }
+        self.flushes += 1;
+        self.pixels += pixels as u64;
+        self.conversion_ms += conversion;
+        self.image_data_ms += image_data;
+        self.upload_ms += upload;
+        self.total_ms += total;
+        self.max_flush_ms = self.max_flush_ms.max(total);
+        if now - self.start_ms >= 5000.0 {
+            log::info!(
+                "wasm canvas 5s: flushes={} pixels={} bytes={} conversion_ms={:.2} image_data_ms={:.2} upload_ms={:.2} total_ms={:.2} max_flush_ms={:.2}",
+                self.flushes, self.pixels, self.pixels * 4,
+                self.conversion_ms, self.image_data_ms, self.upload_ms,
+                self.total_ms, self.max_flush_ms
+            );
+            *self = Self { start_ms: now, ..Self::default() };
+        }
+    }
+}
+
+#[cfg(feature = "profiling")]
+fn now_ms() -> f64 {
+    web_sys::window()
+        .and_then(|window| window.performance())
+        .map_or(0.0, |performance| performance.now())
+}
+
 struct Inner {
     canvas: HtmlCanvasElement,
     context: CanvasRenderingContext2d,
     conversion_buffer: Vec<u8>,
     area: Area,
     was_resized: bool,
+    #[cfg(feature = "profiling")]
+    profile: FlushProfile,
 }
 
 impl Inner {
@@ -40,6 +87,8 @@ impl Inner {
             conversion_buffer: Vec::new(),
             area: Area::default(),
             was_resized: false,
+            #[cfg(feature = "profiling")]
+            profile: FlushProfile::default(),
         };
 
         Ok(canvas_screen)
@@ -74,6 +123,8 @@ impl Inner {
     }
 
     fn draw_buffer(&mut self, buffer: &[RenderingColor]) -> Result<(), String> {
+        #[cfg(feature = "profiling")]
+        let start = now_ms();
         let pixel_count = self.area.get_width() as usize * self.area.get_height() as usize;
         let bytes_needed = pixel_count * size_of::<RenderingColor>();
 
@@ -94,6 +145,9 @@ impl Inner {
             Self::rgba_to_bgra_simd(source, destination);
         }
 
+        #[cfg(feature = "profiling")]
+        let after_conversion = now_ms();
+
         // now conversion_buffer is ready as &[u8]
         let image_data = ImageData::new_with_u8_clamped_array_and_sh(
             Clamped(&self.conversion_buffer),
@@ -102,10 +156,26 @@ impl Inner {
         )
         .expect("Failed to create ImageData");
 
+        #[cfg(feature = "profiling")]
+        let after_image_data = now_ms();
+
         let (x, y) = self.area.get_point_1().into();
         self.context
             .put_image_data(&image_data, x as _, y as _)
             .unwrap();
+
+        #[cfg(feature = "profiling")]
+        {
+            let end = now_ms();
+            self.profile.record(
+                pixel_count,
+                after_conversion - start,
+                after_image_data - after_conversion,
+                end - after_image_data,
+                end - start,
+                end,
+            );
+        }
 
         Ok(())
     }
