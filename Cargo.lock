@@ -2511,8 +2511,8 @@ dependencies = [
 
 [[package]]
 name = "nanoaudio"
-version = "0.2.0"
-source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=e1419d7e301f66e8feed5de0ec23c2cf07e44c91#e1419d7e301f66e8feed5de0ec23c2cf07e44c91"
+version = "0.2.2"
+source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=596076c64827fd8bf9e8319addc2f215e0cde8be#596076c64827fd8bf9e8319addc2f215e0cde8be"
 dependencies = [
  "nanoaudio-buffer",
  "nanoaudio-core",
@@ -2522,17 +2522,17 @@ dependencies = [
 [[package]]
 name = "nanoaudio-buffer"
 version = "0.1.0"
-source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=e1419d7e301f66e8feed5de0ec23c2cf07e44c91#e1419d7e301f66e8feed5de0ec23c2cf07e44c91"
+source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=596076c64827fd8bf9e8319addc2f215e0cde8be#596076c64827fd8bf9e8319addc2f215e0cde8be"
 
 [[package]]
 name = "nanoaudio-core"
-version = "0.1.0"
-source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=e1419d7e301f66e8feed5de0ec23c2cf07e44c91#e1419d7e301f66e8feed5de0ec23c2cf07e44c91"
+version = "0.1.1"
+source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=596076c64827fd8bf9e8319addc2f215e0cde8be#596076c64827fd8bf9e8319addc2f215e0cde8be"
 
 [[package]]
 name = "nanoaudio-dsp"
-version = "0.1.0"
-source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=e1419d7e301f66e8feed5de0ec23c2cf07e44c91#e1419d7e301f66e8feed5de0ec23c2cf07e44c91"
+version = "0.1.1"
+source = "git+https://github.com/AlixANNERAUD/nanoaudio.git?rev=596076c64827fd8bf9e8319addc2f215e0cde8be#596076c64827fd8bf9e8319addc2f215e0cde8be"
 dependencies = [
  "nanoaudio-core",
 ]
