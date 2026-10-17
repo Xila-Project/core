@@ -56,6 +56,8 @@ impl Inner {
     unsafe fn rgba_to_bgra_simd(rgba: &[u8], bgra: &mut [u8]) {
         use core::arch::wasm32::*;
 
+        assert_eq!(rgba.len(), bgra.len());
+        assert_eq!(rgba.len() % 4, 0, "pixel data must be RGBA-sized");
         let len = rgba.len();
         let mut i = 0;
         while i + 16 <= len {
@@ -69,8 +71,11 @@ impl Inner {
             i += 16;
         }
 
-        // handle remainder
-        bgra[i..len].copy_from_slice(&rgba[i..len]);
+        // XRGB8888 on little-endian WASM stores pixels as B,G,R,X.
+        // Canvas ImageData expects R,G,B,A. Swap the remaining complete pixels.
+        for (src, dst) in rgba[i..].chunks_exact(4).zip(bgra[i..].chunks_exact_mut(4)) {
+            dst.copy_from_slice(&[src[2], src[1], src[0], src[3]]);
+        }
     }
 
     fn draw_buffer(&mut self, buffer: &[RenderingColor]) -> Result<(), String> {
