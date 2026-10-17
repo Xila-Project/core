@@ -199,6 +199,7 @@ members = [
   "executables/weather",
   "executables/clock",
   "modules/graphics/bindings_generator",
+  "tools/fs_image",
 ]
 
 [patch.crates-io]
