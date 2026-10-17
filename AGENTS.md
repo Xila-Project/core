@@ -16,6 +16,8 @@ These tasks are defined in `Makefile.toml`; CI is the source of truth for target
 
 # Architecture & Implementation Guidelines
 
+- Visual identity is defined in `xila-project/brand`: Montserrat Regular 400 for proportional UI text, SemiBold 600 for web headings, and Bold 700 for the wordmark and emphasis. Preserve the embedded Regular glyph subsets and Unscii terminal font unless a task explicitly needs more weights. Browser fonts and README logos are local deployment copies; record their exact brand source revision when updating them. Never make builds fetch assets from the private brand repository.
+
 - Put changes in the crate that owns the behavior and follow its existing APIs, error handling, feature flags, and tests.
 - Keep reusable modules portable: preserve `no_std` operation and isolate host-only code and dependencies behind target-specific Cargo sections or conditional compilation.
 - Check a crate's `Cargo.toml`, features, and consumers before changing dependencies or enabling features. Preserve intentional `default-features = false`, optional dependencies, and target-specific dependency boundaries.

@@ -1,5 +1,10 @@
 # Xila — Rust embedded operating system with WebAssembly apps
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/xila-horizontal-white.svg">
+  <img src="assets/brand/xila-horizontal-ink.svg" alt="Xila" width="300">
+</picture>
+
 Build embedded experiences with **Xila**, a modular, open-source operating system
 written in Rust. Xila brings together WebAssembly (Wasm) applications, an LVGL
 graphical interface, task management, networking, and storage for

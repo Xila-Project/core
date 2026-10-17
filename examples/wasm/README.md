@@ -58,6 +58,12 @@ instead. Graphical guests must use compatible Xila graphics bindings; see the
 [runtime documentation](../../executables/wasm/README.md) for supported APIs and
 limits.
 
+## Visual identity
+
+The browser help panel uses local Montserrat normal and italic variable web fonts, following the shared 400/600/700 text, heading and emphasis hierarchy. Trunk copies `fonts/` alongside the example; font rendering needs no Google Fonts connection. Keep `fonts/OFL.txt` with those files. The font and logo source revision is recorded in `fonts/README.md`.
+
+The OS canvas still uses the existing localized LVGL Montserrat Regular subsets at 10/14/18/28px, and Unscii for terminal content. Web font files are not compiled into the OS font tables or loaded into MCU flash. Bold wordmarks are outlined SVG assets.
+
 ## Browser limitations
 
 - The example persists its filesystem in OPFS; see the storage and durability
