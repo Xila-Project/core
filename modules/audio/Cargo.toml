@@ -7,7 +7,7 @@ edition = "2024"
 file_system = { workspace = true }
 shared = { workspace = true }
 synchronization = { workspace = true }
-nanoaudio = { workspace = true }
+nanoaudio = { workspace = true, features = ["buffer", "dsp"] }
 
 [dev-dependencies]
 critical-section = { workspace = true, features = ["std"] }
