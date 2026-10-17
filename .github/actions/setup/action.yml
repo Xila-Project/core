@@ -10,6 +10,10 @@ inputs:
     description: "Cargo workspace -> target directory mappings for the job's Rust cache."
     required: false
     default: ". -> target"
+  cache-key:
+    description: "Extra Rust cache key, e.g. the matrix value, so matrix legs save separate caches."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -94,10 +98,11 @@ runs:
         cache: npm
 
     - name: Setup | Rust cache
+      if: inputs.profile != 'minimal'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: ${{ inputs.cache-workspaces }}
-        key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}
+        key: ${{ hashFiles('**/Cargo.lock', 'development/toolchains.env') }}${{ inputs.cache-key != '' && format('-{0}', inputs.cache-key) || '' }}
         # PRs restore main's caches without filling the quota with PR copies.
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
