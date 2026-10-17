@@ -78,8 +78,10 @@ total host-driver memory or an assertion about allocations inside SDL.
 ## Fixed-capacity audio system
 
 `AudioSystem<STREAMS, STREAM_BYTES, MIX_FRAMES, OUTPUTS, SINK_BYTES>` owns one
-application queue per stream and one nanoaudio SPSC queue per output. All clients
-use the same configuration. Defaults are `AudioSystem<4, 2048, 128, 2, 3072>`:
+application queue per stream and one nanoaudio SPSC queue per output. The mix
+contract is fixed at 48 kHz stereo interleaved F32; all stream and output handles
+report that configuration. `new() -> Result<Self>` checks the const capacities.
+Defaults are `AudioSystem<4, 2048, 128, 2, 3072>`:
 four 256-frame application queues and two output queues holding three 128-frame
 blocks each, for stereo F32. The fifth generic counts bytes so the type works on
 stable Rust; sink storage must be frame-aligned and hold at least one mix block.
@@ -87,9 +89,7 @@ stable Rust; sink storage must be frame-aligned and hold at least one mix block.
 Pin the caller-owned system before opening outputs or mixing:
 
 ```rust
-let system = core::pin::pin!(audio::AudioSystem::<4, 2048, 128, 2, 3072>::new(
-    audio::Configuration::new(48_000, 2, audio::SampleFormat::F32),
-)?);
+let system = core::pin::pin!(audio::AudioSystem::<4, 2048, 128, 2, 3072>::new()?);
 let stream = system.open_stream()?;
 let mut output = system.as_ref().open_output()?;
 stream.start()?;
@@ -114,10 +114,10 @@ never take this lock. `with_consumer` keeps the consumer inside its reservation;
 static consumer, permanently reserving that output slot because those adapters do
 not return their consumer for safe reuse.
 
-On the x86_64 debug test build, the system is **14,552 bytes**, each stream handle
+On the x86_64 debug test build, the system is **14,544 bytes**, each stream handle
 is **16 bytes**, and each output handle is **24 bytes**. PCM queues contain exactly
 **14,336 bytes (14 KiB)**: 8 KiB for application queues plus 6 KiB for output queues.
-Mixing uses 32 bytes of stack PCM scratch (one maximum-size frame), plus bounded
+Mixing uses 8 bytes of stack PCM scratch (one stereo F32 frame), plus bounded
 per-stream/per-output metadata; it does not store another whole mix block.
 Defaults perform at most 1,024 source sample additions per 128-frame mix
 (4 streams × 128 frames × 2 channels). Setup and steady-state core operations do

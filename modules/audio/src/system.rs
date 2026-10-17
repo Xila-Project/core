@@ -1,4 +1,4 @@
-use crate::Configuration;
+use crate::{Configuration, SampleFormat};
 use core::{
     cell::UnsafeCell,
     marker::PhantomPinned,
@@ -8,6 +8,9 @@ use core::{
 };
 use file_system::{Error, Result};
 use nanoaudio::{Consumer, Mixer, Producer, RingBuffer, Volume};
+
+const MIX_CONFIGURATION: Configuration = Configuration::new(48_000, 2, SampleFormat::F32);
+const FRAME_BYTES: usize = 2 * size_of::<f32>();
 
 // Contention is reported immediately; audio work never waits for another caller.
 struct TryMutex<T> {
@@ -81,7 +84,7 @@ struct OutputSlot<const N: usize> {
 // consumer has been dropped. While occupied, only the SPSC halves touch the ring.
 unsafe impl<const N: usize> Sync for OutputSlot<N> {}
 
-/// A fixed pool of independent PCM streams and output queues.
+/// A fixed pool of independent 48 kHz stereo interleaved F32 streams and outputs.
 ///
 /// Defaults reserve 8 KiB for application PCM and 6 KiB for output PCM. The
 /// fifth generic is bytes per sink (3072 = three 128-frame stereo F32 blocks).
@@ -94,10 +97,8 @@ unsafe impl<const N: usize> Sync for OutputSlot<N> {}
 /// Output consumption never takes the core lock.
 ///
 /// ```compile_fail
-/// use audio::{AudioSystem, Configuration, SampleFormat};
-/// let mut system: AudioSystem = AudioSystem::new(
-///     Configuration::new(48_000, 2, SampleFormat::F32),
-/// ).unwrap();
+/// use audio::AudioSystem;
+/// let mut system: AudioSystem = AudioSystem::new().unwrap();
 /// // A registered queue may not move, even when its handle is forgotten.
 /// let pinned = core::pin::Pin::new(&mut system);
 /// ```
@@ -108,7 +109,6 @@ pub struct AudioSystem<
     const OUTPUTS: usize = 2,
     const SINK_BYTES: usize = 3072,
 > {
-    configuration: Configuration,
     _pinned: PhantomPinned,
     occupied: [AtomicBool; STREAMS],
     streams: TryMutex<Core<STREAMS, STREAM_BYTES, OUTPUTS, SINK_BYTES>>,
@@ -124,20 +124,19 @@ struct Core<const S: usize, const B: usize, const O: usize, const Q: usize> {
 impl<const S: usize, const B: usize, const F: usize, const O: usize, const Q: usize>
     AudioSystem<S, B, F, O, Q>
 {
-    /// Creates empty, paused application streams with unity gain, without allocation.
-    pub fn new(configuration: Configuration) -> Result<Self> {
-        let frame_size = configuration.frame_size()?;
-        let block_bytes = F.checked_mul(frame_size).ok_or(Error::InvalidParameter)?;
+    /// Creates empty, paused 48 kHz stereo F32 streams without allocation.
+    /// Invalid const capacities return `InvalidParameter`.
+    pub fn new() -> Result<Self> {
+        let block_bytes = F.checked_mul(FRAME_BYTES).ok_or(Error::InvalidParameter)?;
         if B == 0
-            || !B.is_multiple_of(frame_size)
+            || !B.is_multiple_of(FRAME_BYTES)
             || F == 0
             || Q < block_bytes
-            || !Q.is_multiple_of(frame_size)
+            || !Q.is_multiple_of(FRAME_BYTES)
         {
             return Err(Error::InvalidParameter);
         }
         Ok(Self {
-            configuration,
             _pinned: PhantomPinned,
             occupied: core::array::from_fn(|_| AtomicBool::new(false)),
             streams: TryMutex::new(Core {
@@ -169,8 +168,8 @@ impl<const S: usize, const B: usize, const F: usize, const O: usize, const Q: us
     /// A full output drops this block without affecting any other output.
     pub fn mix_next_block(self: Pin<&Self>) -> Result<()> {
         let mut core = self.streams.lock()?;
-        let frame_size = self.configuration.frame_size()?;
-        let format = self.configuration.sample_format()?.native();
+        let frame_size = FRAME_BYTES;
+        let format = nanoaudio::Format::F32;
         let admitted: [bool; O] = core::array::from_fn(|index| {
             let occupied = self.outputs[index].occupied.load(Ordering::Acquire);
             if !occupied {
@@ -193,9 +192,9 @@ impl<const S: usize, const B: usize, const F: usize, const O: usize, const Q: us
             producers,
             mixer,
         } = &mut *core;
-        // One maximum-sized PCM frame of scratch, independent of block length.
+        // One stereo F32 frame of scratch, independent of block length.
         // This avoids an additional persistent block beyond the queue budget.
-        let mut frame = [0u8; 32];
+        let mut frame = [0u8; FRAME_BYTES];
         for _ in 0..F {
             mixer.clear_bytes(&mut frame[..frame_size], format);
             for (index, stream) in streams.iter_mut().enumerate() {
@@ -295,7 +294,7 @@ impl<const S: usize, const B: usize, const F: usize, const O: usize, const Q: us
     StreamHandle<'_, S, B, F, O, Q>
 {
     pub fn configuration(&self) -> Configuration {
-        self.system.configuration
+        MIX_CONFIGURATION
     }
     pub fn start(&self) -> Result<()> {
         self.system.streams.lock()?.streams[self.index].started = true;
@@ -344,7 +343,7 @@ impl<const S: usize, const B: usize, const F: usize, const O: usize, const Q: us
     /// Writes as many whole frames as fit. An incomplete input frame is rejected;
     /// the input byte slice does not need typed sample alignment.
     pub fn write(&self, bytes: &[u8]) -> Result<usize> {
-        let frame_size = self.configuration().frame_size()?;
+        let frame_size = FRAME_BYTES;
         if !bytes.len().is_multiple_of(frame_size) {
             return Err(Error::InvalidParameter);
         }
@@ -384,7 +383,7 @@ impl<'a, const S: usize, const B: usize, const F: usize, const O: usize, const Q
     OutputHandle<'a, S, B, F, O, Q>
 {
     pub fn configuration(&self) -> Configuration {
-        self.system.configuration
+        MIX_CONFIGURATION
     }
     /// Counts incoming whole blocks dropped while this sink had insufficient space.
     pub fn dropped_blocks(&self) -> usize {

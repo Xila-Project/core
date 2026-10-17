@@ -42,7 +42,7 @@ fn configuration() -> Configuration {
 
 #[test]
 fn stream_slots_are_bounded_and_reused_without_old_pcm() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let first = system.open_stream().unwrap();
     let second = system.open_stream().unwrap();
     assert!(matches!(system.open_stream(), Err(Error::RessourceBusy)));
@@ -56,7 +56,7 @@ fn stream_slots_are_bounded_and_reused_without_old_pcm() {
 
 #[test]
 fn writes_are_partial_whole_frames_and_reject_incomplete_frames() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let stream = system.open_stream().unwrap();
     assert_eq!(stream.write(&[1; 7]), Err(Error::InvalidParameter));
     assert_eq!(stream.writable(), 32);
@@ -66,17 +66,18 @@ fn writes_are_partial_whole_frames_and_reject_incomplete_frames() {
 }
 
 #[test]
-fn invalid_configuration_and_capacities_are_rejected() {
-    assert!(System::new(Configuration::new(0, 2, SampleFormat::F32)).is_err());
-    assert!(AudioSystem::<2, 31, 2, 2, 48>::new(configuration()).is_err());
-    assert!(AudioSystem::<2, 32, 0, 2, 48>::new(configuration()).is_err());
-    assert!(AudioSystem::<2, 32, 2, 2, 8>::new(configuration()).is_err());
-    assert!(AudioSystem::<2, 32, 2, 2, 47>::new(configuration()).is_err());
+fn invalid_capacities_are_rejected() {
+    assert!(AudioSystem::<2, 0, 2, 2, 48>::new().is_err());
+    assert!(AudioSystem::<2, 31, 2, 2, 48>::new().is_err());
+    assert!(AudioSystem::<2, 32, 0, 2, 48>::new().is_err());
+    assert!(AudioSystem::<2, 32, 2, 2, 8>::new().is_err());
+    assert!(AudioSystem::<2, 32, 2, 2, 47>::new().is_err());
+    assert!(AudioSystem::<2, 32, { usize::MAX }, 2, 48>::new().is_err());
 }
 
 #[test]
 fn outputs_are_bounded_and_reused_with_empty_consumers() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let mut first = system.as_ref().open_output().unwrap();
     let second = system.as_ref().open_output().unwrap();
     assert!(matches!(
@@ -106,7 +107,7 @@ fn pcm(samples: &[f32]) -> Vec<u8> {
 
 #[test]
 fn mixes_independent_streams_once_and_fans_out_identical_blocks() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let first = system.open_stream().unwrap();
     let second = system.open_stream().unwrap();
     let mut left = system.as_ref().open_output().unwrap();
@@ -128,7 +129,7 @@ fn mixes_independent_streams_once_and_fans_out_identical_blocks() {
 
 #[test]
 fn stream_and_master_gain_are_combined_and_reset_on_reuse() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let first = system.open_stream().unwrap();
     let second = system.open_stream().unwrap();
     let mut output = system.as_ref().open_output().unwrap();
@@ -152,7 +153,7 @@ fn stream_and_master_gain_are_combined_and_reset_on_reuse() {
 
 #[test]
 fn stopped_and_empty_streams_are_silent_and_stop_retains_pcm() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let stream = system.open_stream().unwrap();
     let mut output = system.as_ref().open_output().unwrap();
     stream.write(&pcm(&[0.25, -0.25])).unwrap();
@@ -179,7 +180,7 @@ fn stopped_and_empty_streams_are_silent_and_stop_retains_pcm() {
 
 #[test]
 fn full_output_drops_whole_blocks_without_stalling_other_outputs() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let stream = system.open_stream().unwrap();
     let mut slow = system.as_ref().open_output().unwrap();
     let mut fast = system.as_ref().open_output().unwrap();
@@ -221,7 +222,7 @@ fn full_output_drops_whole_blocks_without_stalling_other_outputs() {
 
 #[test]
 fn default_capacity_hot_paths_allocate_nothing() {
-    let system: AudioSystem = AudioSystem::new(configuration()).unwrap();
+    let system: AudioSystem = AudioSystem::new().unwrap();
     let system = core::pin::pin!(system);
     let streams = core::array::from_fn::<_, 4, _>(|_| system.open_stream().unwrap());
     let mut outputs = core::array::from_fn::<_, 2, _>(|_| system.as_ref().open_output().unwrap());
@@ -261,7 +262,7 @@ fn default_capacity_hot_paths_allocate_nothing() {
 
 #[test]
 fn static_output_can_transfer_its_consumer_to_an_owning_platform_adapter() {
-    let system = Box::leak(Box::new(Box::pin(System::new(configuration()).unwrap())));
+    let system = Box::leak(Box::new(Box::pin(System::new().unwrap())));
     let system = core::pin::Pin::as_ref(system);
     let mut consumer = system.open_output().unwrap().into_consumer();
     let other = system.open_output().unwrap();
@@ -275,7 +276,7 @@ fn static_output_can_transfer_its_consumer_to_an_owning_platform_adapter() {
 
 #[test]
 fn unaligned_writes_preserve_frame_order_across_queue_wrap() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     let stream = system.open_stream().unwrap();
     let mut output = system.as_ref().open_output().unwrap();
     let mut input = [0; 25];
@@ -297,7 +298,7 @@ fn unaligned_writes_preserve_frame_order_across_queue_wrap() {
 
 #[test]
 fn forgotten_output_keeps_its_pinned_slot_reserved() {
-    let system = core::pin::pin!(System::new(configuration()).unwrap());
+    let system = core::pin::pin!(System::new().unwrap());
     core::mem::forget(system.as_ref().open_output().unwrap());
     let _remaining = system.as_ref().open_output().unwrap();
     assert!(matches!(
@@ -307,4 +308,14 @@ fn forgotten_output_keeps_its_pinned_slot_reserved() {
     for _ in 0..10 {
         system.as_ref().mix_next_block().unwrap();
     }
+}
+
+#[test]
+fn mixer_configuration_is_fixed_48000_stereo_f32() {
+    let system = core::pin::pin!(System::new().unwrap());
+    let stream = system.open_stream().unwrap();
+    let output = system.as_ref().open_output().unwrap();
+    let expected = Configuration::new(48_000, 2, SampleFormat::F32);
+    assert_eq!(stream.configuration(), expected);
+    assert_eq!(output.configuration(), expected);
 }
